@@ -1,0 +1,21 @@
+# Manifesto de versões dos scanners (adaptadores de fonte gerados pelo Claude a partir da exploração das
+# plataformas). Ao refazer um scanner: suba a versão (MAJOR.MINOR.PATCH), atualize a data da exploração e
+# registre no changelog de docs/SCANNERS.md. Regras de versão e procedimento: docs/SCANNERS.md.
+
+[linkedin]
+versao = "1.0.0"
+explorado_em = "2026-10-14"
+gerado_por = "Claude"
+referencia = "docs/EXPLORACAO_PLATAFORMAS.md §2.2"
+
+[indeed]
+versao = "1.0.0"
+explorado_em = "2026-10-14"
+gerado_por = "Claude"
+referencia = "docs/EXPLORACAO_PLATAFORMAS.md §2.3"
+
+[gupy]
+versao = "1.0.0"
+explorado_em = "2026-10-14"
+gerado_por = "Claude"
+referencia = "docs/EXPLORACAO_PLATAFORMAS.md §2.4"

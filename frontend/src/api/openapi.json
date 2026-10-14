@@ -1,0 +1,1065 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "JobScanner",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/health": {
+      "get": {
+        "summary": "Health",
+        "operationId": "health_api_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs": {
+      "post": {
+        "summary": "Start Run",
+        "operationId": "start_run_api_runs_post",
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunStarted"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "List Runs",
+        "operationId": "list_runs_api_runs_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RunOut"
+                  },
+                  "title": "Response List Runs Api Runs Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/{run_id}": {
+      "get": {
+        "summary": "Get Run",
+        "operationId": "get_run_api_runs__run_id__get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs": {
+      "get": {
+        "summary": "List Jobs",
+        "operationId": "list_jobs_api_jobs_get",
+        "parameters": [
+          {
+            "name": "visto",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Visto"
+            }
+          },
+          {
+            "name": "fonte",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Fonte"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobsPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/mark-seen": {
+      "post": {
+        "summary": "Mark Seen",
+        "operationId": "mark_seen_api_jobs_mark_seen_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarkSeenIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarkSeenOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{job_id}": {
+      "patch": {
+        "summary": "Set Seen",
+        "operationId": "set_seen_api_jobs__job_id__patch",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SeenIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/keywords": {
+      "get": {
+        "summary": "List Keywords",
+        "operationId": "list_keywords_api_keywords_get",
+        "parameters": [
+          {
+            "name": "tipo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tipo"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/KeywordOut"
+                  },
+                  "title": "Response List Keywords Api Keywords Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Add Keyword",
+        "operationId": "add_keyword_api_keywords_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KeywordIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KeywordOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/keywords/{keyword_id}": {
+      "delete": {
+        "summary": "Delete Keyword",
+        "operationId": "delete_keyword_api_keywords__keyword_id__delete",
+        "parameters": [
+          {
+            "name": "keyword_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Keyword Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scanners": {
+      "get": {
+        "summary": "List Scanners",
+        "description": "Versão e estado de cada scanner; 'refazer' traz a instrução pronta para o Claude.",
+        "operationId": "list_scanners_api_scanners_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ScannerOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Scanners Api Scanners Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/config": {
+      "get": {
+        "summary": "Get Config",
+        "description": "Parâmetros em vigor, só leitura; caminhos e URLs internas ficam de fora.",
+        "operationId": "get_config_api_config_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ConfigApi": {
+        "properties": {
+          "jobs_page_size": {
+            "type": "integer",
+            "title": "Jobs Page Size"
+          },
+          "poll_interval_ms": {
+            "type": "integer",
+            "title": "Poll Interval Ms"
+          }
+        },
+        "type": "object",
+        "required": [
+          "jobs_page_size",
+          "poll_interval_ms"
+        ],
+        "title": "ConfigApi"
+      },
+      "ConfigBusca": {
+        "properties": {
+          "localidade": {
+            "type": "string",
+            "title": "Localidade"
+          },
+          "modalidade": {
+            "type": "string",
+            "title": "Modalidade"
+          },
+          "janela_horas": {
+            "type": "integer",
+            "title": "Janela Horas"
+          },
+          "keyword_max_length": {
+            "type": "integer",
+            "title": "Keyword Max Length"
+          }
+        },
+        "type": "object",
+        "required": [
+          "localidade",
+          "modalidade",
+          "janela_horas",
+          "keyword_max_length"
+        ],
+        "title": "ConfigBusca"
+      },
+      "ConfigFiltro": {
+        "properties": {
+          "peso_titulo": {
+            "type": "integer",
+            "title": "Peso Titulo"
+          },
+          "peso_descricao": {
+            "type": "integer",
+            "title": "Peso Descricao"
+          },
+          "min_score": {
+            "type": "integer",
+            "title": "Min Score"
+          }
+        },
+        "type": "object",
+        "required": [
+          "peso_titulo",
+          "peso_descricao",
+          "min_score"
+        ],
+        "title": "ConfigFiltro"
+      },
+      "ConfigLimites": {
+        "properties": {
+          "max_paginas_detalhe": {
+            "type": "integer",
+            "title": "Max Paginas Detalhe"
+          },
+          "max_vagas_lista": {
+            "type": "integer",
+            "title": "Max Vagas Lista"
+          }
+        },
+        "type": "object",
+        "required": [
+          "max_paginas_detalhe",
+          "max_vagas_lista"
+        ],
+        "title": "ConfigLimites"
+      },
+      "ConfigOut": {
+        "properties": {
+          "busca": {
+            "$ref": "#/components/schemas/ConfigBusca"
+          },
+          "filtro": {
+            "$ref": "#/components/schemas/ConfigFiltro"
+          },
+          "limites": {
+            "$ref": "#/components/schemas/ConfigLimites"
+          },
+          "ritmo": {
+            "$ref": "#/components/schemas/ConfigRitmo"
+          },
+          "api": {
+            "$ref": "#/components/schemas/ConfigApi"
+          }
+        },
+        "type": "object",
+        "required": [
+          "busca",
+          "filtro",
+          "limites",
+          "ritmo",
+          "api"
+        ],
+        "title": "ConfigOut"
+      },
+      "ConfigRitmo": {
+        "properties": {
+          "pausa_min_s": {
+            "type": "number",
+            "title": "Pausa Min S"
+          },
+          "pausa_max_s": {
+            "type": "number",
+            "title": "Pausa Max S"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pausa_min_s",
+          "pausa_max_s"
+        ],
+        "title": "ConfigRitmo"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HealthOut": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "db": {
+            "type": "string",
+            "title": "Db"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "db"
+        ],
+        "title": "HealthOut"
+      },
+      "JobOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "fonte": {
+            "type": "string",
+            "title": "Fonte"
+          },
+          "id_da_vaga": {
+            "type": "string",
+            "title": "Id Da Vaga"
+          },
+          "titulo": {
+            "type": "string",
+            "title": "Titulo"
+          },
+          "empresa": {
+            "type": "string",
+            "title": "Empresa"
+          },
+          "link": {
+            "type": "string",
+            "title": "Link"
+          },
+          "trecho": {
+            "type": "string",
+            "title": "Trecho"
+          },
+          "pontos": {
+            "type": "integer",
+            "title": "Pontos"
+          },
+          "run_id": {
+            "type": "integer",
+            "title": "Run Id"
+          },
+          "encontrada_em": {
+            "type": "string",
+            "title": "Encontrada Em"
+          },
+          "visto": {
+            "type": "boolean",
+            "title": "Visto"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "fonte",
+          "id_da_vaga",
+          "titulo",
+          "empresa",
+          "link",
+          "trecho",
+          "pontos",
+          "run_id",
+          "encontrada_em",
+          "visto"
+        ],
+        "title": "JobOut"
+      },
+      "JobsPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/JobOut"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "JobsPage"
+      },
+      "KeywordIn": {
+        "properties": {
+          "termo": {
+            "type": "string",
+            "title": "Termo"
+          },
+          "tipo": {
+            "type": "string",
+            "title": "Tipo"
+          }
+        },
+        "type": "object",
+        "required": [
+          "termo",
+          "tipo"
+        ],
+        "title": "KeywordIn"
+      },
+      "KeywordOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "termo": {
+            "type": "string",
+            "title": "Termo"
+          },
+          "tipo": {
+            "type": "string",
+            "title": "Tipo"
+          },
+          "criada_em": {
+            "type": "string",
+            "title": "Criada Em"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "termo",
+          "tipo",
+          "criada_em"
+        ],
+        "title": "KeywordOut"
+      },
+      "MarkSeenIn": {
+        "properties": {
+          "fonte": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fonte"
+          },
+          "q": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Q"
+          }
+        },
+        "type": "object",
+        "title": "MarkSeenIn"
+      },
+      "MarkSeenOut": {
+        "properties": {
+          "atualizadas": {
+            "type": "integer",
+            "title": "Atualizadas"
+          }
+        },
+        "type": "object",
+        "required": [
+          "atualizadas"
+        ],
+        "title": "MarkSeenOut"
+      },
+      "RunOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "inicio": {
+            "type": "string",
+            "title": "Inicio"
+          },
+          "fim": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fim"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "fontes": {
+            "items": {
+              "$ref": "#/components/schemas/RunSourceOut"
+            },
+            "type": "array",
+            "title": "Fontes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "inicio",
+          "fim",
+          "status",
+          "fontes"
+        ],
+        "title": "RunOut"
+      },
+      "RunSourceOut": {
+        "properties": {
+          "fonte": {
+            "type": "string",
+            "title": "Fonte"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "motivo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Motivo"
+          },
+          "detalhe": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detalhe"
+          },
+          "lidas": {
+            "type": "integer",
+            "title": "Lidas"
+          },
+          "aprovadas": {
+            "type": "integer",
+            "title": "Aprovadas"
+          },
+          "novas": {
+            "type": "integer",
+            "title": "Novas"
+          },
+          "scanner_versao": {
+            "type": "string",
+            "title": "Scanner Versao"
+          }
+        },
+        "type": "object",
+        "required": [
+          "fonte",
+          "status",
+          "motivo",
+          "detalhe",
+          "lidas",
+          "aprovadas",
+          "novas",
+          "scanner_versao"
+        ],
+        "title": "RunSourceOut"
+      },
+      "RunStarted": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "title": "RunStarted"
+      },
+      "ScannerOut": {
+        "properties": {
+          "fonte": {
+            "type": "string",
+            "title": "Fonte"
+          },
+          "versao": {
+            "type": "string",
+            "title": "Versao"
+          },
+          "explorado_em": {
+            "type": "string",
+            "title": "Explorado Em"
+          },
+          "gerado_por": {
+            "type": "string",
+            "title": "Gerado Por"
+          },
+          "referencia": {
+            "type": "string",
+            "title": "Referencia"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "falhas_consecutivas": {
+            "type": "integer",
+            "title": "Falhas Consecutivas"
+          },
+          "ultimo_motivo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ultimo Motivo"
+          },
+          "mensagem": {
+            "type": "string",
+            "title": "Mensagem"
+          },
+          "instrucao": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instrucao"
+          }
+        },
+        "type": "object",
+        "required": [
+          "fonte",
+          "versao",
+          "explorado_em",
+          "gerado_por",
+          "referencia",
+          "status",
+          "falhas_consecutivas",
+          "ultimo_motivo",
+          "mensagem",
+          "instrucao"
+        ],
+        "title": "ScannerOut"
+      },
+      "SeenIn": {
+        "properties": {
+          "visto": {
+            "type": "boolean",
+            "title": "Visto"
+          }
+        },
+        "type": "object",
+        "required": [
+          "visto"
+        ],
+        "title": "SeenIn"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

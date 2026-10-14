@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+*.db
+*.db-journal
+data/
+backups/
+logs/
+chrome-profile/
+node_modules/
+frontend/dist/

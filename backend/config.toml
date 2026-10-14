@@ -1,0 +1,62 @@
+# Parâmetros do JobScanner. Palavras-chave e exclusões são editadas na tela
+# (tabela keywords); [padrao] só semeia a tabela quando ela está vazia.
+# Caminhos relativos partem da raiz do projeto.
+
+[geral]
+db_path = "data/jobscanner.db"
+backup_dir = "backups"
+frontend_dist = "frontend/dist"
+log_dir = "logs"
+
+[padrao]
+palavras_chave = ["Engenheiro Mecânico"]
+exclusoes = []
+
+[busca]
+keyword_max_length = 80
+janela_horas = 24
+localidade = ""             # vazio = sem filtro de local (como na busca observada)
+modalidade = ""          # "", "remoto", "hibrido" ou "presencial"
+
+[filtro]
+peso_titulo = 3
+peso_descricao = 1
+min_score = 3
+trecho_max_chars = 4000
+
+[limites]
+max_paginas_detalhe = 15
+max_vagas_lista = 100
+
+[ritmo]
+pausa_min_s = 2.0
+pausa_max_s = 6.0
+rolagem_min_s = 0.25     # pausa ao rolar a lista, card a card
+rolagem_max_s = 0.7
+
+[navegador]
+cdp_url = "http://127.0.0.1:9222"
+timeout_s = 30
+
+[api]
+jobs_page_size = 50
+runs_history_limit = 30
+poll_interval_ms = 2000
+
+[gupy]
+base_url = "https://portal.gupy.io/api/job-search/jobs"
+page_size = 50
+timeout_s = 20
+
+[linkedin]
+base_url = "https://www.linkedin.com/jobs/search/"
+page_size = 25
+
+[indeed]
+base_url = "https://br.indeed.com/jobs"
+page_size = 10
+
+[versionamento]
+falhas_consecutivas = 2   # falhas seguidas de "quebra", na versão atual, para pedir que o scanner seja refeito
+max_idade_dias = 90       # idade (desde a exploração) a partir da qual o scanner pede atenção
+motivos_de_quebra = ["seletor_nao_encontrado", "zero_resultados", "http_erro"]
