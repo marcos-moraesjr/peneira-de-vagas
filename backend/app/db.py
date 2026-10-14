@@ -55,15 +55,69 @@ CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 
 _MIGRATION_V2 = "ALTER TABLE run_sources ADD COLUMN scanner_versao TEXT NOT NULL DEFAULT '';"
 
+_MIGRATION_V3 = """
+ALTER TABLE jobs ADD COLUMN localidade TEXT NOT NULL DEFAULT '';
+ALTER TABLE jobs ADD COLUMN publicada_em TEXT;
+"""
+
+_MIGRATION_V4 = """
+CREATE TABLE conjuntos (
+    id INTEGER PRIMARY KEY,
+    nome TEXT NOT NULL,
+    nome_normalizado TEXT NOT NULL UNIQUE,
+    ativo INTEGER NOT NULL DEFAULT 0,
+    criada_em TEXT NOT NULL
+);
+CREATE UNIQUE INDEX um_conjunto_ativo ON conjuntos (ativo) WHERE ativo = 1;
+INSERT INTO conjuntos (id, nome, nome_normalizado, ativo, criada_em) VALUES (1, 'Padrão', 'padrao', 1, '1970-01-01T00:00:00+00:00');
+CREATE TABLE keywords_novo (
+    id INTEGER PRIMARY KEY,
+    termo TEXT NOT NULL,
+    termo_normalizado TEXT NOT NULL,
+    tipo TEXT NOT NULL CHECK (tipo IN ('busca', 'exclusao')),
+    criada_em TEXT NOT NULL,
+    conjunto_id INTEGER NOT NULL REFERENCES conjuntos(id) ON DELETE CASCADE,
+    UNIQUE (conjunto_id, termo_normalizado, tipo)
+);
+INSERT INTO keywords_novo (id, termo, termo_normalizado, tipo, criada_em, conjunto_id)
+    SELECT id, termo, termo_normalizado, tipo, criada_em, 1 FROM keywords;
+DROP TABLE keywords;
+ALTER TABLE keywords_novo RENAME TO keywords;
+"""
+
+# V5: a vaga sobrevive à execução que a originou (limpar o histórico não apaga vagas): run_id passa a aceitar vazio.
+_MIGRATION_V5 = """
+CREATE TABLE jobs_novo (
+    id INTEGER PRIMARY KEY,
+    fonte TEXT NOT NULL,
+    id_da_vaga TEXT NOT NULL,
+    titulo TEXT NOT NULL,
+    empresa TEXT NOT NULL,
+    link TEXT NOT NULL,
+    trecho TEXT NOT NULL,
+    pontos INTEGER NOT NULL,
+    run_id INTEGER REFERENCES runs(id) ON DELETE SET NULL,
+    encontrada_em TEXT NOT NULL,
+    visto INTEGER NOT NULL DEFAULT 0,
+    localidade TEXT NOT NULL DEFAULT '',
+    publicada_em TEXT,
+    UNIQUE (fonte, id_da_vaga)
+);
+INSERT INTO jobs_novo (id, fonte, id_da_vaga, titulo, empresa, link, trecho, pontos, run_id, encontrada_em, visto, localidade, publicada_em)
+    SELECT id, fonte, id_da_vaga, titulo, empresa, link, trecho, pontos, run_id, encontrada_em, visto, localidade, publicada_em FROM jobs;
+DROP TABLE jobs;
+ALTER TABLE jobs_novo RENAME TO jobs;
+"""
+
 # Versão do esquema → script. Banco existente é copiado para backup_dir antes de qualquer migração.
-MIGRATIONS = {1: _SCHEMA_V1, 2: _MIGRATION_V2}
+MIGRATIONS = {1: _SCHEMA_V1, 2: _MIGRATION_V2, 3: _MIGRATION_V3, 4: _MIGRATION_V4, 5: _MIGRATION_V5}
 SCHEMA_VERSION = max(MIGRATIONS)
 
 
 def connect(path: Path) -> sqlite3.Connection:
-    """Conexão própria por requisição/thread; linhas acessíveis por nome."""
+    """Conexão própria por requisição; linhas acessíveis por nome. Usada por uma thread de cada vez (dependência e rota podem cair em threads diferentes do pool)."""
     Path(path).parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path, timeout=30)
+    conn = sqlite3.connect(path, timeout=30, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys=ON")
     conn.create_function("norm", 1, normalize, deterministic=True)
@@ -151,9 +205,12 @@ def insert_new_jobs(conn: sqlite3.Connection, jobs: list[Job], scores: dict[str,
     inserted = 0
     for job in jobs:
         cursor = conn.execute(
-            "INSERT OR IGNORE INTO jobs (fonte, id_da_vaga, titulo, empresa, link, trecho, pontos, run_id, encontrada_em) "
-            "VALUES (?,?,?,?,?,?,?,?,?)",
-            (job.fonte, job.id, job.titulo, job.empresa, job.link, job.trecho, scores.get(job.id, 0), run_id, now),
+            "INSERT OR IGNORE INTO jobs (fonte, id_da_vaga, titulo, empresa, link, trecho, pontos, run_id, encontrada_em, localidade, publicada_em) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                job.fonte, job.id, job.titulo, job.empresa, job.link, job.trecho,
+                scores.get(job.id, 0), run_id, now, job.localidade, job.publicada_em,
+            ),
         )
         inserted += cursor.rowcount
     conn.commit()

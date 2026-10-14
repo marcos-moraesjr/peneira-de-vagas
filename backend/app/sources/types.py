@@ -11,3 +11,5 @@ class Job:
     link: str
     trecho: str
     fonte: str
+    localidade: str = ""
+    publicada_em: str | None = None  # data de publicação em ISO 8601, quando a fonte informa

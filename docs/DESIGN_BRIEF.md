@@ -33,19 +33,21 @@ API ("API: ok · banco: ok" / "API indisponível").
 
 De cima para baixo:
 
-- **Barra de ação**: botão **Buscar agora**. Durante a execução vira "Buscando…" (desabilitado) e mostra o andamento por fonte (cada fonte: aguardando · buscando · ok · falha).
+- **Chrome dedicado**: indicador "Chrome dedicado aberto/fechado"; fechado, mostra o botão **Abrir Chrome dedicado** (abre pelo app, sem terminal) e a nota de que só LinkedIn e Indeed precisam dele.
+- **Barra de ação**: botão **Buscar agora** e, ao lado, checkboxes de plataforma (LinkedIn · Indeed · Gupy; todas marcadas por padrão, escolha de uma ou mais; sem nenhuma marcada o botão fica desabilitado; desabilitados durante a execução). Antes era uma lista "Plataforma da busca" com uma só opção por vez. Durante a execução vira "Buscando…" (desabilitado) e mostra o andamento por fonte (cada fonte: aguardando · buscando · ok · falha).
 - **Faixa de falhas** (só se a última execução teve falha; âmbar/vermelho): uma linha por fonte com motivo e ação. Exemplos: "LinkedIn: verificação de segurança. Abra o Chrome dedicado e resolva manualmente." · "Chrome dedicado não encontrado. Abra-o com o atalho do projeto."
 - **Aviso de scanner** (abaixo da faixa de falhas): scanner em estado `refazer` aparece como alerta vermelho "O scanner do X (vN) precisa ser refeito" com a mensagem, a instrução pronta (recolhível) e o botão **Copiar instrução para o Claude**; estado `atencao` aparece como nota discreta; em dia, nada. Detalhes em `SCANNERS.md`.
 - **Painel de palavras-chave** (recolhível, aberto na primeira visita): campo de texto + **Adicionar** (Enter também; foco volta ao campo), lista de termos como "chips" com ✕ para remover; seção irmã **Exclusões** igual. Sem termos: orientação "Adicione ao menos uma palavra-chave para buscar" e **Buscar agora** desabilitado. Erros inline ("Esse termo já existe", "Informe um termo"). Nota: "Vale a partir da próxima busca." Padrão de desenvolvimento: chip "Engenheiro Mecânico".
-- **Filtros**: abas/segmentos **Novas** | **Todas**, select de fonte ("Todas as fontes"), busca por texto (título/empresa). **Marcar todas como vistas** (com confirmação leve).
-- **Lista de vagas** (tabela ou cartões): ponto de "nova" · **Título** (link que abre a vaga em nova aba) · Empresa · Fonte (selo) · Pontuação · "Encontrada há X" · ação **Marcar como vista**. Abrir o link de uma vaga nova a marca como vista (implementado; a confirmar com o usuário). Botão "Carregar mais (N de M)".
+- **Filtros**: abas/segmentos **Novas** | **Todas**, select de fonte ("Todas as fontes"), busca por texto (título/empresa). **Marcar todas como vistas** (com confirmação leve) e **Excluir todas as vagas** (confirmação explícita; apaga vistas e novas, sem respeitar os filtros; irreversível).
+- **Lista de vagas** (tabela; antes eram linhas de lista; rolagem horizontal em telas estreitas): colunas **Vaga** (ponto de "nova" + título, link que abre a vaga em nova aba) · Empresa · Localidade · Publicada (DD/MM/AAAA; "—" quando a fonte não informa: LinkedIn e Indeed) · "Encontrada há X" · Plataforma (selo) · Pontos · Ações. **Ordenação:** todos os cabeçalhos de dado são botões (▲/▼/↕ e `aria-sort`); o 1º clique ordena (texto A→Z; pontos e datas do maior/mais recente), o 2º inverte, o 3º volta à ordem padrão; ação **Marcar como vista**. Abrir o link de uma vaga nova a marca como vista (implementado; a confirmar com o usuário). Botão "Carregar mais (N de M)".
 - **Estados**: carregando · vazio com orientação ("Nenhuma vaga nova. Última busca: {data}.") · vazio antes da primeira busca ("Clique em Buscar agora") · erro de API.
 
 ### 2. Execuções (`/execucoes`)
 
 - **Histórico**: uma linha por execução — início, duração, status; expandida mostra uma linha por fonte: status (ok/falha), motivo, lidas, aprovadas, novas.
+- **Refazer a documentação das plataformas**: select "Plataforma" (todas ou uma) + botão **Gerar instrução para refazer a documentação**; mostra a instrução e o botão **Copiar instrução para o Claude**.
 - **Scanners**: tabela com fonte, versão, data da exploração, autor (Claude) e estado (Em dia / Atenção / Refazer); a expansão de cada execução mostra a versão do scanner usada em cada fonte.
-- **Configuração em vigor** (somente leitura): localidade, pesos, limites. Nota: "Para alterar, edite `config.toml`. Palavras-chave e exclusões são editadas na tela Vagas."
+- **Configuração em vigor** (somente leitura): localidades, pesos, limites. Nota: "Para alterar, edite `config.toml`. Palavras-chave e exclusões são editadas na tela Vagas."
 - **Estados**: carregando, vazio ("Nenhuma execução ainda"), erro.
 
 ## Estados e feedback a desenhar

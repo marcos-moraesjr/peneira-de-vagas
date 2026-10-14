@@ -1,8 +1,9 @@
-"""Palavras-chave e exclusões editáveis pelo front, guardadas no SQLite."""
+"""Palavras-chave e exclusões editáveis pelo front, guardadas no SQLite, sempre no conjunto ativo."""
 import sqlite3
 
 from ..config import Settings
 from ..errors import DomainError, NotFound
+from . import conjuntos
 from .filters import normalize
 
 TIPOS = ("busca", "exclusao")
@@ -14,12 +15,13 @@ def _check_type(tipo: str) -> None:
 
 
 def list_all(conn: sqlite3.Connection, tipo: str | None = None) -> list[dict]:
-    sql = "SELECT id, termo, tipo, criada_em FROM keywords"
-    params: tuple = ()
+    """Palavras do conjunto ativo."""
+    sql = "SELECT id, termo, tipo, criada_em FROM keywords WHERE conjunto_id=?"
+    params: tuple = (conjuntos.active_id(conn),)
     if tipo is not None:
         _check_type(tipo)
-        sql += " WHERE tipo=?"
-        params = (tipo,)
+        sql += " AND tipo=?"
+        params += (tipo,)
     return [dict(row) for row in conn.execute(sql + " ORDER BY id", params)]
 
 
@@ -34,8 +36,8 @@ def add(conn: sqlite3.Connection, settings: Settings, termo: str, tipo: str, now
         raise DomainError(f"Valor inválido: termo={termo[:20]!r}... com {len(termo)} caracteres (esperado <= {limit})")
     try:
         cursor = conn.execute(
-            "INSERT INTO keywords (termo, termo_normalizado, tipo, criada_em) VALUES (?,?,?,?)",
-            (termo, normalized, tipo, now),
+            "INSERT INTO keywords (termo, termo_normalizado, tipo, criada_em, conjunto_id) VALUES (?,?,?,?,?)",
+            (termo, normalized, tipo, now, conjuntos.active_id(conn)),
         )
     except sqlite3.IntegrityError:
         raise DomainError(f"Esse termo já existe: {termo!r}") from None

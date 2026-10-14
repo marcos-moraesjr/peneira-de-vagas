@@ -1,6 +1,6 @@
 # Scanners — versionamento e manutenção
 
-Cada fonte de vagas (LinkedIn, Indeed, Gupy) tem um **scanner**: o adaptador em `backend/app/sources/<fonte>.py`
+Cada fonte de vagas (LinkedIn, Indeed, Gupy, Google) tem um **scanner**: o adaptador em `backend/app/sources/<fonte>.py`
 mais as amostras de teste, **gerado pelo Claude a partir de uma exploração da plataforma** (seletores e endpoint
 observados no DOM real; ver [`EXPLORACAO_PLATAFORMAS.md`](EXPLORACAO_PLATAFORMAS.md)). Plataformas mudam sem
 aviso, então todo scanner tem prazo de validade: este documento define como versioná-lo, como o app avisa que
@@ -74,3 +74,30 @@ Faça, seguindo TDD (teste vermelho antes do código):
 | linkedin | 1.0.0 | 2026-10-14 | Primeira versão: leitura card a card (`li[data-occludable-job-id]`), título em `a[href*="/jobs/view/"] strong`, `f_TPR=r86400`, paginação por `start=`. Não verificado: paginação por `start=`, perfil sem login |
 | indeed | 1.0.0 | 2026-10-14 | Primeira versão: `div.job_seen_beacon`, `a.jcs-JobTitle[data-jk]`, trecho pelos `li` do card, `fromage=1`. Não verificado: efeito de `fromage`, paginação por `start=` |
 | gupy | 1.0.0 | 2026-10-14 | Primeira versão: `portal.gupy.io/api/job-search/jobs` (`jobName`, `limit`, `offset`). Não verificado: resposta a `httpx` fora do navegador |
+| linkedin | 1.0.1 | 2026-10-14 | Em bloqueio (CAPTCHA/login/Cloudflare) a aba fica aberta para o usuário concluir a verificação à mão (`playwright_session`); sem mudança no que a fonte lê |
+| indeed | 1.0.1 | 2026-10-14 | Em bloqueio (CAPTCHA/login/Cloudflare) a aba fica aberta para o usuário concluir a verificação à mão (`playwright_session`); sem mudança no que a fonte lê |
+| linkedin | 1.0.2 | 2026-10-14 | `modalidade` passa a ser lista: `f_WT` leva os códigos separados por vírgula (ex.: `2,3`). Não verificado: aceitação de vários valores em `f_WT` pelo LinkedIn |
+| gupy | 1.1.0 | 2026-10-14 | `modalidade` passa a ser lista: uma busca por modalidade (`workplaceType` com um valor, como observado), vagas unidas sem repetir. Sem modalidade, uma busca sem filtro |
+| google | 0.1.0 | 2026-10-14 | Primeira versão (0.x = **seletores não observados no DOM real**): `google.com/search` com `q` (consulta booleana inteira de `[google] consultas`), `tbs=qdr:d<N>` e `start=`; resultados `#search a` com `h3` e trecho em `[data-sncf]`/`.VwiC3b`; bloqueio por `/sorry`, "tráfego incomum", `consent.google.com` e `accounts.google.com`. Não verificado: todos os seletores, efeito de `tbs` e da paginação por `start=`, frequência de CAPTCHA. Rodar "Documentar plataforma" para o Google antes de subir para 1.0.0 |
+| linkedin | 1.1.0 | 2026-10-14 | `Job` ganha `localidade` (legenda do card, já lida como trecho). O card não traz data de publicação: `publicada_em` fica vazio. Sem mudança nos seletores |
+| indeed | 1.1.0 | 2026-10-14 | `Job` ganha `localidade` (`[data-testid="text-location"]`, seletor já observado) no JS de extração. O card não traz data: `publicada_em` fica vazio |
+| gupy | 1.2.0 | 2026-10-14 | `Job` ganha `localidade` (`city, state`) e `publicada_em` (`publishedDate`), campos já presentes na resposta. Campo ausente deixa vazio, não é mudança de layout |
+| linkedin | 1.2.0 | 2026-10-14 | `search_url(termo, start, localidade)`: `location` vem de uma das `[busca] localidades` (uma busca por palavra-chave e localidade), não mais de um texto único. Não verificado: `location` com estado ("Minas Gerais") |
+| indeed | 1.2.0 | 2026-10-14 | `search_url(termo, start, localidade)`: `l` vem de uma das `[busca] localidades`. Não verificado: `l` com estado inteiro |
+| google | 0.1.1 | 2026-10-14 | `search_url` aceita `localidade` e a ignora; `GoogleSource` não multiplica as consultas pelas localidades |
+
+## Refazer só a documentação das plataformas
+
+Para atualizar `EXPLORACAO_PLATAFORMAS.md` sem esperar um scanner quebrar (por exemplo, antes de uma validação ou
+depois de um aviso de atenção), use a tela **Execuções → Refazer a documentação das plataformas**: escolha
+todas as plataformas ou uma, clique em **Gerar instrução para refazer a documentação** e cole a instrução
+copiada numa sessão do Claude Code neste repositório.
+
+A instrução pede **apenas documentação**: o Claude repete a busca com as suas palavras-chave, registra URL,
+seletores, paginação, filtro de data, formato da resposta e sinais de bloqueio (marcando o que foi verificado e
+o que não foi), compara com o que os adaptadores usam hoje e **lista as divergências sem alterar o código**.
+Se houver divergência, ele pergunta se deve atualizar os scanners; aí vale o procedimento da seção anterior
+(TDD, nova versão em `scanners.toml`, changelog).
+
+As regras de segurança vão junto na instrução: só o Chrome dedicado, sem abrir vagas para candidatura, sem
+aceitar cookies nem digitar credenciais, sem resolver CAPTCHA nem contornar bloqueios.

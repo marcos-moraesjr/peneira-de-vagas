@@ -22,6 +22,7 @@ busca pela API e exibe os resultados; **não há Telegram nem agendador externo*
 | --- | --- | --- |
 | **LinkedIn** | Navegador real (Chrome dedicado, controlado via CDP) | Navegador logado em automação viola os termos de uso; risco de restrição da conta aceito conscientemente. |
 | **Indeed** | Navegador real (mesmo Chrome dedicado) | Protegido por Cloudflare. Verificação anti-bot é esperada e tratada como falha, nunca contornada. |
+| **Google** | Navegador real (mesmo Chrome dedicado), consultas booleanas em `google.com/search` | Quarta fonte de dados enviada a terceiros, **por decisão do usuário** (14/10/2026): as consultas de `[google] consultas` vão ao Google. Páginas de ATS (lever, greenhouse…) só aparecem como resultado; não são abertas. CAPTCHA é esperado e tratado como falha, nunca contornado; sem API paga nem chave. |
 | **Gupy** | API JSON do portal (`portal.gupy.io`) via HTTP | Endpoint não documentado: capturado pelo DevTools (aba Network) e tratado como instável. |
 
 ## Backend
@@ -36,7 +37,7 @@ busca pela API e exibe os resultados; **não há Telegram nem agendador externo*
 | Extração de HTML | Locators do próprio Playwright | Sem biblioteca de parsing separada; o DOM é lido onde ele já está. |
 | Armazenamento | **SQLite** (módulo `sqlite3` da stdlib) | Deduplicação por chave única `(fonte, id_da_vaga)`, vagas e histórico de execuções. Sem ORM. |
 | Filtro de palavras-chave | `re` + `unicodedata` (stdlib) | Normalização (caixa, acentos) e regex. Peso maior para título que para descrição, com lista de exclusões. |
-| Configuração | **TOML** (`tomllib` da stdlib) | Localidade, pesos, limites e pausas ficam em `config.toml`, fora do código. Somente leitura. |
+| Configuração | **TOML** (`tomllib` da stdlib) | Localidade, pesos, limites e pausas ficam em `config.toml`, fora do código. Leitura com `tomllib`; a aba Configurações regrava só o valor da linha (`services/config_edit.py`, sem lib de escrita, comentários preservados). |
 | Palavras-chave e exclusões | **SQLite** (tabela `keywords`) | Editáveis pelo front; `config.toml` só traz o valor inicial (seed). Evita biblioteca de escrita de TOML. |
 | Execução da busca | `threading` (stdlib) | Uma execução por vez, em segundo plano; a API responde na hora e o front consulta o andamento. |
 | Logging | Módulo `logging` da stdlib | Sem biblioteca de logging externa. |
@@ -72,7 +73,7 @@ jobscanner/
 │   │   ├── main.py        # create_app(): rotas, lifespan, build estático
 │   │   ├── routes/        # rotas finas
 │   │   ├── services/      # execução da busca, vagas, filtro
-│   │   ├── sources/       # linkedin.py, indeed.py (Playwright/CDP) e gupy.py (httpx)
+│   │   ├── sources/       # linkedin.py, indeed.py, google.py (Playwright/CDP) e gupy.py (httpx)
 │   │   ├── db.py          # SQLite e deduplicação
 │   │   └── config.py      # config.toml tipado
 │   ├── config.toml
@@ -88,7 +89,7 @@ Todas as fontes devolvem o mesmo formato: `id`, `título`, `empresa`, `link`, `t
 
 ## Regras de projeto
 
-- **Chrome dedicado:** perfil próprio (`--user-data-dir`) e `--remote-debugging-port=9222` ligado só em `localhost`. Nunca o perfil pessoal.
+- **Chrome dedicado:** perfil próprio (`--user-data-dir`) e `--remote-debugging-port=9222` ligado só em `localhost`. Nunca conectar ao perfil pessoal em uso (versões recentes do Chrome ignoram a porta de depuração nele). O login nos sites é feito à mão pelo usuário nesse perfil (fica em `chrome-profile/`, fora do Git).
 - **API só em `127.0.0.1`:** sem autenticação, portanto sem exposição à rede. Abrir além disso é decisão do usuário.
 - **Deduplicação, não janela de tempo:** vaga nova é a que não está no SQLite.
 - **Filtro da própria busca primeiro:** URL com palavra-chave e filtro de últimas 24h; o filtro local é a segunda passada.

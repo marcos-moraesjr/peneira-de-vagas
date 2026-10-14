@@ -13,7 +13,7 @@ arquitetura. Continua **não verificado**: a Gupy responder a `httpx` fora do na
 ## Visão geral
 
 App **local** com front end (React) e API (FastAPI). O front dispara a busca; a API executa, em segundo
-plano, as tarefas de cada fonte (LinkedIn e Indeed via navegador real/CDP; Gupy via API JSON), filtra,
+plano, as tarefas de cada fonte (LinkedIn, Indeed e Google via navegador real/CDP; Gupy via API JSON), filtra,
 deduplica no SQLite e expõe os resultados, que o front exibe. Um usuário, nada sai da máquina além das
 requisições às três fontes.
 
@@ -25,7 +25,7 @@ Front (React/Vite) ──fetch + tipos OpenAPI──▶ API (FastAPI) ──sqli
         │  polling do andamento (TanStack Query)  ▼
         └───────────────────────────── serviço de execução (thread)
                                                   │
-                  para cada fonte (LinkedIn → Indeed → Gupy), isolada:
+                  para cada fonte (LinkedIn → Indeed → Google → Gupy), isolada:
                   sources/<fonte> ─▶ vagas (formato único) ─▶ filters ─▶ db (dedup)
                          └── falha explícita (SourceError) ─▶ run_sources
 ```
@@ -52,17 +52,27 @@ Tudo sob `/api`, JSON, só em `127.0.0.1`. Erros: `422` (entrada inválida), `40
 | Rota | Efeito |
 | --- | --- |
 | `GET /api/health` | `{status, db}` |
-| `POST /api/runs` | inicia a busca; `202 {id}`; `409` se há outra em andamento |
+| `POST /api/runs` | inicia a busca; corpo opcional `{fontes}` (`null`/ausente = todas as plataformas; lista = só essas, rodam na ordem do registro; antes era `{fonte}` com um único nome); `202 {id}`; `409` se há outra em andamento; `422` se a lista for vazia ou tiver fonte inexistente (valor e esperado) |
+| `POST /api/runs/{id}/cancel` | interrompe a execução em andamento (botão **Interromper**); `202 {id}`; `404` se não existe; `409` se já terminou. O cancelamento é cooperativo (um `threading.Event` por execução, em `app.state.cancel`): é checado antes de cada fonte e ao fim da busca e do detalhe, então a etapa em curso termina antes de parar. A fonte em andamento é descartada (nada é gravado) e as demais não começam: todas ficam `falha/interrompida`; a execução vira `concluida` |
 | `GET /api/runs?limit=` | histórico (mais recentes primeiro), cada um com suas `fontes` |
+| `DELETE /api/runs` | limpa o histórico: apaga **todas** as execuções (e seus `run_sources`); `200 {removidas}`; `409` se há execução em andamento. As vagas nunca são apagadas: ficam com `run_id` nulo (antes, execuções que originaram vagas eram preservadas e a limpeza não removia nada se todas tinham originado) |
 | `GET /api/runs/{id}` | andamento: `status` e, por fonte, `status`, `motivo`, `lidas`, `aprovadas`, `novas` |
-| `GET /api/jobs?visto=&fonte=&q=&limit=&offset=` | vagas, mais recentes primeiro; `visto=false` = novas |
+| `GET /api/jobs?visto=&fonte=&q=&ordenar=&direcao=&limit=&offset=` | vagas (cada uma com `localidade` e `publicada_em`). Sem `ordenar`: ordem padrão (execução mais recente, pontos, id). `ordenar` ∈ `titulo`, `empresa`, `localidade`, `publicada_em`, `encontrada_em`, `fonte`, `pontos` e `direcao` ∈ `asc` (padrão) / `desc`; texto compara sem acento nem maiúscula; vagas sem `publicada_em` ficam no fim nas duas direções; desempate por `id` decrescente; valor fora da lista → `422` com valor e esperado. A ordenação é no servidor porque a lista pagina; `visto=false` = novas |
 | `PATCH /api/jobs/{id}` | `{visto: bool}` |
+| `DELETE /api/jobs` | apaga todas as vagas (vistas e novas, sem filtro); `200 {removidas}`; `409` se há execução em andamento. Vaga excluída que reaparecer numa busca volta como nova (a deduplicação consulta a tabela `jobs`); "Limpar execuções" apaga o histórico independentemente das vagas |
 | `POST /api/jobs/mark-seen` | marca como vistas todas as que casam com os filtros do corpo |
-| `GET /api/keywords?tipo=` | lista palavras-chave (`busca`) e/ou exclusões (`exclusao`) |
-| `POST /api/keywords` | `{termo, tipo}` → `201`; `422` se vazio, maior que `keyword_max_length` ou duplicado (sem acento/caixa) |
+| `GET /api/keywords?tipo=` | lista palavras-chave (`busca`) e/ou exclusões (`exclusao`) **do conjunto ativo** |
+| `POST /api/keywords` | `{termo, tipo}` → `201` (grava no conjunto ativo); `422` se vazio, maior que `keyword_max_length` ou duplicado **no conjunto** (sem acento/caixa) |
 | `DELETE /api/keywords/{id}` | remove; `404` se não existe |
+| `GET /api/conjuntos` | conjuntos de palavras-chave `[{id, nome, ativo}]`; exatamente um está ativo |
+| `POST /api/conjuntos` | `{nome}` → `201`; cria um conjunto **vazio e já o ativa**; `422` se vazio, maior que `keyword_max_length` ou duplicado (sem acento/caixa) |
+| `POST /api/conjuntos/{id}/ativar` | torna esse o conjunto ativo → `204`; `404` se não existe |
+| `DELETE /api/conjuntos/{id}` | apaga o conjunto e suas palavras → `204`; se era o ativo, ativa o primeiro que sobrar; `404` se não existe; `422` se for o último |
+| `GET /api/browser` · `POST /api/browser/open` | se o Chrome dedicado está aberto (sonda CDP) · abre-o com perfil próprio e porta só local (`ja_aberto` se já estava); 422 se o Chrome não for achado em `chrome_paths` |
+| `GET /api/scanners/instrucao?fonte=` | instrução pronta para o Claude Code **refazer só a documentação** das plataformas (todas ou uma), com versões atuais, palavras-chave cadastradas e regras de segurança; 422 se a fonte for desconhecida |
 | `GET /api/scanners` | versão e estado (`ok`/`atencao`/`refazer`) de cada scanner; em `refazer`, traz a `instrucao` pronta para o Claude (`SCANNERS.md`) |
-| `GET /api/config` | config em vigor (somente leitura): localidade, pesos, limites |
+| `GET /api/config` | config em vigor: seções `busca`, `filtro`, `limites`, `ritmo`, `api` (caminhos, `cdp_url`, `chrome_paths` e URLs das fontes ficam de fora) |
+| `PUT /api/config` | corpo = o mesmo formato do `GET` (completo); valida, regrava só esses valores no `config.toml` (comentários e demais chaves intactos) e passa a valer na hora; `422` se inválido (arquivo intacto), `409` se há execução em andamento |
 
 Motivos de falha de fonte (enum): `captcha`, `login`, `cloudflare`, `seletor_nao_encontrado`,
 `zero_resultados`, `cdp_indisponivel`, `http_erro`, `interrompida`, `erro_interno`. Status por fonte durante
@@ -77,10 +87,10 @@ Ajustar aqui ao criar cada diretório.
 | Caminho | Conteúdo |
 | --- | --- |
 | `backend/app/main.py` | `create_app()`: rotas sob `/api`, lifespan, tradução de erros, build estático em `/` |
-| `backend/app/routes/` | rotas finas: `health`, `runs`, `jobs`, `keywords`, `config` |
-| `backend/app/services/` | `run_service` (orquestra uma execução, trava de execução única), `jobs` (consulta e marcação), `keywords` (CRUD, normalização, seed), `filters` (normalização, pontuação, exclusões) |
+| `backend/app/routes/` | rotas finas: `health`, `runs`, `jobs`, `keywords`, `conjuntos`, `config` |
+| `backend/app/services/` | `run_service` (orquestra uma execução, trava de execução única), `jobs` (consulta e marcação), `keywords` (CRUD no conjunto ativo, normalização, seed), `conjuntos` (criar, ativar, remover), `filters` (normalização, pontuação, exclusões) |
 | `backend/app/services/runs.py` | consulta de execuções e resultado por fonte |
-| `backend/app/sources/` | `gupy.py` (httpx), `browser.py` (`BrowserSource`, `PlaywrightNavigator`, `playwright_session`: CDP, ritmo, bloqueio), `linkedin.py` e `indeed.py` (adaptadores de site), `registry.py` (`build_sources`: LinkedIn → Indeed → Gupy), `types.py` (`Job`), `errors.py` (`SourceBlocked`, `SourceLayoutChanged`, `SourceEmpty`, `SourceUnavailable`) |
+| `backend/app/sources/` | `gupy.py` (httpx), `browser.py` (`BrowserSource`, `PlaywrightNavigator`, `playwright_session`: CDP, ritmo, bloqueio), `linkedin.py`, `indeed.py` e `google.py` (adaptadores de site; `GoogleSource` roda as consultas da config), `registry.py` (`build_sources`: LinkedIn → Indeed → Google → Gupy), `types.py` (`Job`), `errors.py` (`SourceBlocked`, `SourceLayoutChanged`, `SourceEmpty`, `SourceUnavailable`) |
 | `backend/app/schemas.py` | contratos Pydantic de toda a API |
 | `backend/app/errors.py` | `DomainError` (422), `NotFound` (404), `Conflict` (409) |
 | `backend/app/db.py` | `sqlite3`: conexão, esquema versionado (`schema_version`), inserção com dedup, consultas |
@@ -90,10 +100,11 @@ Ajustar aqui ao criar cada diretório.
 | `backend/scanners.toml` | manifesto de versões dos scanners (versão, data da exploração, autor, referência); regras em `SCANNERS.md` |
 | `backend/app/services/scanners.py` · `routes/scanners.py` | `load_manifest`, `evaluate` (estado de cada scanner) e a rota `/api/scanners` |
 | `backend/scripts/export_openapi.py` | grava o OpenAPI em `frontend/src/api/openapi.json`; `npm run gen:api` gera `schema.d.ts` |
-| `scripts/chrome-dedicado.ps1` | abre o Chrome dedicado (porta 9222 só em localhost, perfil `chrome-profile/`) |
+| `scripts/chrome-dedicado.ps1` | alternativa manual ao botão: abre o Chrome dedicado (porta 9222 só em localhost, perfil `chrome-profile/`) |
+| `backend/app/services/chrome.py` · `routes/browser.py` | `is_open`, `find_chrome`, `open_chrome`: sonda, descoberta e abertura do Chrome dedicado; `cdp_url` só aceita 127.0.0.1/localhost (validado na config) |
 | `backend/tests/` | pytest, um `test_<módulo>.py` por módulo; `conftest.py`: SQLite temporário, `Settings` e "agora" injetados; `samples/` (JSON/HTML salvos, sem dados pessoais) |
 | `frontend/src/api/` | `client.ts` (`apiGet` tipado + `apiSend`), `hooks.ts`; `schema.d.ts` e `openapi.json` gerados e versionados |
-| `frontend/src/features/` | `vagas` (lista, filtros, busca, painel de palavras-chave), `execucoes` (histórico e config) |
+| `frontend/src/features/` | `vagas` (lista, filtros, busca, seletor de conjuntos e painéis de palavras-chave), `execucoes` (histórico e config) |
 | `frontend/src/components/` | componentes comuns (`Tabs`, `ErrorBox`, `SourceBadge`, `ui.ts` com classes Tailwind compartilhadas) |
 | `frontend/dist/` | build estático (gerado, não versionado) |
 | `scripts/chrome-dedicado.*` | abre o Chrome dedicado (perfil e porta CDP) |
@@ -112,9 +123,11 @@ Cada `sources/<fonte>.py` expõe `fetch(config, ...) -> list[Job]`. `Job`:
 | `empresa` | `str` | vazio permitido |
 | `link` | `str` | URL canônica, sem parâmetros de rastreio |
 | `trecho` | `str` | descrição ou resumo disponível (lista; detalhe, se aberto) |
-| `fonte` | `str` | `linkedin`, `indeed` ou `gupy` |
+| `fonte` | `str` | `linkedin`, `indeed`, `google` ou `gupy` |
+| `localidade` | `str` | vazio permitido. Gupy: `city, state`; LinkedIn: legenda do card (local e modalidade); Indeed: `[data-testid="text-location"]` |
+| `publicada_em` | `str \| None` | data de publicação em ISO 8601. Só a Gupy informa (`publishedDate`); LinkedIn e Indeed não trazem data no card (`None`) |
 
-Cada fonte expõe também `name` e `enrich(jobs) -> list[Job]` (abre o detalhe; na Gupy é identidade).
+Cada fonte expõe também `name` e `enrich(jobs) -> list[Job]` (abre o detalhe; na Gupy e no Google é identidade).
 Falhas são exceções de `sources/errors.py` (com `motivo` e `detalhe`), nunca lista vazia disfarçada. **Zero
 resultados** é decidido pelo serviço de execução (`SourceEmpty`, MVP §6.8); a fonte de navegador devolve `[]`
 quando a página traz o aviso de "nenhum resultado" e levanta `SourceLayoutChanged` quando não há cards **nem**
@@ -124,6 +137,21 @@ LinkedIn e Indeed compartilham `sources/browser.py` (`BrowserSource`: paginaçã
 bloqueio, detalhe), extraído porque há dois casos reais; cada site fornece um adaptador (`LinkedInSite`,
 `IndeedSite`: URL de busca, `classify`, JS de extração, seletores de detalhe, `to_job`). O navegador real é
 isolado em `PlaywrightNavigator`, o que permite testar o fluxo com um navegador simulado.
+
+### Google
+
+- Fonte de navegador (`GoogleSite` + `GoogleSource`, subclasse de `BrowserSource`). **Não usa as palavras-chave do
+  painel**: cada item de `[google] consultas` é uma consulta booleana completa, enviada inteira em `q`
+  (`site:lever.co OR site:greenhouse.io intitle:(...) -"US only" ...`), com `tbs=qdr:d<N>` (dias, arredondando
+  `janela_horas` para cima) e `start=` (passo `[google] page_size`).
+- Resultado = link `#search a` com `h3` (título) e trecho em `[data-sncf]`/`.VwiC3b`. `id` e `link` = URL sem query e
+  sem fragmento (`/url?q=` é desembrulhado; links do próprio Google são ignorados); `empresa` fica vazia.
+- **Seletores não observados no DOM real** (scanner 0.x): frágeis até a plataforma ser documentada.
+- Bloqueio: `/sorry`, "tráfego incomum"/"unusual traffic" → `captcha`; `consent.google.com` e `accounts.google.com`
+  → `login`. Sem contorno; a aba fica aberta para o usuário resolver à mão (como no LinkedIn/Indeed).
+- **A consulta é o filtro.** `local_filter = False`: o serviço de execução não aplica exclusões nem pontuação às vagas
+  do Google (gravadas com `pontos = 0`), só a deduplicação. Antes: toda fonte passava pelo filtro local. Depois: fonte com
+  `local_filter = False` pula as duas passadas (lista e detalhe). Não há página de detalhe aberta.
 
 ### Gupy
 
@@ -140,21 +168,26 @@ isolado em `PlaywrightNavigator`, o que permite testar o fluxo com um navegador 
 ### LinkedIn e Indeed
 
 - URL de busca montada da config: `keywords`/`q`, recência (`f_TPR=r86400` / `fromage=1`), `start` para paginar
-  e `location`/`l` **só se** a localidade estiver preenchida (a busca observada não envia local).
+  e `location`/`l` **só se** houver localidade (a busca observada não envia local). **Uma busca por palavra-chave e por
+  localidade** de `[busca] localidades` (sem nenhuma, uma única busca sem local); o teto `max_vagas_lista` vale para o conjunto.
+  Gupy e Google não filtram por localidade (no Google, escreva o local na consulta booleana).
 - **LinkedIn lê card a card** (`lazy_cards`): o `<li data-occludable-job-id>` já traz o ID, mas título e empresa
   só aparecem depois de rolar até ele (7–11 cards renderizados ao carregar, de 25). Card sem título é
   descartado e **nunca gravado**, para a vaga não deixar de ser avaliada depois. Indeed lê tudo de uma vez.
 - Seletores observados: LinkedIn `a[href*="/jobs/view/"] strong` (título), `.artdeco-entity-lockup__subtitle`
   (empresa), `.artdeco-entity-lockup__caption` (local); Indeed `a.jcs-JobTitle[data-jk]` (ID e título em
-  `span[title]`), `[data-testid="company-name"]`, itens `li` do card (trecho). Classes com hash não são usadas.
+  `span[title]`), `[data-testid="company-name"]`, `[data-testid="text-location"]` (local), itens `li` do card (trecho). Classes com hash não são usadas.
 - "Anunciada novamente há N horas" no LinkedIn = vaga repostada; quem decide se é nova é o SQLite.
 - O banner de cookies do Indeed não bloqueia a leitura; escolha uma opção uma vez, à mão, no Chrome dedicado.
 - Pausas variáveis entre ações (e curtas ao rolar); uma aba por vez.
 - Tela de login, CAPTCHA/verificação, página Cloudflare ou seletor ausente → exceção da fonte; **sem retentativa de contorno**.
+- **Bloqueio (`SourceBlocked`) mantém a aba aberta** no Chrome dedicado, para o usuário concluir a verificação à
+  mão; a próxima execução abre uma aba nova (antes: a aba era sempre fechada). Outros erros e o sucesso continuam
+  fechando a aba. A aba deixada aberta é responsabilidade do usuário fechar.
 
 ## Filtro
 
-Palavras-chave e exclusões vêm da tabela `keywords`, lidas **no início de cada execução** (edição vale na
+Palavras-chave e exclusões vêm da tabela `keywords`, **só do conjunto ativo** (tabela `conjuntos`; antes eram uma lista única global), lidas **no início de cada execução** (edição vale na
 busca seguinte). Cada palavra-chave `busca` gera uma consulta por fonte (mais termos = mais páginas lidas,
 limitadas por `max_vagas_lista`); a mesma lista pontua o filtro local.
 
@@ -178,8 +211,9 @@ antes de qualquer mudança de esquema.
 
 | Tabela | Colunas | Restrições |
 | --- | --- | --- |
-| `jobs` | `id` PK, `fonte`, `id_da_vaga`, `titulo`, `empresa`, `link`, `trecho`, `pontos`, `run_id` FK, `encontrada_em`, `visto` (0/1) | `UNIQUE(fonte, id_da_vaga)` |
-| `keywords` | `id` PK, `termo`, `termo_normalizado`, `tipo` (`busca`/`exclusao`), `criada_em` | `UNIQUE(termo_normalizado, tipo)` |
+| `jobs` | `id` PK, `fonte`, `id_da_vaga`, `titulo`, `empresa`, `link`, `trecho`, `pontos`, `run_id` FK (anulável, `ON DELETE SET NULL`; esquema v5), `encontrada_em`, `localidade` (`''` se a fonte não informa), `publicada_em` (NULL se não informa), `visto` (0/1) | `UNIQUE(fonte, id_da_vaga)` |
+| `conjuntos` (esquema v4) | `id` PK, `nome`, `nome_normalizado` (único), `ativo` (0/1), `criada_em` | índice único parcial: no máximo um `ativo=1`; a migração cria o conjunto `Padrão` (ativo) |
+| `keywords` | `id` PK, `termo`, `termo_normalizado`, `tipo` (`busca`/`exclusao`), `criada_em`, `conjunto_id` FK (`ON DELETE CASCADE`) | `UNIQUE(conjunto_id, termo_normalizado, tipo)` (antes `UNIQUE(termo_normalizado, tipo)`); a migração 4 move as palavras existentes para o `Padrão` |
 | `runs` | `id` PK, `inicio`, `fim`, `status` (`executando`/`concluida`) | |
 | `run_sources` | `run_id` FK, `fonte`, `status` (`aguardando`/`buscando`/`ok`/`falha`), `motivo`, `detalhe`, `lidas`, `aprovadas`, `novas`, `scanner_versao` (versão do scanner usada; esquema v2) | `PRIMARY KEY(run_id, fonte)` |
 
@@ -188,7 +222,9 @@ Datas em ISO 8601 (UTC); o front formata em pt-BR com `Intl`. "Agora" é injetad
 ## Configuração
 
 Todo valor que ajusta comportamento mora aqui, nunca como literal (`CODE_QUALITY.md` §5). `config.toml` lido
-por `backend/app/config.py` (`tomllib`); caminhos relativos partem da raiz do projeto. Host e porta são
+por `backend/app/config.py` (`tomllib`) e editável pela aba Configurações **só** nas seções `busca`, `filtro`, `limites`,
+`ritmo` e `api` (`PUT /api/config`; escrita em `services/config_edit.py`, sem biblioteca: troca só o valor da linha).
+Antes: `janela_horas`, `trecho_max_chars`, pesos e `poll_interval_ms` não tinham limite; agora exigem `> 0` (pesos, `min_score` e pausas, `>= 0`); caminhos relativos partem da raiz do projeto. Host e porta são
 argumentos do `uvicorn` (`127.0.0.1` por padrão; abrir para a rede é decisão registrada no TECH_STACK).
 
 | Parâmetro | Default | Efeito |
@@ -196,10 +232,10 @@ argumentos do `uvicorn` (`127.0.0.1` por padrão; abrir para a rede é decisão 
 | `[geral] db_path` | `data/jobscanner.db` | arquivo SQLite (a pasta é criada se faltar) |
 | `[geral] frontend_dist` | `frontend/dist` | build estático servido pela API em `/` |
 | `[geral] log_dir` | `logs` | pasta do log |
-| `[padrao] palavras_chave` | `["Engenheiro Mecânico"]` | seed da tabela `keywords` (tipo `busca`), aplicado **uma única vez** (flag `seeded`); depois disso, a lista vive no SQLite e é editada pelo front |
+| `[padrao] palavras_chave` | `["Engenheiro Mecânico"]` | seed da tabela `keywords` (tipo `busca`, conjunto ativo), aplicado **uma única vez** (flag `seeded`); depois disso, a lista vive no SQLite e é editada pelo front |
 | `[padrao] exclusoes` | `[]` | seed das exclusões, mesma regra |
 | `[busca] keyword_max_length` | `80` | tamanho máximo de um termo |
-| `[busca] localidade` / `modalidade` | `""` / `""` | local (vazio = não envia, como na busca observada) e remoto/híbrido/presencial |
+| `[busca] localidades` / `modalidade` | `[]` / `[]` | lista de cidades ou estados (`"Campinas, SP"`, `"Minas Gerais"`; textos não vazios, sem repetição ignorando caixa; vazia = não envia local, como na busca observada), editável na aba Configurações; e lista de `remoto`/`hibrido`/`presencial` (vazia = todas). Antes: `localidade`, um único texto (`""`) e `modalidade` um único texto (`"remoto"`…); LinkedIn envia `f_WT=2,3`, Gupy faz uma busca por modalidade |
 | `[busca] janela_horas` | `24` | filtro de recência da própria busca (onde a fonte permite) |
 | `[filtro] peso_titulo` / `peso_descricao` | `3` / `1` | pontos por termo no título e no trecho |
 | `[filtro] min_score` | `3` | pontuação mínima para aprovar |
@@ -212,11 +248,15 @@ argumentos do `uvicorn` (`127.0.0.1` por padrão; abrir para a rede é decisão 
 | `[linkedin]` / `[indeed]` `base_url`, `page_size` | URL de busca e passo de paginação (`start`) | |
 | `[navegador] cdp_url` | `http://127.0.0.1:9222` | endereço do Chrome dedicado (só `localhost`) |
 | `[navegador] timeout_s` | `30` | espera máxima por página/elemento |
+| `[navegador] probe_timeout_s` / `chrome_paths` | `1.5` / caminhos do Chrome (Windows, Linux, macOS) | espera ao sondar o CDP; onde procurar o Chrome para o botão "Abrir Chrome dedicado" (o primeiro que existir) |
+| `[geral] chrome_profile_dir` | `chrome-profile` | perfil do Chrome dedicado (nunca o pessoal) |
 | `[api] jobs_page_size` | `50` | tamanho padrão da página de vagas |
 | `[api] runs_history_limit` | `30` | execuções devolvidas por padrão no histórico |
 | `[api] poll_interval_ms` | `2000` | intervalo do polling do front (exposto em `GET /api/config`) |
 | `[versionamento] falhas_consecutivas` / `max_idade_dias` | `2` / `90` | falhas de quebra seguidas (na versão atual) que mandam refazer o scanner; idade que pede atenção |
 | `[versionamento] motivos_de_quebra` | `seletor_nao_encontrado`, `zero_resultados`, `http_erro` | motivos que contam como scanner quebrado (bloqueios não contam) |
+| `[google] base_url`, `page_size` | `https://www.google.com/search`, `10` | URL de busca e passo de paginação (`start`) |
+| `[google] consultas` | uma consulta booleana de ATS (`site:lever.co OR …`) | lista de consultas completas, uma busca por item; cada texto não vazio. Exige o Chrome dedicado aberto. Edição só em `config.toml` por ora |
 | `[gupy] base_url`, `page_size`, `timeout_s` | `portal.gupy.io/api/job-search/jobs`, `50`, `20` | endpoint (parâmetros `jobName`, `limit`, `offset`, `workplaceType`), página e timeout. A Gupy não tem filtro de recência (a deduplicação cobre) nem de localidade nesta versão |
 
 Os valores `(a definir)` dependem das decisões em aberto de `MVP.md` §11. Parâmetro novo é registrado aqui

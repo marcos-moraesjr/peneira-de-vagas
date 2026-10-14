@@ -16,11 +16,13 @@ der 403, parar e reavaliar), o efeito de `fromage=1` no Indeed, a paginação po
 logado e a falha provocada (Chrome fechado). Endpoint e seletores vêm da exploração em DOM real de 14/10/2026
 (`EXPLORACAO_PLATAFORMAS.md` §2); as amostras de teste são fictícias com a estrutura observada. Fase 5 não iniciada.
 
+Extra pedido pelo usuário: **conjuntos de palavras-chave** (esquema v4: tabela `conjuntos`, `keywords.conjunto_id`, rotas `/api/conjuntos`, seletor na tela de vagas; a busca usa só o conjunto ativo, com as exclusões dele).
+
 Extra pedido pelo usuário depois da Fase 4: **versionamento dos scanners** (`backend/scanners.toml`, esquema v2 do banco, `GET /api/scanners`, aviso "refazer" na tela e no log; ver `SCANNERS.md`).
 
 Desvios registrados: o `README` e a API usam a porta **8100** (a 8000 estava em uso pelo FinApp); `Python 3.14`
 no ambiente de desenvolvimento; Tailwind 4.1.11 no lugar da 4.0.0 (falha de build); `BackgroundTasks` não foi
-usado (apenas `threading`); a Gupy não recebe filtro de localidade/recência nesta versão.
+usado (apenas `threading`); a Gupy não recebe filtro de localidade/recência nesta versão; extra pedido pelo usuário depois da Fase 4: fonte **Google** (consultas booleanas em `[google] consultas`, scanner 0.1.0 com seletores não observados, sem filtro local).
 
 ## Visão geral
 

@@ -41,3 +41,9 @@ class SourceEmpty(SourceError):
 
 class SourceUnavailable(SourceError):
     motivo = "http_erro"
+
+
+class SourceInterrupted(SourceError):
+    """Execução cancelada pelo usuário."""
+
+    motivo = "interrompida"

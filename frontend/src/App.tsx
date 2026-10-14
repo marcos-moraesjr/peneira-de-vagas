@@ -1,11 +1,15 @@
 import { useState } from "react";
 import { useHealth } from "./api/hooks";
+import { ConfigPage } from "./features/configuracoes/ConfigPage";
 import { ExecucoesPage } from "./features/execucoes/ExecucoesPage";
+import { TutorialPage } from "./features/tutorial/TutorialPage";
 import { VagasPage } from "./features/vagas/VagasPage";
 
 const TABS = [
   { id: "vagas", label: "Vagas" },
   { id: "execucoes", label: "Execuções" },
+  { id: "config", label: "Configurações" },
+  { id: "tutorial", label: "Tutorial" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -47,7 +51,12 @@ export default function App() {
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-5xl px-4 py-6">{tab === "vagas" ? <VagasPage /> : <ExecucoesPage />}</main>
+      <main className="mx-auto max-w-5xl px-4 py-6">
+        {tab === "vagas" && <VagasPage />}
+        {tab === "execucoes" && <ExecucoesPage />}
+        {tab === "config" && <ConfigPage />}
+        {tab === "tutorial" && <TutorialPage />}
+      </main>
     </div>
   );
 }

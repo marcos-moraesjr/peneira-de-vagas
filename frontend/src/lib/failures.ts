@@ -1,4 +1,4 @@
-const LABELS: Record<string, string> = { linkedin: "LinkedIn", indeed: "Indeed", gupy: "Gupy" };
+const LABELS: Record<string, string> = { linkedin: "LinkedIn", indeed: "Indeed", google: "Google", gupy: "Gupy" };
 
 export function sourceLabel(fonte: string): string {
   return LABELS[fonte] ?? fonte;
@@ -47,3 +47,6 @@ const TEXTS: Record<string, { message: string; action: string }> = {
 export function describeFailure(_fonte: string, motivo: string): { message: string; action: string } {
   return TEXTS[motivo] ?? { message: `falhou (${motivo}).`, action: "Veja o log em logs/jobscanner.log." };
 }
+
+/** Todos os motivos padronizados de falha de fonte, na ordem em que o tutorial os explica. */
+export const FAILURE_REASONS = Object.keys(TEXTS);

@@ -7,6 +7,7 @@ import pytest
 
 from backend.app import db
 from backend.app.config import ConfigError, settings_from_dict
+from backend.app.errors import DomainError
 from backend.app.services import run_service, scanners
 from backend.app.services.scanners import Manifest, ScannerInfo, load_manifest
 from backend.app.sources.errors import SourceLayoutChanged
@@ -37,9 +38,9 @@ def evaluate(conn, settings, manifest=None, today=TODAY):
 
 # ---------- manifesto ----------
 
-def test_manifesto_do_projeto_cobre_as_tres_fontes_com_versao_e_data():
+def test_manifesto_do_projeto_cobre_as_quatro_fontes_com_versao_e_data():
     manifest = load_manifest(MANIFEST_PATH)
-    assert list(manifest.scanners) == ["linkedin", "indeed", "gupy"]
+    assert list(manifest.scanners) == ["linkedin", "indeed", "gupy", "google"]
     for info in manifest.scanners.values():
         assert info.versao.count(".") == 2 and info.gerado_por and info.referencia
         assert info.explorado_em >= date(2026, 10, 14)
@@ -156,6 +157,11 @@ def test_execucao_grava_a_versao_do_scanner_usada(conn):
 
 def test_migracao_v1_para_v2_adiciona_a_coluna_e_faz_copia(conn, settings):
     conn.execute("ALTER TABLE run_sources DROP COLUMN scanner_versao")
+    conn.execute("ALTER TABLE jobs DROP COLUMN localidade")  # colunas da migração 3, que também roda neste teste
+    conn.execute("ALTER TABLE jobs DROP COLUMN publicada_em")
+    conn.execute("DROP TABLE keywords")  # volta ao esquema 1 (migração 4 também roda neste teste)
+    conn.execute("DROP TABLE conjuntos")
+    conn.executescript(db.MIGRATIONS[1])
     conn.execute("UPDATE schema_version SET version=1")
     conn.commit()
     db.init_db(conn, settings)
@@ -189,3 +195,57 @@ def test_start_run_grava_as_versoes_do_manifesto(conn, settings):
     spawned = []
     run_id = run_service.start_run(conn, settings, [BrokenSource()], lambda: NOW, spawn=spawned.append, manifest=make_manifest(versao="2.0.1"))
     assert conn.execute("SELECT scanner_versao FROM run_sources WHERE run_id=?", (run_id,)).fetchone()[0] == "2.0.1"
+
+
+# ---------- instrução para refazer a documentação das plataformas ----------
+
+def full_manifest():
+    return load_manifest(MANIFEST_PATH)
+
+
+def test_instrucao_de_documentacao_cobre_todas_as_plataformas_com_versao_e_data():
+    manifesto = full_manifest()
+    texto = scanners.documentation_instruction(manifesto, None, ["Engenheiro Mecânico"])
+    for rotulo in ("LinkedIn", "Indeed", "Gupy", "Google"):
+        assert rotulo in texto
+    assert all(info.versao in texto for info in manifesto.scanners.values()) and "2026-10-14" in texto
+    for arquivo in ("backend/app/sources/linkedin.py", "backend/app/sources/indeed.py", "backend/app/sources/gupy.py", "backend/app/sources/google.py"):
+        assert arquivo in texto
+
+
+def test_instrucao_de_documentacao_traz_termos_destino_e_o_que_registrar():
+    texto = scanners.documentation_instruction(full_manifest(), None, ["Engenheiro Mecânico", "Projetista"])
+    assert '"Engenheiro Mecânico"' in texto and '"Projetista"' in texto
+    assert "docs/EXPLORACAO_PLATAFORMAS.md" in texto
+    for item in ("seletores", "paginação", "ID estável", "filtro de data", "bloqueio"):
+        assert item in texto
+    assert "verificado" in texto and "não verificado" in texto
+
+
+def test_instrucao_de_documentacao_repete_as_regras_de_seguranca():
+    texto = scanners.documentation_instruction(full_manifest(), None, ["x"])
+    assert "Chrome dedicado" in texto
+    assert "candidatura" in texto and "cookies" in texto and "CAPTCHA" in texto
+    assert "não contorne" in texto.lower() or "sem contornar" in texto.lower()
+
+
+def test_instrucao_de_documentacao_so_documenta_e_pede_as_divergencias_antes_de_mexer_no_codigo():
+    texto = scanners.documentation_instruction(full_manifest(), None, ["x"])
+    assert "Não altere o código" in texto
+    assert "divergências" in texto and "docs/SCANNERS.md" in texto
+
+
+def test_instrucao_de_uma_so_plataforma_nao_menciona_as_outras():
+    texto = scanners.documentation_instruction(full_manifest(), "gupy", ["x"])
+    assert "Gupy" in texto and "backend/app/sources/gupy.py" in texto
+    assert "LinkedIn" not in texto and "Indeed" not in texto
+
+
+def test_instrucao_de_fonte_desconhecida_informa_valor_e_esperado():
+    with pytest.raises(DomainError, match=r"fonte='orkut'.*linkedin"):
+        scanners.documentation_instruction(full_manifest(), "orkut", ["x"])
+
+
+def test_instrucao_sem_palavras_chave_orienta_a_usar_a_do_config():
+    texto = scanners.documentation_instruction(full_manifest(), None, [])
+    assert "nenhuma palavra-chave cadastrada" in texto

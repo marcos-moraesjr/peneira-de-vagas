@@ -1,10 +1,11 @@
 # JobScanner
 
-Aplicação **local** que busca vagas de emprego no **LinkedIn**, no **Indeed** e na **Gupy**. Você cadastra
+Aplicação **local** que busca vagas de emprego no **LinkedIn**, no **Indeed**, no **Google** (buscas booleanas) e na **Gupy**. Você cadastra
 as palavras-chave no front end (padrão de desenvolvimento: **Engenheiro Mecânico**), clica em **Buscar
-agora**, e a API consulta as três fontes, filtra, remove duplicadas e mostra as vagas novas na tela.
+agora**, e a API consulta as quatro fontes, filtra, remove duplicadas e mostra as vagas novas na tela.
 
-- LinkedIn e Indeed: navegador Chrome real e dedicado, controlado via CDP (sem disfarce de automação).
+- LinkedIn, Indeed e Google: navegador Chrome real e dedicado, controlado via CDP (sem disfarce de automação).
+- Google: roda as consultas booleanas de `[google] consultas` (`backend/config.toml`), por exemplo `site:lever.co OR site:greenhouse.io intitle:(...)`.
 - Gupy: API JSON do próprio portal.
 - Front end: React + TypeScript. API: FastAPI. Banco: SQLite.
 
@@ -51,17 +52,17 @@ npm install
 
 ## Chrome dedicado (LinkedIn e Indeed)
 
-Use um perfil próprio, nunca o seu pessoal. A porta de depuração fica só em `localhost`.
+Usa um perfil próprio (`chrome-profile/`), nunca o seu pessoal; a porta de depuração fica só em `localhost`.
 
-```bash
-# Windows (PowerShell)
-& "C:\Program Files\Google\Chrome\Application\chrome.exe" `
-  --remote-debugging-port=9222 --user-data-dir="$PWD\chrome-profile"
-```
+**Pelo app (recomendado):** na aba Vagas, clique em **Abrir Chrome dedicado**. O indicador muda para "Chrome
+dedicado aberto" quando ele estiver pronto. Se o Chrome não for achado, ajuste `chrome_paths` em
+`backend/config.toml`.
+
+**Pelo terminal (alternativa):** `powershell -File scripts\chrome-dedicado.ps1`.
 
 Na primeira vez, faça login no LinkedIn e no Indeed **manualmente** nessa janela e deixe-a aberta durante a
-busca. O atalho do projeto ficará em `scripts/`. Se o Chrome estiver fechado, a busca nessas fontes falha
-com o aviso "Chrome dedicado não encontrado" (a Gupy continua funcionando).
+busca. Se o Chrome estiver fechado, a busca nessas fontes falha com o aviso "Chrome dedicado não encontrado"
+(a Gupy continua funcionando). O Google pode pedir verificação (CAPTCHA); nesse caso a fonte falha e a aba fica aberta para você resolver à mão.
 
 > O uso de navegador logado em automação pode violar os termos de uso do LinkedIn e do Indeed; o risco de
 > restrição da conta é aceito conscientemente. Se aparecer CAPTCHA ou verificação, resolva à mão: o
@@ -99,6 +100,7 @@ Não exponha a API além de `127.0.0.1`: ela não tem autenticação.
 2. Clique em **Buscar agora** e acompanhe o andamento por fonte.
 3. Veja as vagas **novas**, abra a original pelo link e marque como vistas.
 4. A tela **Execuções** mostra o histórico e o motivo de qualquer fonte que tenha falhado.
+5. A aba **Tutorial** do app traz esses passos (Chrome dedicado, login, palavras-chave, busca) e a tabela de problemas comuns.
 
 Parâmetros fixos (localidade, pesos, limites, pausas; a localidade vem vazia, como na busca observada) ficam em `backend/config.toml`; referência completa em
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#configuração).

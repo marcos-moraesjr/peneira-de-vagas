@@ -51,7 +51,9 @@ por "testo depois".
   limitação de taxa encerram a fonte na execução e geram alerta. Não resolver CAPTCHA, não trocar
   user-agent para disfarçar, não usar proxy, não instalar stealth (`TECH_STACK.md`, Excluídos).
 - Chrome dedicado do projeto apenas (`--user-data-dir` próprio, porta de depuração só em `localhost`).
-  Nunca conectar ao perfil pessoal do usuário nem abrir a porta de depuração além de `127.0.0.1`.
+  Nunca conectar ao perfil pessoal do usuário (a porta de depuração só vale no perfil dedicado) nem abrir a
+  porta além de `127.0.0.1`. O perfil dedicado nasce vazio e o login é feito à mão pelo usuário; não há cópia
+  do perfil pessoal.
 - Nunca ler, imprimir, logar ou commitar cookies, o perfil do Chrome (`chrome-profile/`),
   `*.db` ou o conteúdo de sessões logadas.
 - Abrir a API além de `127.0.0.1` ou enviar dados a terceiros além das três fontes de vagas: decisão **exclusiva do usuário**.

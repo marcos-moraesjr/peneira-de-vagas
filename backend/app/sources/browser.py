@@ -29,7 +29,7 @@ class Site(Protocol):
     lazy_cards: bool  # True: os cards só renderizam ao rolar até eles (LinkedIn)
     detail_selectors: list[str]
 
-    def search_url(self, termo: str, start: int) -> str: ...
+    def search_url(self, termo: str, start: int, localidade: str = "") -> str: ...
 
     def classify(self, url: str, title: str, text: str) -> str | None: ...
 
@@ -102,7 +102,10 @@ def make_pause(minimum_s: float, maximum_s: float) -> Callable[[], None]:
 
 
 def playwright_session(settings: Settings) -> AbstractContextManager[Navigator]:
-    """Conecta ao Chrome dedicado já aberto pelo usuário e usa uma aba por vez; nunca fecha o Chrome."""
+    """Conecta ao Chrome dedicado já aberto pelo usuário e usa uma aba por vez; nunca fecha o Chrome.
+
+    A aba é fechada ao terminar, exceto em bloqueio (`SourceBlocked`): fica aberta para o usuário concluir a
+    verificação à mão; a próxima execução abre uma aba nova."""
 
     @contextmanager
     def session():
@@ -117,10 +120,15 @@ def playwright_session(settings: Settings) -> AbstractContextManager[Navigator]:
                 ) from error
             context = browser.contexts[0] if browser.contexts else browser.new_context()
             page = context.new_page()
+            keep_open = False
             try:
                 yield PlaywrightNavigator(page, timeout_ms)
+            except SourceBlocked:
+                keep_open = True  # o usuário resolve a verificação à mão nesta aba
+                raise
             finally:
-                page.close()
+                if not keep_open:
+                    page.close()
         finally:
             playwright.stop()
 
@@ -148,9 +156,10 @@ class BrowserSource:
         found: dict[str, Job] = {}
         with self._session() as navigator:
             for termo in termos:
-                if len(found) >= limit:
-                    break
-                self._search_term(navigator, termo, found)
+                for localidade in self._localidades():
+                    if len(found) >= limit:
+                        break
+                    self._search_term(navigator, termo, localidade, found)
         return list(found.values())[:limit]
 
     def enrich(self, jobs: list[Job]) -> list[Job]:
@@ -168,11 +177,15 @@ class BrowserSource:
                 enriched.append(replace(job, trecho=text) if text else job)
         return enriched
 
-    def _search_term(self, navigator: Navigator, termo: str, found: dict[str, Job]) -> None:
+    def _localidades(self) -> list[str]:
+        """Uma busca por localidade da config; sem nenhuma, uma única busca sem filtro de local ("")."""
+        return self._settings.busca.localidades or [""]
+
+    def _search_term(self, navigator: Navigator, termo: str, localidade: str, found: dict[str, Job]) -> None:
         limit = self._settings.limites.max_vagas_lista
         start = 0
         while len(found) < limit:
-            navigator.open(self._site.search_url(termo, start))
+            navigator.open(self._site.search_url(termo, start, localidade))
             self._pause()
             self._check_block(navigator)
             raws = self._read_cards(navigator)

@@ -1,4 +1,4 @@
-import { describeFailure, sourceLabel } from "./failures";
+import { FAILURE_REASONS, describeFailure, sourceLabel } from "./failures";
 
 describe("describeFailure", () => {
   it("traduz o motivo em frase simples e ação", () => {
@@ -34,5 +34,18 @@ describe("sourceLabel", () => {
     expect(sourceLabel("indeed")).toBe("Indeed");
     expect(sourceLabel("gupy")).toBe("Gupy");
     expect(sourceLabel("outra")).toBe("outra");
+  });
+});
+
+describe("FAILURE_REASONS", () => {
+  it("lista todos os motivos padronizados, cada um com texto", () => {
+    expect(FAILURE_REASONS).toHaveLength(9);
+    for (const reason of FAILURE_REASONS) expect(describeFailure("gupy", reason).message).not.toMatch(/^falhou \(/);
+  });
+});
+
+describe("sourceLabel", () => {
+  it("nomeia a fonte Google", () => {
+    expect(sourceLabel("google")).toBe("Google");
   });
 });

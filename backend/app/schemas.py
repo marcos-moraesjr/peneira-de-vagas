@@ -7,8 +7,16 @@ class HealthOut(BaseModel):
     db: str
 
 
+class RunIn(BaseModel):
+    fontes: list[str] | None = None  # None = todas as fontes
+
+
 class RunStarted(BaseModel):
     id: int
+
+
+class RunsCleared(BaseModel):
+    removidas: int
 
 
 class RunSourceOut(BaseModel):
@@ -52,8 +60,10 @@ class JobOut(BaseModel):
     link: str
     trecho: str
     pontos: int
-    run_id: int
+    run_id: int | None
     encontrada_em: str
+    localidade: str
+    publicada_em: str | None
     visto: bool
 
 
@@ -75,6 +85,20 @@ class MarkSeenOut(BaseModel):
     atualizadas: int
 
 
+class JobsCleared(BaseModel):
+    removidas: int
+
+
+class ConjuntoIn(BaseModel):
+    nome: str
+
+
+class ConjuntoOut(BaseModel):
+    id: int
+    nome: str
+    ativo: bool
+
+
 class KeywordIn(BaseModel):
     termo: str
     tipo: str
@@ -88,8 +112,8 @@ class KeywordOut(BaseModel):
 
 
 class ConfigBusca(BaseModel):
-    localidade: str
-    modalidade: str
+    localidades: list[str]
+    modalidade: list[str]
     janela_horas: int
     keyword_max_length: int
 
@@ -98,6 +122,7 @@ class ConfigFiltro(BaseModel):
     peso_titulo: int
     peso_descricao: int
     min_score: int
+    trecho_max_chars: int
 
 
 class ConfigLimites(BaseModel):
@@ -108,6 +133,8 @@ class ConfigLimites(BaseModel):
 class ConfigRitmo(BaseModel):
     pausa_min_s: float
     pausa_max_s: float
+    rolagem_min_s: float
+    rolagem_max_s: float
 
 
 class ConfigApi(BaseModel):
@@ -121,3 +148,17 @@ class ConfigOut(BaseModel):
     limites: ConfigLimites
     ritmo: ConfigRitmo
     api: ConfigApi
+
+
+class BrowserOut(BaseModel):
+    aberto: bool
+
+
+class BrowserOpenOut(BaseModel):
+    estado: str
+
+
+class InstructionOut(BaseModel):
+    instrucao: str
+
+

@@ -1,6 +1,7 @@
 """Fontes ativas, na ordem de execução (navegador primeiro, API por último)."""
 from ..config import Settings
 from .browser import BrowserSource, make_pause, playwright_session
+from .google import GoogleSite, GoogleSource
 from .gupy import GupySource
 from .indeed import IndeedSite
 from .linkedin import LinkedInSite
@@ -17,5 +18,6 @@ def build_sources(settings: Settings) -> list:
     return [
         BrowserSource(LinkedInSite(settings), settings, session, pause, scroll_pause),
         BrowserSource(IndeedSite(settings), settings, session, pause, scroll_pause),
+        GoogleSource(GoogleSite(settings), settings, session, pause, scroll_pause),
         GupySource(settings),
     ]

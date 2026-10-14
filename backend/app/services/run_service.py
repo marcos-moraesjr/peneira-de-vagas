@@ -9,7 +9,7 @@ from typing import Protocol
 from .. import db
 from ..config import Settings
 from ..errors import DomainError
-from ..sources.errors import SourceEmpty, SourceError
+from ..sources.errors import SourceEmpty, SourceError, SourceInterrupted
 from ..sources.types import Job
 from . import keywords, scanners
 from .filters import Filter
@@ -49,15 +49,24 @@ def _approve(jobs: list[Job], flt: Filter) -> tuple[list[Job], dict[str, int]]:
     return approved, scores
 
 
-def _run_source(conn, settings, source: Source, termos, flt, run_id: int, now: str) -> None:
+def _check_cancel(cancel: threading.Event | None) -> None:
+    if cancel is not None and cancel.is_set():
+        raise SourceInterrupted("Execução interrompida pelo usuário")
+
+
+def _run_source(conn, settings, source: Source, termos, flt, run_id: int, now: str, cancel=None) -> None:
+    _check_cancel(cancel)
     jobs = source.search(termos)
+    _check_cancel(cancel)
     if not jobs:
         raise SourceEmpty("A fonte não devolveu nenhuma vaga")
-    approved, scores = _approve(jobs, flt)
+    local_filter = getattr(source, "local_filter", True)
+    approved, scores = _approve(jobs, flt) if local_filter else (jobs, {})
     unknown = db.filter_unknown(conn, approved)
     cap = settings.limites.max_paginas_detalhe
     detailed = source.enrich(unknown[:cap])
-    detailed_ok, detailed_scores = _approve(detailed, flt)
+    _check_cancel(cancel)
+    detailed_ok, detailed_scores = _approve(detailed, flt) if local_filter else (detailed, {})
     final = detailed_ok + unknown[cap:]
     scores.update(detailed_scores)
     novas = db.insert_new_jobs(conn, final, scores, run_id, now)
@@ -79,15 +88,18 @@ def execute_run(
     sources: list[Source],
     now: Callable[[], str],
     manifest: Manifest | None = None,
+    cancel: threading.Event | None = None,
 ) -> None:
-    """Roda cada fonte isolada: a falha de uma é registrada e a execução segue para a próxima."""
+    """Roda cada fonte isolada: a falha de uma é registrada e a execução segue para a próxima.
+
+    `cancel` aceso interrompe: a fonte em andamento é descartada ao fim da etapa atual e as seguintes nem começam."""
     conn = db.connect(settings.geral.db_path)
     try:
         termos, flt = _build_filter(conn, settings)
         for source in sources:
             _update_source(conn, run_id, source.name, status="buscando")
             try:
-                _run_source(conn, settings, source, termos, flt, run_id, now())
+                _run_source(conn, settings, source, termos, flt, run_id, now(), cancel)
             except SourceError as error:
                 log.warning("Fonte %s falhou: %s (%s)", source.name, error.motivo, error.detalhe)
                 _update_source(conn, run_id, source.name, status="falha", motivo=error.motivo, detalhe=error.detalhe)
@@ -113,11 +125,12 @@ def start_run(
     now: Callable[[], str],
     spawn: Callable[[Callable[[], None]], None] = spawn_thread,
     manifest: Manifest | None = None,
+    cancel: threading.Event | None = None,
 ) -> int:
     """Valida, abre a execução (uma por vez) e a dispara em segundo plano, gravando a versão de cada scanner."""
     if not keywords.list_all(conn, "busca"):
         raise DomainError("Adicione ao menos uma palavra-chave para buscar")
     versions = manifest.versions() if manifest else None
     run_id = db.create_run(conn, [source.name for source in sources], now(), versions)
-    spawn(lambda: execute_run(settings, run_id, sources, now, manifest))
+    spawn(lambda: execute_run(settings, run_id, sources, now, manifest, cancel))
     return run_id

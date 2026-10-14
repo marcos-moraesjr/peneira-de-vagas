@@ -1,8 +1,10 @@
+import threading
+
 import pytest
 
 from backend.app import db
 from backend.app.errors import Conflict, DomainError
-from backend.app.services import keywords, run_service
+from backend.app.services import conjuntos, keywords, run_service
 from backend.app.sources.errors import SourceBlocked
 from backend.app.sources.types import Job
 
@@ -57,6 +59,35 @@ def test_grava_apenas_vagas_aprovadas_e_conta_lidas_aprovadas_novas(conn, settin
     assert (linha["status"], linha["lidas"], linha["aprovadas"], linha["novas"]) == ("ok", 2, 1, 1)
     assert [r["id_da_vaga"] for r in conn.execute("SELECT id_da_vaga FROM jobs")] == ["1"]
     assert conn.execute("SELECT status FROM runs").fetchone()[0] == "concluida"
+
+
+def test_cancelar_antes_de_comecar_interrompe_todas_as_fontes_sem_buscar(conn, settings):
+    a, b = FakeSource("a", jobs=[job("1", fonte="a")]), FakeSource("b", jobs=[job("2", fonte="b")])
+    run_id = db.create_run(conn, ["a", "b"], NOW)
+    cancel = threading.Event()
+    cancel.set()
+    run_service.execute_run(settings, run_id, [a, b], now, cancel=cancel)
+    fontes = sources_of(conn, run_id)
+    assert [(f["status"], f["motivo"]) for f in fontes.values()] == [("falha", "interrompida")] * 2
+    assert a.search_calls == [] and b.search_calls == []
+    assert conn.execute("SELECT status FROM runs").fetchone()[0] == "concluida"
+
+
+def test_cancelar_durante_a_busca_descarta_a_fonte_atual_e_interrompe_as_seguintes(conn, settings):
+    cancel = threading.Event()
+
+    class CancelaAoBuscar(FakeSource):
+        def search(self, termos):
+            cancel.set()
+            return super().search(termos)
+
+    a, b = CancelaAoBuscar("a", jobs=[job("1", fonte="a")]), FakeSource("b", jobs=[job("2", fonte="b")])
+    run_id = db.create_run(conn, ["a", "b"], NOW)
+    run_service.execute_run(settings, run_id, [a, b], now, cancel=cancel)
+    fontes = sources_of(conn, run_id)
+    assert [(f["status"], f["motivo"]) for f in fontes.values()] == [("falha", "interrompida")] * 2
+    assert a.enrich_calls == [] and b.search_calls == []
+    assert conn.execute("SELECT COUNT(*) FROM jobs").fetchone()[0] == 0
 
 
 def test_falha_de_uma_fonte_nao_impede_as_outras(conn, settings):
@@ -123,6 +154,19 @@ def test_palavras_chave_do_banco_sao_enviadas_a_fonte(conn, settings):
     assert fonte.search_calls == [["Engenheiro Mecânico", "Engenheiro de Manutenção"]]
 
 
+def test_busca_usa_so_o_conjunto_ativo(conn, settings):
+    padrao = conjuntos.list_all(conn)[0]
+    conjuntos.add(conn, settings, "Tecnologia", NOW)
+    keywords.add(conn, settings, "Cientista de dados", "busca", NOW)
+    fonte = FakeSource(jobs=[job("1", titulo="Cientista de dados")])
+    run_all(conn, settings, [fonte])
+    assert fonte.search_calls == [["Cientista de dados"]]
+    conjuntos.activate(conn, padrao["id"])
+    fonte = FakeSource(jobs=[job("2")])
+    run_all(conn, settings, [fonte])
+    assert fonte.search_calls == [["Engenheiro Mecânico"]]
+
+
 def test_start_run_sem_palavra_chave_e_rejeitado(conn, settings):
     for item in keywords.list_all(conn, "busca"):
         keywords.remove(conn, item["id"])
@@ -136,3 +180,13 @@ def test_start_run_com_outra_em_andamento_levanta_conflito(conn, settings):
     with pytest.raises(Conflict):
         run_service.start_run(conn, settings, [FakeSource()], now, spawn=spawned.append)
     assert len(spawned) == 1
+
+
+def test_fonte_sem_filtro_local_grava_tudo_sem_exclusoes_nem_pontuacao(conn, settings):
+    keywords.add(conn, settings, "pintor", "exclusao", NOW)
+    fonte = FakeSource(jobs=[job("1", titulo="Pintor"), job("2", titulo="Dev .NET")])
+    fonte.local_filter = False
+    run_id = run_all(conn, settings, [fonte])
+    linha = sources_of(conn, run_id)["fake"]
+    assert (linha["status"], linha["lidas"], linha["aprovadas"], linha["novas"]) == ("ok", 2, 2, 2)
+    assert [r["pontos"] for r in conn.execute("SELECT pontos FROM jobs")] == [0, 0]

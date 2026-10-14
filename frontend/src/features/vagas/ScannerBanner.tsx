@@ -1,27 +1,16 @@
-import { useState } from "react";
 import { useScanners } from "../../api/hooks";
 import type { Scanner } from "../../api/types";
-import { buttonSecondary } from "../../components/ui";
+import { CopyButton } from "../../components/CopyButton";
 import { sourceLabel } from "../../lib/failures";
 
 function CopyInstruction({ instruction }: { instruction: string }) {
-  const [copied, setCopied] = useState(false);
-  async function copy() {
-    await navigator.clipboard.writeText(instruction);
-    setCopied(true);
-  }
   return (
     <div className="mt-2 space-y-2">
       <details className="text-xs">
         <summary className="cursor-pointer text-red-800">Ver instrução</summary>
         <pre className="mt-1 whitespace-pre-wrap rounded bg-white/70 p-2 text-slate-800">{instruction}</pre>
       </details>
-      <div className="flex items-center gap-3">
-        <button type="button" className={buttonSecondary} onClick={copy}>
-          Copiar instrução para o Claude
-        </button>
-        {copied && <span className="text-xs text-red-900">Copiado</span>}
-      </div>
+      <CopyButton text={instruction} />
     </div>
   );
 }

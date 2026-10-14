@@ -13,6 +13,7 @@ function setup(opts: { jobs?: unknown[]; runs?: unknown[] | (() => unknown[]); k
     "GET /api/jobs": () => ({ items: jobs, total: jobs.length }),
     "GET /api/runs": () => (typeof opts.runs === "function" ? opts.runs() : (opts.runs ?? [])),
     "POST /api/runs": { status: 202, json: { id: 5 } },
+    "POST /api/runs/5/cancel": { status: 202, json: { id: 5 } },
     "PATCH /api/jobs/1": () => ({ ...(jobs[0] as object), visto: true }),
     "POST /api/jobs/mark-seen": { atualizadas: 2 },
     ...opts.extra,
@@ -56,6 +57,21 @@ describe("VagasPage", () => {
     });
   });
 
+  it("ordena pelo servidor: texto começa crescente, números e datas decrescentes, terceiro clique limpa", async () => {
+    const user = userEvent.setup();
+    const { calls } = setup({ jobs: [makeJob(1)] });
+    await screen.findByRole("link", { name: "Engenheiro Mecânico 1" });
+    const ultima = () => [...calls].reverse().find((c) => c.path.startsWith("/api/jobs?"))?.path ?? "";
+    await user.click(screen.getByRole("button", { name: /^Empresa/ }));
+    await waitFor(() => expect(ultima()).toContain("ordenar=empresa&direcao=asc"));
+    await user.click(screen.getByRole("button", { name: /^Empresa/ }));
+    await waitFor(() => expect(ultima()).toContain("ordenar=empresa&direcao=desc"));
+    await user.click(screen.getByRole("button", { name: /^Empresa/ }));
+    await waitFor(() => expect(ultima()).not.toContain("ordenar"));
+    await user.click(screen.getByRole("button", { name: /^Pontos/ }));
+    await waitFor(() => expect(ultima()).toContain("ordenar=pontos&direcao=desc"));
+  });
+
   it("marca como vista pelo botão", async () => {
     const user = userEvent.setup();
     const { calls } = setup({ jobs: [makeJob(1)] });
@@ -85,6 +101,23 @@ describe("VagasPage", () => {
     await user.click(await screen.findByRole("button", { name: "Marcar todas como vistas" }));
     expect(confirm).toHaveBeenCalled();
     await waitFor(() => expect(calls.find((c) => c.path === "/api/jobs/mark-seen")?.body).toEqual({}));
+  });
+
+  it("excluir todas as vagas pede confirmação e chama DELETE /api/jobs", async () => {
+    const user = userEvent.setup();
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const { calls } = setup({ jobs: [makeJob(1)] });
+    await user.click(await screen.findByRole("button", { name: "Excluir todas as vagas" }));
+    expect(confirm).toHaveBeenCalled();
+    await waitFor(() => expect(calls.some((c) => c.method === "DELETE" && c.path === "/api/jobs")).toBe(true));
+  });
+
+  it("cancelar a exclusão não envia nada", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    const { calls } = setup({ jobs: [makeJob(1)] });
+    await user.click(await screen.findByRole("button", { name: "Excluir todas as vagas" }));
+    expect(calls.some((c) => c.method === "DELETE")).toBe(false);
   });
 
   it("cancelar a confirmação não envia nada", async () => {
@@ -121,6 +154,35 @@ describe("VagasPage", () => {
     await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.path === "/api/runs")).toBe(true));
   });
 
+  it("vem com todas as plataformas marcadas e Buscar agora busca em todas", async () => {
+    const user = userEvent.setup();
+    const { calls } = setup({ jobs: [] });
+    const button = await screen.findByRole("button", { name: "Buscar agora" });
+    await waitFor(() => expect(button).toBeEnabled());
+    for (const nome of ["LinkedIn", "Indeed", "Gupy", "Google"]) expect(screen.getByRole("checkbox", { name: nome })).toBeChecked();
+    await user.click(button);
+    await waitFor(() => expect(calls.find((c) => c.method === "POST" && c.path === "/api/runs")?.body).toEqual({ fontes: null }));
+  });
+
+  it("desmarcar plataformas busca só nas marcadas (mais de uma)", async () => {
+    const user = userEvent.setup();
+    const { calls } = setup({ jobs: [] });
+    const button = await screen.findByRole("button", { name: "Buscar agora" });
+    await waitFor(() => expect(button).toBeEnabled());
+    await user.click(screen.getByRole("checkbox", { name: "Indeed" }));
+    await user.click(button);
+    await waitFor(() => expect(calls.find((c) => c.method === "POST" && c.path === "/api/runs")?.body).toEqual({ fontes: ["linkedin", "google", "gupy"] }));
+  });
+
+  it("sem nenhuma plataforma marcada o botão fica desabilitado", async () => {
+    const user = userEvent.setup();
+    setup({ jobs: [] });
+    const button = await screen.findByRole("button", { name: "Buscar agora" });
+    await waitFor(() => expect(button).toBeEnabled());
+    for (const nome of ["LinkedIn", "Indeed", "Gupy", "Google"]) await user.click(screen.getByRole("checkbox", { name: nome }));
+    expect(button).toBeDisabled();
+  });
+
   it("durante a execução mostra o andamento por fonte e bloqueia novo clique", async () => {
     setup({
       runs: [
@@ -137,6 +199,19 @@ describe("VagasPage", () => {
     expect(within(progress).getByText(/LinkedIn/)).toBeInTheDocument();
     expect(within(progress).getByText(/buscando/i)).toBeInTheDocument();
     expect(within(progress).getByText(/aguardando/i)).toBeInTheDocument();
+  });
+
+  it("durante a execução, Interromper dispara POST /api/runs/{id}/cancel", async () => {
+    const user = userEvent.setup();
+    const { calls } = setup({ runs: [makeRun(5, "executando", [makeSource("linkedin", { status: "buscando" })])] });
+    await user.click(await screen.findByRole("button", { name: "Interromper" }));
+    await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.path === "/api/runs/5/cancel")).toBe(true));
+  });
+
+  it("sem execução em andamento não há botão Interromper", async () => {
+    setup({ runs: [makeRun(5, "concluida", [makeSource("gupy")])] });
+    await screen.findByRole("button", { name: "Buscar agora" });
+    expect(screen.queryByRole("button", { name: "Interromper" })).not.toBeInTheDocument();
   });
 
   it("acompanha a execução por polling e recarrega as vagas ao concluir", async () => {

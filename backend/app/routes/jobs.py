@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 
 from ..config import Settings
 from ..deps import get_conn, get_settings
-from ..schemas import JobOut, JobsPage, MarkSeenIn, MarkSeenOut, SeenIn
+from ..schemas import JobOut, JobsCleared, JobsPage, MarkSeenIn, MarkSeenOut, SeenIn
 from ..services import jobs
 
 router = APIRouter()
@@ -17,10 +17,17 @@ def list_jobs(
     q: str | None = None,
     limit: int | None = None,
     offset: int = 0,
+    ordenar: str | None = None,
+    direcao: str | None = None,
     conn: sqlite3.Connection = Depends(get_conn),
     settings: Settings = Depends(get_settings),
 ) -> dict:
-    return jobs.list_jobs(conn, visto, fonte, q, limit or settings.api.jobs_page_size, offset)
+    return jobs.list_jobs(conn, visto, fonte, q, limit or settings.api.jobs_page_size, offset, ordenar, direcao)
+
+
+@router.delete("/jobs", response_model=JobsCleared)
+def clear_jobs(conn: sqlite3.Connection = Depends(get_conn)) -> JobsCleared:
+    return JobsCleared(removidas=jobs.clear_all(conn))
 
 
 @router.post("/jobs/mark-seen", response_model=MarkSeenOut)

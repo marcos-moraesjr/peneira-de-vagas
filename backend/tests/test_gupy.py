@@ -23,6 +23,15 @@ def test_converte_resposta_da_gupy_para_o_formato_unico(settings):
     assert primeira.titulo == "Engenheiro(a) Mecânico(a) Pleno"
     assert primeira.link == "https://metalurgicaexemplo.gupy.io/job/eyJqb2JJZCI6MTAwMX0="
     assert "equipamentos industriais" in primeira.trecho
+    assert primeira.localidade == "Campinas, São Paulo"
+    assert primeira.publicada_em == "2026-10-08T11:04:27.057Z"
+
+
+def test_vaga_da_gupy_sem_cidade_ou_data_fica_sem_localidade_e_sem_publicacao(settings):
+    item = {k: v for k, v in SAMPLE["data"][0].items() if k not in ("city", "state", "publishedDate")}
+    source = make_source(settings, lambda request: httpx.Response(200, json={**SAMPLE, "data": [item]}))
+    job = source.search(["x"])[0]
+    assert job.localidade == "" and job.publicada_em is None
 
 
 def test_envia_termo_limite_e_offset_da_config(settings):
@@ -73,9 +82,33 @@ def test_filtro_de_modalidade_vai_para_a_api(settings):
         vistos.append(dict(request.url.params))
         return httpx.Response(200, json=SAMPLE)
 
-    remoto = settings.busca.__class__(settings.busca.keyword_max_length, 24, "Brasil", "remoto")
+    remoto = settings.busca.__class__(settings.busca.keyword_max_length, 24, "Brasil", ["remoto"])
     make_source(settings.__class__(**{**settings.__dict__, "busca": remoto}), handler).search(["x"])
     assert vistos[0]["workplaceType"] == "remote"
+
+
+def test_varias_modalidades_fazem_uma_busca_por_modalidade_sem_repetir_vagas(settings):
+    vistos = []
+
+    def handler(request):
+        vistos.append(request.url.params.get("workplaceType"))
+        return httpx.Response(200, json=SAMPLE)
+
+    busca = settings.busca.__class__(settings.busca.keyword_max_length, 24, "Brasil", ["remoto", "hibrido"])
+    jobs = make_source(settings.__class__(**{**settings.__dict__, "busca": busca}), handler).search(["x"])
+    assert vistos == ["remote", "hybrid"]
+    assert sorted(job.id for job in jobs) == ["1001", "1002"]
+
+
+def test_sem_modalidade_faz_uma_busca_sem_filtro(settings):
+    vistos = []
+
+    def handler(request):
+        vistos.append(request.url.params.get("workplaceType"))
+        return httpx.Response(200, json=SAMPLE)
+
+    make_source(settings, handler).search(["x"])
+    assert vistos == [None]
 
 
 def test_resposta_sem_data_e_mudanca_de_layout(settings):

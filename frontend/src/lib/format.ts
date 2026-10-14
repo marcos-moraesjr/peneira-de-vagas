@@ -30,3 +30,10 @@ export function formatDateTime(iso: string): string {
 export function formatDate(isoDate: string): string {
   return isoDate.split("-").reverse().join("/");
 }
+
+const day = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short" });
+
+/** Data (sem hora) de um instante ISO 8601, no fuso local. */
+export function formatDay(iso: string): string {
+  return day.format(new Date(iso));
+}

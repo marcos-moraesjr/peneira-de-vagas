@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { useConfig, useRuns, useScanners } from "../../api/hooks";
+import { useClearRuns, useConfig, useDocumentationInstruction, useRuns, useScanners } from "../../api/hooks";
 import type { Config, Run, Scanner } from "../../api/types";
+import { CopyButton } from "../../components/CopyButton";
 import { ErrorBox } from "../../components/ErrorBox";
-import { card } from "../../components/ui";
+import { buttonSecondary, card, inputClass } from "../../components/ui";
 import { describeFailure, sourceLabel } from "../../lib/failures";
 import { formatDate, formatDateTime, formatDuration } from "../../lib/format";
 
@@ -66,8 +67,8 @@ function RunItem({ run }: { run: Run }) {
 
 function ConfigView({ config }: { config: Config }) {
   const rows: [string, string][] = [
-    ["Localidade", config.busca.localidade],
-    ["Modalidade", config.busca.modalidade || "qualquer"],
+    ["Localidades", config.busca.localidades.join(", ") || "qualquer"],
+    ["Modalidade", config.busca.modalidade.join(", ") || "qualquer"],
     ["Janela da busca", `${config.busca.janela_horas} h`],
     ["Pontos por termo no título / na descrição", `${config.filtro.peso_titulo} / ${config.filtro.peso_descricao}`],
     ["Pontuação mínima", String(config.filtro.min_score)],
@@ -127,19 +128,76 @@ function ScannersTable({ scanners }: { scanners: Scanner[] }) {
   );
 }
 
+const DOC_SOURCES = ["linkedin", "indeed", "google", "gupy"];
+
+/** Gera a instrução para o Claude Code refazer a documentação das plataformas (todas ou uma). */
+function DocumentationPanel() {
+  const [fonte, setFonte] = useState("");
+  const generate = useDocumentationInstruction();
+  return (
+    <section className={`${card} space-y-3`}>
+      <h2 className="text-sm font-semibold text-slate-800">Refazer a documentação das plataformas</h2>
+      <p className="text-xs text-slate-500">
+        Gera uma instrução para colar numa sessão do Claude Code neste repositório: ele explora as plataformas de novo
+        e atualiza docs/EXPLORACAO_PLATAFORMAS.md, sem mexer no código.
+      </p>
+      <div className="flex flex-wrap items-center gap-3">
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          Plataforma
+          <select value={fonte} onChange={(event) => setFonte(event.target.value)} className={inputClass}>
+            <option value="">Todas as plataformas</option>
+            {DOC_SOURCES.map((source) => (
+              <option key={source} value={source}>
+                {sourceLabel(source)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button type="button" className={buttonSecondary} disabled={generate.isPending} onClick={() => generate.mutate(fonte)}>
+          Gerar instrução para refazer a documentação
+        </button>
+      </div>
+      {generate.error && <ErrorBox message={generate.error.message} />}
+      {generate.data && (
+        <div className="space-y-2">
+          <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded bg-slate-900 p-3 text-xs text-slate-100">
+            {generate.data.instrucao}
+          </pre>
+          <CopyButton text={generate.data.instrucao} />
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function ExecucoesPage() {
   const runs = useRuns();
   const config = useConfig();
   const scanners = useScanners();
+  const clear = useClearRuns();
   return (
     <div className="space-y-4">
       {scanners.data && scanners.data.length > 0 && <ScannersTable scanners={scanners.data} />}
       {runs.isError && <ErrorBox message="Não foi possível carregar as execuções. Verifique se a API está rodando." />}
       {runs.isLoading && <p className="text-sm text-slate-500">Carregando execuções…</p>}
       {runs.isSuccess && runs.data.length === 0 && <p className="text-sm text-slate-500">Nenhuma execução ainda.</p>}
+      <div className="flex justify-end">
+        <button
+          type="button"
+          className={buttonSecondary}
+          disabled={clear.isPending || !runs.data?.length}
+          onClick={() => {
+            if (window.confirm("Apagar o histórico de execuções? As vagas encontradas são mantidas.")) clear.mutate();
+          }}
+        >
+          Limpar execuções
+        </button>
+      </div>
+      {clear.error && <ErrorBox message={clear.error.message} />}
       <ul className="space-y-2">
         {runs.data?.map((run) => <RunItem key={run.id} run={run} />)}
       </ul>
+      <DocumentationPanel />
       {config.data && <ConfigView config={config.data} />}
     </div>
   );

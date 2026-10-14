@@ -12,10 +12,11 @@ from datetime import date
 from pathlib import Path
 
 from ..config import ConfigError, Settings
+from ..errors import DomainError
 
 SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
 REQUIRED_KEYS = ("versao", "explorado_em", "gerado_por", "referencia")
-LABELS = {"linkedin": "LinkedIn", "indeed": "Indeed", "gupy": "Gupy"}
+LABELS = {"linkedin": "LinkedIn", "indeed": "Indeed", "gupy": "Gupy", "google": "Google"}
 
 INSTRUCTION = (
     'O scanner da fonte "{label}" (versão {versao}, explorado em {explorado_em} por {gerado_por}) precisa ser refeito.\n'
@@ -127,3 +128,48 @@ def _state(conn: sqlite3.Connection, settings: Settings, info: ScannerInfo, toda
 
 def evaluate(conn: sqlite3.Connection, settings: Settings, manifest: Manifest, today: date) -> list[dict]:
     return [_state(conn, settings, info, today) for info in manifest.scanners.values()]
+
+
+DOC_INSTRUCTION = """Refaça a documentação das plataformas de vagas: {plataformas}.
+
+Contexto: o JobScanner lê cada plataforma com um scanner versionado (docs/SCANNERS.md). A documentação atual \
+está em docs/EXPLORACAO_PLATAFORMAS.md e pode estar desatualizada.
+
+Plataformas e versão atual do scanner:
+{linhas}
+
+Termos de busca a usar na exploração: {termos}.
+
+O que fazer (apenas documentação, no Chrome dedicado já logado):
+1. Para cada plataforma, repita a busca com esses termos e registre em docs/EXPLORACAO_PLATAFORMAS.md \
+(substituindo a seção da plataforma e a data da exploração): URL e parâmetros de busca; seletores dos cards \
+(ID estável, título, empresa, local); paginação; filtro de data (e se ele realmente funciona); formato da \
+resposta (para a Gupy: endpoint, parâmetros e JSON); renderização incremental; banner de cookies; qualquer \
+sinal de bloqueio.
+2. Marque cada item como verificado (observado no DOM ou na rede) ou não verificado.
+3. Compare com o que os adaptadores usam hoje ({arquivos}) e liste as divergências encontradas.
+4. Não altere o código nem as amostras agora. Ao final, mostre as divergências e pergunte se devo atualizar \
+os scanners (via TDD, subindo a versão em backend/scanners.toml e registrando em docs/SCANNERS.md).
+
+Regras de segurança: use só o Chrome dedicado do JobScanner (nunca o perfil pessoal); não abra vagas para \
+candidatura nem envie formulários; não aceite banners de cookies nem digite credenciais (se algo disso for \
+necessário, peça a mim); não resolva CAPTCHA e não contorne bloqueios: se aparecerem, pare e relate."""
+
+
+def documentation_instruction(manifest: Manifest, fonte: str | None, keywords: list[str]) -> str:
+    """Instrução para o Claude Code refazer só a documentação das plataformas (uma ou todas)."""
+    if fonte is not None and fonte not in manifest.scanners:
+        raise DomainError(f"Valor inválido: fonte={fonte!r} (esperado um de {list(manifest.scanners)})")
+    chosen = [manifest.scanners[fonte]] if fonte else list(manifest.scanners.values())
+    lines = "\n".join(
+        f"- {LABELS.get(info.fonte, info.fonte)}: scanner v{info.versao}, explorado em "
+        f"{info.explorado_em.isoformat()} ({info.referencia})"
+        for info in chosen
+    )
+    terms = ", ".join(f'"{term}"' for term in keywords) or "nenhuma palavra-chave cadastrada (use as do config.toml, seção [padrao])"
+    return DOC_INSTRUCTION.format(
+        plataformas=", ".join(LABELS.get(info.fonte, info.fonte) for info in chosen),
+        linhas=lines,
+        termos=terms,
+        arquivos=", ".join(f"backend/app/sources/{info.fonte}.py" for info in chosen),
+    )

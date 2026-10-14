@@ -1,5 +1,6 @@
 """create_app(): rotas sob /api, abertura do banco, tradução de erros e build estático em /."""
 import logging
+import threading
 from collections.abc import Callable
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -13,7 +14,8 @@ from . import db
 from .config import Settings, load_settings
 from .errors import Conflict, DomainError, NotFound
 from .routes import config as config_routes
-from .routes import health, jobs, keywords, runs, scanners
+from .routes import browser, conjuntos, health, jobs, keywords, runs, scanners
+from .services import chrome
 from .services.run_service import spawn_thread
 from .services.scanners import Manifest, load_manifest
 from .sources.registry import build_sources
@@ -51,6 +53,9 @@ def create_app(
     spawn: Callable | None = None,
     now: Callable[[], str] | None = None,
     manifest: Manifest | None = None,
+    chrome_probe: Callable[[], bool] | None = None,
+    chrome_launcher: Callable[[list[str]], None] | None = None,
+    config_path: Path | None = None,
 ) -> FastAPI:
     if settings is None:
         settings = load_settings(DEFAULT_CONFIG)
@@ -68,14 +73,18 @@ def create_app(
 
     app = FastAPI(title="JobScanner", lifespan=lifespan)
     app.state.settings = settings
-    app.state.sources_factory = sources_factory or (lambda: build_sources(settings))
+    app.state.sources_factory = sources_factory or (lambda: build_sources(app.state.settings))
     app.state.spawn = spawn or spawn_thread
+    app.state.cancel = threading.Event()
     app.state.now = now or utc_now
+    app.state.config_path = config_path or DEFAULT_CONFIG
     app.state.manifest = manifest or load_manifest(DEFAULT_MANIFEST)
+    app.state.chrome_probe = chrome_probe or (lambda: chrome.is_open(settings))
+    app.state.chrome_launcher = chrome_launcher or chrome.launch_detached
 
     for status_code, error in ((422, DomainError), (404, NotFound), (409, Conflict)):
         app.add_exception_handler(error, _handler(status_code))
-    for module in (health, runs, jobs, keywords, scanners, config_routes):
+    for module in (health, runs, jobs, keywords, conjuntos, scanners, browser, config_routes):
         app.include_router(module.router, prefix="/api")
 
     if (settings.geral.frontend_dist / "index.html").exists():

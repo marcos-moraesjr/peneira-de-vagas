@@ -27,6 +27,23 @@
       "post": {
         "summary": "Start Run",
         "operationId": "start_run_api_runs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/RunIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "description": "Successful Response",
@@ -34,6 +51,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RunStarted"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -72,6 +99,61 @@
                     "$ref": "#/components/schemas/RunOut"
                   },
                   "title": "Response List Runs Api Runs Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Clear Runs",
+        "operationId": "clear_runs_api_runs_delete",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunsCleared"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/{run_id}/cancel": {
+      "post": {
+        "summary": "Cancel Run",
+        "operationId": "cancel_run_api_runs__run_id__cancel_post",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunStarted"
                 }
               }
             }
@@ -206,6 +288,38 @@
               "default": 0,
               "title": "Offset"
             }
+          },
+          {
+            "name": "ordenar",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ordenar"
+            }
+          },
+          {
+            "name": "direcao",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Direcao"
+            }
           }
         ],
         "responses": {
@@ -225,6 +339,22 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Clear Jobs",
+        "operationId": "clear_jobs_api_jobs_delete",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobsCleared"
                 }
               }
             }
@@ -437,6 +567,128 @@
         }
       }
     },
+    "/api/conjuntos": {
+      "get": {
+        "summary": "List Conjuntos",
+        "operationId": "list_conjuntos_api_conjuntos_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ConjuntoOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Conjuntos Api Conjuntos Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Add Conjunto",
+        "operationId": "add_conjunto_api_conjuntos_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConjuntoIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConjuntoOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conjuntos/{conjunto_id}/ativar": {
+      "post": {
+        "summary": "Activate Conjunto",
+        "operationId": "activate_conjunto_api_conjuntos__conjunto_id__ativar_post",
+        "parameters": [
+          {
+            "name": "conjunto_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conjunto Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conjuntos/{conjunto_id}": {
+      "delete": {
+        "summary": "Delete Conjunto",
+        "operationId": "delete_conjunto_api_conjuntos__conjunto_id__delete",
+        "parameters": [
+          {
+            "name": "conjunto_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conjunto Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/scanners": {
       "get": {
         "summary": "List Scanners",
@@ -460,10 +712,95 @@
         }
       }
     },
+    "/api/scanners/instrucao": {
+      "get": {
+        "summary": "Documentation Instruction",
+        "description": "Instrução pronta para o Claude Code refazer a documentação das plataformas (uma ou todas).",
+        "operationId": "documentation_instruction_api_scanners_instrucao_get",
+        "parameters": [
+          {
+            "name": "fonte",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Fonte"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstructionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/browser": {
+      "get": {
+        "summary": "Browser Status",
+        "description": "Se o Chrome dedicado (LinkedIn/Indeed) está aberto e respondendo.",
+        "operationId": "browser_status_api_browser_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrowserOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/browser/open": {
+      "post": {
+        "summary": "Open Browser",
+        "description": "Abre o Chrome dedicado (perfil próprio, porta de depuração só local), se ainda não estiver aberto.",
+        "operationId": "open_browser_api_browser_open_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrowserOpenOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/config": {
       "get": {
         "summary": "Get Config",
-        "description": "Parâmetros em vigor, só leitura; caminhos e URLs internas ficam de fora.",
+        "description": "Parâmetros de comportamento em vigor; caminhos, cdp_url e URLs das fontes ficam de fora.",
         "operationId": "get_config_api_config_get",
         "responses": {
           "200": {
@@ -477,11 +814,74 @@
             }
           }
         }
+      },
+      "put": {
+        "summary": "Put Config",
+        "description": "Valida, grava no config.toml e passa a valer na hora; recusa durante uma execução.",
+        "operationId": "put_config_api_config_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfigOut"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     }
   },
   "components": {
     "schemas": {
+      "BrowserOpenOut": {
+        "properties": {
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          }
+        },
+        "type": "object",
+        "required": [
+          "estado"
+        ],
+        "title": "BrowserOpenOut"
+      },
+      "BrowserOut": {
+        "properties": {
+          "aberto": {
+            "type": "boolean",
+            "title": "Aberto"
+          }
+        },
+        "type": "object",
+        "required": [
+          "aberto"
+        ],
+        "title": "BrowserOut"
+      },
       "ConfigApi": {
         "properties": {
           "jobs_page_size": {
@@ -502,12 +902,18 @@
       },
       "ConfigBusca": {
         "properties": {
-          "localidade": {
-            "type": "string",
-            "title": "Localidade"
+          "localidades": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Localidades"
           },
           "modalidade": {
-            "type": "string",
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
             "title": "Modalidade"
           },
           "janela_horas": {
@@ -521,7 +927,7 @@
         },
         "type": "object",
         "required": [
-          "localidade",
+          "localidades",
           "modalidade",
           "janela_horas",
           "keyword_max_length"
@@ -541,13 +947,18 @@
           "min_score": {
             "type": "integer",
             "title": "Min Score"
+          },
+          "trecho_max_chars": {
+            "type": "integer",
+            "title": "Trecho Max Chars"
           }
         },
         "type": "object",
         "required": [
           "peso_titulo",
           "peso_descricao",
-          "min_score"
+          "min_score",
+          "trecho_max_chars"
         ],
         "title": "ConfigFiltro"
       },
@@ -606,14 +1017,60 @@
           "pausa_max_s": {
             "type": "number",
             "title": "Pausa Max S"
+          },
+          "rolagem_min_s": {
+            "type": "number",
+            "title": "Rolagem Min S"
+          },
+          "rolagem_max_s": {
+            "type": "number",
+            "title": "Rolagem Max S"
           }
         },
         "type": "object",
         "required": [
           "pausa_min_s",
-          "pausa_max_s"
+          "pausa_max_s",
+          "rolagem_min_s",
+          "rolagem_max_s"
         ],
         "title": "ConfigRitmo"
+      },
+      "ConjuntoIn": {
+        "properties": {
+          "nome": {
+            "type": "string",
+            "title": "Nome"
+          }
+        },
+        "type": "object",
+        "required": [
+          "nome"
+        ],
+        "title": "ConjuntoIn"
+      },
+      "ConjuntoOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "nome": {
+            "type": "string",
+            "title": "Nome"
+          },
+          "ativo": {
+            "type": "boolean",
+            "title": "Ativo"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nome",
+          "ativo"
+        ],
+        "title": "ConjuntoOut"
       },
       "HTTPValidationError": {
         "properties": {
@@ -645,6 +1102,19 @@
           "db"
         ],
         "title": "HealthOut"
+      },
+      "InstructionOut": {
+        "properties": {
+          "instrucao": {
+            "type": "string",
+            "title": "Instrucao"
+          }
+        },
+        "type": "object",
+        "required": [
+          "instrucao"
+        ],
+        "title": "InstructionOut"
       },
       "JobOut": {
         "properties": {
@@ -681,12 +1151,34 @@
             "title": "Pontos"
           },
           "run_id": {
-            "type": "integer",
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Run Id"
           },
           "encontrada_em": {
             "type": "string",
             "title": "Encontrada Em"
+          },
+          "localidade": {
+            "type": "string",
+            "title": "Localidade"
+          },
+          "publicada_em": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publicada Em"
           },
           "visto": {
             "type": "boolean",
@@ -705,9 +1197,24 @@
           "pontos",
           "run_id",
           "encontrada_em",
+          "localidade",
+          "publicada_em",
           "visto"
         ],
         "title": "JobOut"
+      },
+      "JobsCleared": {
+        "properties": {
+          "removidas": {
+            "type": "integer",
+            "title": "Removidas"
+          }
+        },
+        "type": "object",
+        "required": [
+          "removidas"
+        ],
+        "title": "JobsCleared"
       },
       "JobsPage": {
         "properties": {
@@ -816,6 +1323,26 @@
           "atualizadas"
         ],
         "title": "MarkSeenOut"
+      },
+      "RunIn": {
+        "properties": {
+          "fontes": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fontes"
+          }
+        },
+        "type": "object",
+        "title": "RunIn"
       },
       "RunOut": {
         "properties": {
@@ -934,6 +1461,19 @@
           "id"
         ],
         "title": "RunStarted"
+      },
+      "RunsCleared": {
+        "properties": {
+          "removidas": {
+            "type": "integer",
+            "title": "Removidas"
+          }
+        },
+        "type": "object",
+        "required": [
+          "removidas"
+        ],
+        "title": "RunsCleared"
       },
       "ScannerOut": {
         "properties": {

@@ -39,6 +39,7 @@ def test_linkedin_le_cards_rolando_um_a_um_e_ignora_o_nao_renderizado(page, sett
     assert jobs[0].empresa == "Metalúrgica Exemplo"
     assert jobs[0].trecho == "Campinas, São Paulo, Brasil (Presencial)"
     assert jobs[0].link == "https://www.linkedin.com/jobs/view/3900000001/"
+    assert jobs[0].localidade == "Campinas, São Paulo, Brasil (Presencial)"
     assert len(pausas) == 3  # uma pausa de rolagem por card, inclusive o não renderizado
 
 
@@ -65,6 +66,7 @@ def test_indeed_extrai_cards_da_lista_salva(page, settings):
     assert jobs[0].empresa == "Fábrica Exemplo"
     assert jobs[0].trecho == "Tempo integral | Projetos mecânicos e manutenção industrial"
     assert jobs[0].link == "https://br.indeed.com/viewjob?jk=a1b2c3d4e5f60001"
+    assert [j.localidade for j in jobs] == ["São Paulo, SP", "Belo Horizonte, MG"]
 
 
 def test_pagina_sem_cards_devolve_lista_vazia(page, settings):

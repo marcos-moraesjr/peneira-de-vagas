@@ -45,14 +45,15 @@ class LinkedInSite:
         self._settings = settings
         self.page_size = settings.linkedin.page_size
 
-    def search_url(self, termo: str, start: int) -> str:
+    def search_url(self, termo: str, start: int, localidade: str = "") -> str:
         busca = self._settings.busca
         params = {"keywords": termo}
-        if busca.localidade:
-            params["location"] = busca.localidade
+        if localidade:
+            params["location"] = localidade
         params["f_TPR"] = f"r{busca.janela_horas * SECONDS_PER_HOUR}"
-        if busca.modalidade in WORK_TYPE:
-            params["f_WT"] = WORK_TYPE[busca.modalidade]
+        codes = sorted(code for name, code in WORK_TYPE.items() if name in busca.modalidade)
+        if codes:
+            params["f_WT"] = ",".join(codes)
         params["start"] = start
         return f"{self._settings.linkedin.base_url}?{urlencode(params)}"
 
@@ -77,4 +78,5 @@ class LinkedInSite:
             link=f"https://www.linkedin.com/jobs/view/{raw['id']}/",
             trecho=raw.get("text", ""),
             fonte=self.name,
+            localidade=raw.get("text", ""),  # a legenda do card é a localidade (e a modalidade, entre parênteses)
         )

@@ -1,17 +1,19 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { useJobs, useKeywords, useMarkAllSeen, useRuns, useSetSeen, useStartRun } from "../../api/hooks";
+import { useCancelRun, useClearJobs, useJobs, useKeywords, useMarkAllSeen, useRuns, useSetSeen, useStartRun } from "../../api/hooks";
 import type { SeenFilter } from "../../api/types";
 import { ErrorBox } from "../../components/ErrorBox";
+import { ConjuntosPanel } from "../../components/ConjuntosPanel";
 import { KeywordsPanel } from "../../components/KeywordsPanel";
 import { buttonSecondary, inputClass } from "../../components/ui";
 import { sourceLabel } from "../../lib/failures";
+import { ChromeStatus } from "./ChromeStatus";
 import { FailureBanner } from "./FailureBanner";
 import { ScannerBanner } from "./ScannerBanner";
-import { JobsList } from "./JobsList";
+import { JobsList, type Sort, type SortColumn } from "./JobsList";
 import { RunBar } from "./RunBar";
 
-const SOURCES = ["linkedin", "indeed", "gupy"];
+const SOURCES = ["linkedin", "indeed", "google", "gupy"];
 const TABS: { id: SeenFilter; label: string }[] = [
   { id: "novas", label: "Novas" },
   { id: "todas", label: "Todas" },
@@ -30,19 +32,40 @@ function useReloadJobsWhenRunFinishes(status: string | undefined) {
   }, [status, client]);
 }
 
+/** Números e datas começam do maior/mais recente; texto, de A a Z. */
+const FIRST_DIRECTION: Record<SortColumn, "asc" | "desc"> = {
+  titulo: "asc",
+  empresa: "asc",
+  localidade: "asc",
+  fonte: "asc",
+  publicada_em: "desc",
+  encontrada_em: "desc",
+  pontos: "desc",
+};
+
+/** Clique na mesma coluna: direção inicial → inversa → sem ordenação (volta à ordem padrão). */
+function nextSort(current: Sort, column: SortColumn): Sort {
+  const first = FIRST_DIRECTION[column];
+  if (current?.column !== column) return { column, direction: first };
+  return current.direction === first ? { column, direction: first === "asc" ? "desc" : "asc" } : null;
+}
+
 export function VagasPage() {
   const [seen, setSeen] = useState<SeenFilter>("novas");
   const [fonte, setFonte] = useState("");
   const [q, setQ] = useState("");
   const [pages, setPages] = useState(1);
+  const [sort, setSort] = useState<Sort>(null);
 
   const runs = useRuns();
   const latest = runs.data?.[0];
   const keywords = useKeywords("busca");
-  const jobs = useJobs({ visto: seen === "novas" ? false : undefined, fonte, q }, pages);
+  const jobs = useJobs({ visto: seen === "novas" ? false : undefined, fonte, q, ordenar: sort?.column, direcao: sort?.direction }, pages);
   const startRun = useStartRun();
+  const cancelRun = useCancelRun();
   const setSeenMutation = useSetSeen();
   const markAll = useMarkAllSeen();
+  const clearJobs = useClearJobs();
   useReloadJobsWhenRunFinishes(latest?.status);
 
   const hasKeywords = (keywords.data?.length ?? 0) > 0;
@@ -54,19 +77,32 @@ export function VagasPage() {
     }
   }
 
+  function deleteAll() {
+    if (window.confirm("Excluir TODAS as vagas encontradas (vistas e novas)? Não dá para desfazer; se reaparecerem numa busca, voltam como novas.")) {
+      clearJobs.mutate();
+    }
+  }
+
   return (
     <div className="space-y-4">
       <RunBar
         latest={latest}
         canSearch={hasKeywords}
         starting={startRun.isPending}
-        onSearch={() => startRun.mutate()}
+        sources={SOURCES}
+        onSearch={(sources) => startRun.mutate(sources)}
+        cancelling={cancelRun.isPending}
+        onCancel={(id) => cancelRun.mutate(id)}
         hint={hasKeywords || !keywords.isSuccess ? undefined : "Adicione ao menos uma palavra-chave para buscar."}
       />
       {startRun.error && <ErrorBox message={startRun.error.message} />}
+      {cancelRun.error && <ErrorBox message={cancelRun.error.message} />}
+      {clearJobs.error && <ErrorBox message={clearJobs.error.message} />}
+      <ChromeStatus />
       <FailureBanner run={latest} />
       <ScannerBanner />
 
+      <ConjuntosPanel />
       <div className="grid gap-4 md:grid-cols-2">
         <KeywordsPanel tipo="busca" />
         <KeywordsPanel tipo="exclusao" />
@@ -111,6 +147,9 @@ export function VagasPage() {
         <button type="button" className={buttonSecondary} onClick={markAllSeen}>
           Marcar todas como vistas
         </button>
+        <button type="button" className={buttonSecondary} disabled={clearJobs.isPending} onClick={deleteAll}>
+          Excluir todas as vagas
+        </button>
       </div>
 
       {jobs.isError && <ErrorBox message="Não foi possível carregar as vagas. Verifique se a API está rodando." />}
@@ -125,7 +164,12 @@ export function VagasPage() {
         </p>
       )}
       {items.length > 0 && (
-        <JobsList jobs={items} onSeen={(job, visto) => setSeenMutation.mutate({ id: job.id, visto })} />
+        <JobsList
+          jobs={items}
+          onSeen={(job, visto) => setSeenMutation.mutate({ id: job.id, visto })}
+          sort={sort}
+          onSort={(column) => setSort((current) => nextSort(current, column))}
+        />
       )}
       {jobs.data && jobs.data.total > items.length && (
         <button type="button" className={buttonSecondary} onClick={() => setPages((count) => count + 1)}>

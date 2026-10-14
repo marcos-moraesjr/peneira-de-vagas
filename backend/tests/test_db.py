@@ -24,7 +24,7 @@ def test_init_db_nao_semeia_de_novo_se_a_tabela_tem_dados(settings):
     init_db(connection, settings)
     connection.execute("DELETE FROM keywords")
     connection.execute(
-        "INSERT INTO keywords (termo, termo_normalizado, tipo, criada_em) VALUES ('x','x','busca',?)", (NOW,)
+        "INSERT INTO keywords (termo, termo_normalizado, tipo, criada_em, conjunto_id) VALUES ('x','x','busca',?,1)", (NOW,)
     )
     connection.commit()
     init_db(connection, settings)
@@ -61,6 +61,57 @@ def test_vaga_ja_gravada_nao_volta_a_nao_vista(conn):
     assert conn.execute("SELECT visto FROM jobs").fetchone()[0] == 1
 
 
+def test_vaga_grava_localidade_e_data_de_publicacao(conn):
+    run_id = db.create_run(conn, ["gupy"], NOW)
+    job = Job("1", "Eng", "ACME", "https://x/1", "t", "gupy", localidade="Campinas, São Paulo", publicada_em="2026-10-08T11:04:27.057Z")
+    db.insert_new_jobs(conn, [job, make_job("2")], {}, run_id, NOW)
+    linhas = {r["id_da_vaga"]: (r["localidade"], r["publicada_em"]) for r in conn.execute("SELECT * FROM jobs")}
+    assert linhas == {"1": ("Campinas, São Paulo", "2026-10-08T11:04:27.057Z"), "2": ("", None)}
+
+
+def test_migracao_3_preserva_vagas_antigas_com_localidade_vazia_e_sem_data(settings):
+    arquivo = settings.geral.db_path
+    arquivo.parent.mkdir(parents=True, exist_ok=True)
+    antigo = sqlite3.connect(arquivo)
+    antigo.executescript(db.MIGRATIONS[1] + db.MIGRATIONS[2])
+    antigo.execute("CREATE TABLE schema_version (version INTEGER NOT NULL)")
+    antigo.execute("INSERT INTO schema_version VALUES (2)")
+    antigo.execute("INSERT INTO runs (inicio, status) VALUES ('x', 'concluida')")
+    antigo.execute(
+        "INSERT INTO jobs (fonte, id_da_vaga, titulo, empresa, link, trecho, pontos, run_id, encontrada_em) "
+        "VALUES ('gupy','9','Antiga','ACME','https://x/9','t',1,1,'x')"
+    )
+    antigo.commit()
+    antigo.close()
+    connection = connect(arquivo)
+    init_db(connection, settings)
+    linha = connection.execute("SELECT localidade, publicada_em, titulo FROM jobs").fetchone()
+    assert (linha["titulo"], linha["localidade"], linha["publicada_em"]) == ("Antiga", "", None)
+
+
+def test_migracao_5_deixa_a_vaga_sem_execucao_quando_a_execucao_e_apagada_e_preserva_as_vagas(settings):
+    arquivo = settings.geral.db_path
+    arquivo.parent.mkdir(parents=True, exist_ok=True)
+    antigo = sqlite3.connect(arquivo)
+    antigo.executescript("".join(db.MIGRATIONS[versao] for versao in (1, 2, 3, 4)))
+    antigo.execute("CREATE TABLE schema_version (version INTEGER NOT NULL)")
+    antigo.execute("INSERT INTO schema_version VALUES (4)")
+    antigo.execute("INSERT INTO runs (inicio, status) VALUES ('x', 'concluida')")
+    antigo.execute(
+        "INSERT INTO jobs (fonte, id_da_vaga, titulo, empresa, link, trecho, pontos, run_id, encontrada_em, visto) "
+        "VALUES ('gupy','9','Antiga','ACME','https://x/9','t',1,1,'x',1)"
+    )
+    antigo.commit()
+    antigo.close()
+    connection = connect(arquivo)
+    init_db(connection, settings)
+    linha = connection.execute("SELECT titulo, visto, run_id FROM jobs").fetchone()
+    assert (linha["titulo"], linha["visto"], linha["run_id"]) == ("Antiga", 1, 1)
+    connection.execute("DELETE FROM runs")
+    assert connection.execute("SELECT run_id FROM jobs").fetchone()["run_id"] is None
+    assert list(settings.geral.backup_dir.glob("*.db"))
+
+
 def test_criar_execucao_com_outra_em_andamento_levanta_conflito(conn):
     db.create_run(conn, ["gupy"], NOW)
     with pytest.raises(Conflict):
@@ -87,3 +138,22 @@ def test_esquema_antigo_gera_copia_do_banco_antes_de_migrar(settings):
     connection = connect(arquivo)
     init_db(connection, settings)
     assert list(settings.geral.backup_dir.glob("*.db"))
+
+
+def test_conexao_pode_ser_usada_em_outra_thread(settings):
+    """O FastAPI abre a conexão (dependência) e roda a rota em threads diferentes do pool."""
+    import threading
+
+    connection = connect(settings.geral.db_path)
+    erros = []
+
+    def usar():
+        try:
+            connection.execute("SELECT 1").fetchone()
+        except sqlite3.ProgrammingError as exc:
+            erros.append(exc)
+
+    thread = threading.Thread(target=usar)
+    thread.start()
+    thread.join()
+    assert erros == []

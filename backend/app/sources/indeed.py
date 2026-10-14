@@ -28,6 +28,7 @@ EXTRACT_JS = """() => {
       id: link ? link.getAttribute('data-jk') || '' : '',
       title: clean((titled && titled.getAttribute('title')) || (link && link.innerText) || ''),
       company: text(card, '[data-testid="company-name"]'),
+      location: text(card, '[data-testid="text-location"]'),
       text: [...card.querySelectorAll('li')].map((li) => clean(li.innerText || li.textContent)).filter(Boolean).join(' | '),
     };
   });
@@ -47,11 +48,11 @@ class IndeedSite:
         parts = urlsplit(settings.indeed.base_url)
         self._origin = f"{parts.scheme}://{parts.netloc}"
 
-    def search_url(self, termo: str, start: int) -> str:
+    def search_url(self, termo: str, start: int, localidade: str = "") -> str:
         busca = self._settings.busca
         params = {"q": termo}
-        if busca.localidade:
-            params["l"] = busca.localidade
+        if localidade:
+            params["l"] = localidade
         params["fromage"] = max(1, math.ceil(busca.janela_horas / HOURS_PER_DAY))
         params["start"] = start
         return f"{self._settings.indeed.base_url}?{urlencode(params)}"
@@ -80,4 +81,5 @@ class IndeedSite:
             link=f"{self._origin}/viewjob?jk={raw['id']}",
             trecho=raw.get("text", ""),
             fonte=self.name,
+            localidade=raw.get("location", ""),
         )

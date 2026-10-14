@@ -18,8 +18,8 @@ class FakeSite:
     def __init__(self, lazy_cards=False):
         self.lazy_cards = lazy_cards
 
-    def search_url(self, termo, start):
-        return f"https://site/?q={termo}&start={start}"
+    def search_url(self, termo, start, localidade=""):
+        return f"https://site/?q={termo}&start={start}" + (f"&l={localidade}" if localidade else "")
 
     def classify(self, url, title, text):
         return "login" if "login" in url else ("cloudflare" if "Just a moment" in title else None)
@@ -147,6 +147,48 @@ def test_cada_palavra_chave_gera_uma_busca(settings):
         "https://site/?q=b&start=0": {"raw": [card(2)]},
     }
     assert [j.id for j in source.search(["a", "b"])] == ["1", "2"]
+
+
+def with_localidades(settings, localidades):
+    busca = settings.busca.__class__(**{**settings.busca.__dict__, "localidades": localidades})
+    return settings.__class__(**{**settings.__dict__, "busca": busca})
+
+
+def test_cada_palavra_chave_e_localidade_gera_uma_busca(settings):
+    nav = FakeNavigator(
+        {
+            "https://site/?q=a&start=0&l=SP": {"raw": [card(1)]},
+            "https://site/?q=a&start=0&l=Minas Gerais": {"raw": [card(2), card(1)]},
+            "https://site/?q=b&start=0&l=SP": {"raw": [card(3)]},
+            "https://site/?q=b&start=0&l=Minas Gerais": {"raw": [card(4)]},
+        }
+    )
+    source, *_ = make_source(with_localidades(settings, ["SP", "Minas Gerais"]), nav)
+    assert [j.id for j in source.search(["a", "b"])] == ["1", "2", "3", "4"]
+    assert [url for url in nav.opened if "start=0" in url] == [
+        "https://site/?q=a&start=0&l=SP",
+        "https://site/?q=a&start=0&l=Minas Gerais",
+        "https://site/?q=b&start=0&l=SP",
+        "https://site/?q=b&start=0&l=Minas Gerais",
+    ]
+
+
+def test_sem_localidades_faz_uma_busca_sem_local(settings):
+    nav = FakeNavigator({"https://site/?q=a&start=0": {"raw": [card(1)]}})
+    source, *_ = make_source(with_localidades(settings, []), nav)
+    assert [j.id for j in source.search(["a"])] == ["1"]
+    assert nav.opened[0] == "https://site/?q=a&start=0"
+
+
+def test_localidades_respeitam_o_teto_de_vagas_lidas(settings):
+    teto = settings.limites.__class__(settings.limites.max_paginas_detalhe, 2)
+    limitada = with_localidades(settings.__class__(**{**settings.__dict__, "limites": teto}), ["SP", "MG"])
+    nav = FakeNavigator(
+        {"https://site/?q=a&start=0&l=SP": {"raw": [card(1), card(2)]}, "https://site/?q=a&start=0&l=MG": {"raw": [card(3)]}}
+    )
+    source, *_ = make_source(limitada, nav)
+    assert [j.id for j in source.search(["a"])] == ["1", "2"]
+    assert not any("l=MG" in url for url in nav.opened)
 
 
 @pytest.mark.parametrize("pagina,motivo", [({"url": "https://site/login"}, "login"), ({"title": "Just a moment..."}, "cloudflare")])

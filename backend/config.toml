@@ -1,5 +1,5 @@
 # Parâmetros do JobScanner. Palavras-chave e exclusões são editadas na tela
-# (tabela keywords); [padrao] só semeia a tabela quando ela está vazia.
+# (tabela keywords); [padrao] só semeia a tabela na primeira vez.
 # Caminhos relativos partem da raiz do projeto.
 
 [geral]
@@ -7,6 +7,7 @@ db_path = "data/jobscanner.db"
 backup_dir = "backups"
 frontend_dist = "frontend/dist"
 log_dir = "logs"
+chrome_profile_dir = "chrome-profile"   # perfil do Chrome dedicado (nunca o pessoal)
 
 [padrao]
 palavras_chave = ["Engenheiro Mecânico"]
@@ -15,8 +16,8 @@ exclusoes = []
 [busca]
 keyword_max_length = 80
 janela_horas = 24
-localidade = ""             # vazio = sem filtro de local (como na busca observada)
-modalidade = ""          # "", "remoto", "hibrido" ou "presencial"
+localidades = []        # lista de cidades ou estados ("Campinas, SP", "Minas Gerais"); vazia = sem filtro de local. Uma busca por termo e localidade
+modalidade = []         # lista: "remoto", "hibrido", "presencial"; vazia = todas
 
 [filtro]
 peso_titulo = 3
@@ -35,8 +36,16 @@ rolagem_min_s = 0.25     # pausa ao rolar a lista, card a card
 rolagem_max_s = 0.7
 
 [navegador]
-cdp_url = "http://127.0.0.1:9222"
+cdp_url = "http://127.0.0.1:9222"   # só localhost: a porta de depuração nunca sai da máquina
 timeout_s = 30
+probe_timeout_s = 1.5      # espera ao checar se o Chrome dedicado está aberto
+# Onde procurar o Chrome para o botão "Abrir Chrome dedicado" (o primeiro que existir).
+chrome_paths = [
+  'C:\Program Files\Google\Chrome\Application\chrome.exe',
+  'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe',
+  "/usr/bin/google-chrome",
+  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+]
 
 [api]
 jobs_page_size = 50
@@ -55,6 +64,11 @@ page_size = 25
 [indeed]
 base_url = "https://br.indeed.com/jobs"
 page_size = 10
+
+[google]
+base_url = "https://www.google.com/search"
+page_size = 10
+consultas = ["site:lever.co OR site:greenhouse.io OR site:workable.com OR site:ashbyhq.com intitle:(\".net\" OR \"developer\" OR \"engineer\" OR \"fullstack\" OR \"full stack\" OR \"full-stack\") (\"c#\" OR \".net\" OR \"dotnet\") (\"remote\" OR \"latam\" OR \"brazil\") -\"US only\" -\"U.S. only\" -\"USA only\" -\"mexico only\" -nepal -india"]
 
 [versionamento]
 falhas_consecutivas = 2   # falhas seguidas de "quebra", na versão atual, para pedir que o scanner seja refeito

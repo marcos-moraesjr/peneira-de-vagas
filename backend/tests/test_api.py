@@ -73,6 +73,69 @@ def test_historico_lista_execucoes_mais_recentes_primeiro(client):
     assert ids == sorted(ids, reverse=True) and len(ids) == 2
 
 
+def test_limpar_historico_remove_execucoes_sem_vagas(settings):
+    with make_client(settings, [StubSource()]) as test_client:
+        test_client.post("/api/runs")
+        test_client.post("/api/runs")
+        resposta = test_client.delete("/api/runs")
+        assert resposta.status_code == 200
+        assert resposta.json() == {"removidas": 2}
+        assert test_client.get("/api/runs").json() == []
+
+
+def test_limpar_historico_apaga_tambem_execucoes_que_originaram_vagas_e_mantem_as_vagas(client):
+    client.post("/api/runs")
+    resposta = client.delete("/api/runs")
+    assert resposta.json() == {"removidas": 1}
+    assert client.get("/api/runs").json() == []
+    vagas = client.get("/api/jobs").json()
+    assert vagas["total"] == 2
+    assert all(vaga["run_id"] is None for vaga in vagas["items"])
+
+
+def test_limpar_historico_com_execucao_em_andamento_devolve_409(settings):
+    with make_client(settings, [StubSource()], spawn=lambda fn: None) as test_client:
+        test_client.post("/api/runs")
+        resposta = test_client.delete("/api/runs")
+    assert resposta.status_code == 409
+    assert "andamento" in resposta.json()["detail"]
+
+
+def test_interromper_execucao_em_andamento_encerra_as_fontes_como_interrompidas(settings):
+    pendentes = []
+    with make_client(settings, [StubSource(jobs=[job("1")])], spawn=pendentes.append) as test_client:
+        run_id = test_client.post("/api/runs").json()["id"]
+        resposta = test_client.post(f"/api/runs/{run_id}/cancel")
+        assert resposta.status_code == 202
+        assert resposta.json() == {"id": run_id}
+        pendentes[0]()
+        run = test_client.get(f"/api/runs/{run_id}").json()
+    assert run["status"] == "concluida"
+    assert [(f["status"], f["motivo"]) for f in run["fontes"]] == [("falha", "interrompida")]
+    assert run["fontes"][0]["novas"] == 0
+
+
+def test_interromper_execucao_concluida_devolve_409(client):
+    run_id = client.post("/api/runs").json()["id"]
+    assert client.post(f"/api/runs/{run_id}/cancel").status_code == 409
+
+
+def test_interromper_execucao_inexistente_devolve_404(client):
+    assert client.post("/api/runs/999/cancel").status_code == 404
+
+
+def test_nova_execucao_nao_herda_o_cancelamento_da_anterior(settings):
+    pendentes = []
+    with make_client(settings, [StubSource(jobs=[job("1")])], spawn=pendentes.append) as test_client:
+        primeira = test_client.post("/api/runs").json()["id"]
+        test_client.post(f"/api/runs/{primeira}/cancel")
+        pendentes[0]()
+        segunda = test_client.post("/api/runs").json()["id"]
+        pendentes[1]()
+        run = test_client.get(f"/api/runs/{segunda}").json()
+    assert run["fontes"][0]["status"] == "ok"
+
+
 def test_execucao_inexistente_devolve_404(client):
     assert client.get("/api/runs/999").status_code == 404
 
@@ -104,6 +167,69 @@ def test_marcar_todas_como_vistas_respeita_os_filtros(client):
     resposta = client.post("/api/jobs/mark-seen", json={"q": "industria"})
     assert resposta.json() == {"atualizadas": 1}
     assert client.get("/api/jobs?visto=false").json()["total"] == 1
+
+
+def test_excluir_todas_as_vagas_apaga_vistas_e_novas(client):
+    client.post("/api/runs")
+    vaga = client.get("/api/jobs").json()["items"][0]
+    client.patch(f"/api/jobs/{vaga['id']}", json={"visto": True})
+    resposta = client.delete("/api/jobs")
+    assert resposta.status_code == 200 and resposta.json() == {"removidas": 2}
+    assert client.get("/api/jobs").json()["total"] == 0
+
+
+def test_excluir_todas_as_vagas_recusa_durante_execucao(settings):
+    with make_client(settings, [StubSource(jobs=[job("1")])], spawn=lambda fn: None) as test_client:
+        test_client.post("/api/runs")
+        assert test_client.delete("/api/jobs").status_code == 409
+
+
+def test_vagas_excluidas_voltam_como_novas_na_proxima_busca(client):
+    client.post("/api/runs")
+    client.delete("/api/jobs")
+    client.post("/api/runs")
+    assert client.get("/api/jobs?visto=false").json()["total"] == 2
+
+
+@pytest.fixture
+def client_ordenacao(settings):
+    vagas = [
+        Job("1", "Engenheiro Mecânico 1", "Zeta", "https://x/1", "", "stub", localidade="Recife, PE", publicada_em="2026-10-01T10:00:00Z"),
+        Job("2", "Engenheiro Mecânico 2", "Álamo", "https://x/2", "", "stub", localidade="Campinas, SP", publicada_em="2026-10-09T10:00:00Z"),
+        Job("3", "Engenheiro Mecânico 3", "Beta", "https://x/3", "", "stub", localidade="", publicada_em=None),
+    ]
+    with make_client(settings, [StubSource(jobs=vagas)]) as test_client:
+        test_client.post("/api/runs")
+        yield test_client
+
+
+def titulos(client, query):
+    return [j["titulo"] for j in client.get(f"/api/jobs?{query}").json()["items"]]
+
+
+def test_ordena_por_texto_ignorando_acento_e_maiuscula(client_ordenacao):
+    assert titulos(client_ordenacao, "ordenar=empresa&direcao=asc") == ["Engenheiro Mecânico 2", "Engenheiro Mecânico 3", "Engenheiro Mecânico 1"]
+    assert titulos(client_ordenacao, "ordenar=empresa&direcao=desc") == ["Engenheiro Mecânico 1", "Engenheiro Mecânico 3", "Engenheiro Mecânico 2"]
+
+
+def test_ordena_por_data_de_publicacao_e_vagas_sem_data_ficam_no_fim_nas_duas_direcoes(client_ordenacao):
+    assert titulos(client_ordenacao, "ordenar=publicada_em&direcao=desc") == ["Engenheiro Mecânico 2", "Engenheiro Mecânico 1", "Engenheiro Mecânico 3"]
+    assert titulos(client_ordenacao, "ordenar=publicada_em&direcao=asc") == ["Engenheiro Mecânico 1", "Engenheiro Mecânico 2", "Engenheiro Mecânico 3"]
+
+
+def test_ordenacao_vale_na_paginacao(client_ordenacao):
+    pagina2 = titulos(client_ordenacao, "ordenar=localidade&direcao=asc&limit=1&offset=1")
+    assert pagina2 == ["Engenheiro Mecânico 2"]  # ordem: '' (sem local), Campinas, Recife
+
+
+def test_ordenacao_invalida_devolve_422_com_valor_e_esperado(client_ordenacao):
+    resposta = client_ordenacao.get("/api/jobs?ordenar=senha&direcao=asc")
+    assert resposta.status_code == 422 and "senha" in resposta.json()["detail"] and "titulo" in resposta.json()["detail"]
+    assert client_ordenacao.get("/api/jobs?ordenar=titulo&direcao=lateral").status_code == 422
+
+
+def test_sem_ordenacao_mantem_a_ordem_padrao(client_ordenacao):
+    assert titulos(client_ordenacao, "") == ["Engenheiro Mecânico 3", "Engenheiro Mecânico 2", "Engenheiro Mecânico 1"]
 
 
 def test_paginacao_de_vagas(client):
@@ -165,7 +291,7 @@ class BrokenLinkedIn:
 
 def test_scanners_lista_versao_e_estado_de_cada_fonte(client):
     corpo = client.get("/api/scanners").json()
-    assert [s["fonte"] for s in corpo] == ["linkedin", "indeed", "gupy"]
+    assert [s["fonte"] for s in corpo] == ["linkedin", "indeed", "gupy", "google"]
     primeiro = corpo[0]
     assert primeiro["status"] == "ok" and primeiro["versao"].count(".") == 2
     assert primeiro["gerado_por"] == "Claude" and primeiro["instrucao"] is None
@@ -181,3 +307,75 @@ def test_falhas_de_layout_seguidas_mandam_refazer_o_scanner(settings):
     assert linkedin["status"] == "refazer"
     assert "backend/app/sources/linkedin.py" in linkedin["instrucao"]
     assert run["fontes"][0]["scanner_versao"] == linkedin["versao"]
+
+
+def test_instrucao_de_documentacao_usa_as_palavras_chave_cadastradas(client):
+    corpo = client.get("/api/scanners/instrucao").json()
+    assert '"Engenheiro Mecânico"' in corpo["instrucao"]
+    for rotulo in ("LinkedIn", "Indeed", "Gupy"):
+        assert rotulo in corpo["instrucao"]
+
+
+def test_instrucao_de_documentacao_de_uma_fonte_e_fonte_invalida(client):
+    gupy = client.get("/api/scanners/instrucao?fonte=gupy").json()["instrucao"]
+    assert "Gupy" in gupy and "LinkedIn" not in gupy
+    resposta = client.get("/api/scanners/instrucao?fonte=orkut")
+    assert resposta.status_code == 422 and "orkut" in resposta.json()["detail"]
+
+
+def test_busca_numa_fonte_especifica_roda_so_ela(settings):
+    sources = [StubSource("a", [job("1", fonte="a")]), StubSource("b", [job("2", fonte="b")])]
+    with make_client(settings, sources) as test_client:
+        resposta = test_client.post("/api/runs", json={"fontes": ["b"]})
+        run = test_client.get(f"/api/runs/{resposta.json()['id']}").json()
+    assert [fonte["fonte"] for fonte in run["fontes"]] == ["b"]
+
+
+def test_busca_em_varias_fontes_roda_so_as_escolhidas_na_ordem_do_registro(settings):
+    sources = [StubSource("a"), StubSource("b"), StubSource("c")]
+    with make_client(settings, sources) as test_client:
+        resposta = test_client.post("/api/runs", json={"fontes": ["c", "a"]})
+        run = test_client.get(f"/api/runs/{resposta.json()['id']}").json()
+    assert [fonte["fonte"] for fonte in run["fontes"]] == ["a", "c"]
+
+
+def test_busca_com_lista_vazia_devolve_422(settings):
+    with make_client(settings, [StubSource("a")]) as test_client:
+        resposta = test_client.post("/api/runs", json={"fontes": []})
+    assert resposta.status_code == 422 and "fontes" in resposta.json()["detail"]
+
+
+def test_busca_com_fonte_nula_roda_todas(settings):
+    sources = [StubSource("a"), StubSource("b")]
+    with make_client(settings, sources) as test_client:
+        resposta = test_client.post("/api/runs", json={"fontes": None})
+        run = test_client.get(f"/api/runs/{resposta.json()['id']}").json()
+    assert [fonte["fonte"] for fonte in run["fontes"]] == ["a", "b"]
+
+
+def test_busca_numa_fonte_inexistente_devolve_422_com_valor_e_esperado(settings):
+    with make_client(settings, [StubSource("a"), StubSource("b")]) as test_client:
+        resposta = test_client.post("/api/runs", json={"fontes": ["a", "x"]})
+    assert resposta.status_code == 422
+    assert "x" in resposta.json()["detail"] and "['a', 'b']" in resposta.json()["detail"]
+
+
+def test_conjuntos_criar_ativar_e_remover(client):
+    lista = client.get("/api/conjuntos").json()
+    assert [(c["nome"], c["ativo"]) for c in lista] == [("Padrão", True)]
+    padrao_id = lista[0]["id"]
+
+    criado = client.post("/api/conjuntos", json={"nome": "Tecnologia"})
+    assert criado.status_code == 201 and criado.json()["ativo"] is True
+    assert client.get("/api/keywords?tipo=busca").json() == []  # as palavras seguem o conjunto ativo
+    client.post("/api/keywords", json={"termo": "Dados", "tipo": "busca"})
+
+    assert client.post(f"/api/conjuntos/{padrao_id}/ativar").status_code == 204
+    assert [k["termo"] for k in client.get("/api/keywords?tipo=busca").json()] == ["Engenheiro Mecânico"]
+
+    assert client.delete(f"/api/conjuntos/{criado.json()['id']}").status_code == 204
+    assert client.delete(f"/api/conjuntos/{padrao_id}").status_code == 422  # é o último
+    assert client.delete("/api/conjuntos/999").status_code == 404
+    assert client.post("/api/conjuntos/999/ativar").status_code == 404
+    assert client.post("/api/conjuntos", json={"nome": " "}).status_code == 422
+    assert client.post("/api/conjuntos", json={"nome": "padrão"}).status_code == 422

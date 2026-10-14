@@ -13,10 +13,13 @@ def settings(tmp_path) -> Settings:
     """Config real do projeto, com banco e pastas apontados para um diretório temporário."""
     base = load_settings(CONFIG_PATH)
     geral = base.geral.__class__(
-        db_path=tmp_path / "test.db",
-        backup_dir=tmp_path / "backups",
-        frontend_dist=tmp_path / "dist",
-        log_dir=tmp_path / "logs",
+        **{
+            **base.geral.__dict__,
+            "db_path": tmp_path / "test.db",
+            "backup_dir": tmp_path / "backups",
+            "frontend_dist": tmp_path / "dist",
+            "log_dir": tmp_path / "logs",
+        }
     )
     return base.__class__(**{**base.__dict__, "geral": geral})
 

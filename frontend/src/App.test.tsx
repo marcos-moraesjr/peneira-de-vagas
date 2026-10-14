@@ -33,3 +33,23 @@ describe("App", () => {
     expect(await screen.findByText(/API indisponível/)).toBeInTheDocument();
   });
 });
+
+describe("App — tutorial", () => {
+  it("tem a aba Tutorial", async () => {
+    const user = userEvent.setup();
+    mockApi(routes);
+    renderWithClient(<App />);
+    await user.click(await screen.findByRole("tab", { name: "Tutorial" }));
+    expect(await screen.findByRole("heading", { name: "Como usar o JobScanner" })).toBeInTheDocument();
+  });
+});
+
+describe("App — configurações", () => {
+  it("tem a aba Configurações", async () => {
+    const user = userEvent.setup();
+    mockApi(routes);
+    renderWithClient(<App />);
+    await user.click(await screen.findByRole("tab", { name: "Configurações" }));
+    expect(await screen.findByRole("slider", { name: "Pontuação mínima" })).toBeInTheDocument();
+  });
+});

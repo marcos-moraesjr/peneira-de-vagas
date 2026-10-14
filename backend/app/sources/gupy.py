@@ -45,17 +45,19 @@ class GupySource:
     def _collect(self, client: httpx.Client, termos: list[str]) -> list[Job]:
         limit = self._settings.limites.max_vagas_lista
         found: dict[str, Job] = {}
+        workplaces = [WORKPLACE_TYPES[name] for name in self._settings.busca.modalidade] or [None]
         for termo in termos:
-            for job in self._pages(client, termo):
-                found.setdefault(job.id, job)
-                if len(found) >= limit:
-                    return list(found.values())
+            for workplace in workplaces:
+                for job in self._pages(client, termo, workplace):
+                    found.setdefault(job.id, job)
+                    if len(found) >= limit:
+                        return list(found.values())
         return list(found.values())
 
-    def _pages(self, client: httpx.Client, termo: str):
+    def _pages(self, client: httpx.Client, termo: str, workplace: str | None):
         offset = 0
         while True:
-            payload = self._request(client, termo, offset)
+            payload = self._request(client, termo, offset, workplace)
             items = payload["data"]
             for item in items:
                 yield self._to_job(item)
@@ -64,9 +66,8 @@ class GupySource:
             if not items or offset >= total:
                 return
 
-    def _request(self, client: httpx.Client, termo: str, offset: int) -> dict:
+    def _request(self, client: httpx.Client, termo: str, offset: int, workplace: str | None) -> dict:
         params = {"jobName": termo, "limit": self._settings.gupy.page_size, "offset": offset}
-        workplace = WORKPLACE_TYPES.get(self._settings.busca.modalidade)
         if workplace:
             params["workplaceType"] = workplace
         try:
@@ -92,4 +93,6 @@ class GupySource:
             link=_canonical_link(item["jobUrl"]),
             trecho=trecho,
             fonte=self.name,
+            localidade=", ".join(part.strip() for part in (item.get("city"), item.get("state")) if part and part.strip()),
+            publicada_em=item.get("publishedDate") or None,
         )
