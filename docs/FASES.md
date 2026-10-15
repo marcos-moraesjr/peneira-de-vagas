@@ -22,9 +22,11 @@ Extra pedido pelo usuário depois da Fase 4: **versionamento dos scanners** (`ba
 
 Extra pedido pelo usuário: **abas em paralelo** (`[navegador] abas_paralelas`, padrão `false`; uma aba por plataforma, todas ao mesmo tempo; ver `LESSONS.md`).
 
+Extra pedido pelo usuário (2026-10-15): **identidade visual Peneira v2** no front (tokens grafite/verde-sinal, fonte única do sistema, como o LinkedIn (no lugar da DM Sans e da DM Mono do design, a pedido), temas claro e escuro, ícone e favicon novos); ajuste puramente visual, sem lógica nova.
+
 Desvios registrados: o `README` e a API usam a porta **8100** (a 8000 estava em uso pelo FinApp); `Python 3.14`
 no ambiente de desenvolvimento; Tailwind 4.1.11 no lugar da 4.0.0 (falha de build); `BackgroundTasks` não foi
-usado (apenas `threading`); a Gupy não recebe filtro de localidade/recência nesta versão; extra pedido pelo usuário depois da Fase 4: fonte **Google** (consultas booleanas em `[google] consultas`, scanner 0.1.0 com seletores não observados, sem filtro local).
+usado (apenas `threading`); a Gupy não recebe filtro de localidade/recência nesta versão; extra pedido pelo usuário depois da Fase 4: fonte **Google** (consultas booleanas em `[google] consultas`, scanner 0.1.0 com seletores não observados, sem filtro local); **removida em 2026-10-15** a pedido do usuário (ver `LESSONS.md`).
 
 ## Visão geral
 
@@ -117,7 +119,7 @@ usado (apenas `threading`); a Gupy não recebe filtro de localidade/recência ne
 **Objetivo:** transparência sobre o que a busca fez.
 
 **Entregas**
-- Tela **Execuções**: histórico por fonte (status, motivo, lidas, aprovadas, novas, duração) e config em vigor (somente leitura).
+- Tela **Execuções**: histórico em tabela ordenável pelo cabeçalho (execução, início, duração, resultado); clicar numa execução abre um card com o detalhe por fonte (status, motivo, lidas, aprovadas, novas, scanner); cada linha tem um botão para excluir a execução; abaixo, a config em vigor (somente leitura).
 - Log em arquivo; marcar todas como vistas.
 - Estados de carregando, vazio e erro em todas as telas.
 

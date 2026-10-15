@@ -37,3 +37,13 @@ const day = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short" });
 export function formatDay(iso: string): string {
   return day.format(new Date(iso));
 }
+
+export const MODALIDADES: { valor: string; rotulo: string }[] = [
+  { valor: "presencial", rotulo: "Presencial" },
+  { valor: "hibrido", rotulo: "Híbrido" },
+  { valor: "remoto", rotulo: "Remoto" },
+];
+
+export function modalidadeLabel(valor: string): string {
+  return MODALIDADES.find((item) => item.valor === valor)?.rotulo ?? "";
+}

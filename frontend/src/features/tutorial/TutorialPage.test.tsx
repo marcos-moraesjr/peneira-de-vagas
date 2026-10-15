@@ -36,7 +36,7 @@ describe("TutorialPage", () => {
   it("explica o botão Buscar agora e a diferença entre vagas novas e vistas", () => {
     renderWithClient(<TutorialPage />);
     expect(screen.getByText(/Buscar agora/, { selector: "strong" })).toBeInTheDocument();
-    expect(screen.getByText(/Novas/, { selector: "strong" })).toBeInTheDocument();
+    expect(screen.getByText(/Não lidas/, { selector: "strong" })).toBeInTheDocument();
   });
 
   it("nunca pede para o usuário contornar bloqueios", () => {

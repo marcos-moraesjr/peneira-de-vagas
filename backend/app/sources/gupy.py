@@ -4,6 +4,7 @@ Campos lidos de cada vaga (formato observado no DevTools, aba Network): id, name
 careerPageName, jobUrl. Se um deles sumir, é mudança de layout.
 """
 import re
+from collections.abc import Callable
 
 import httpx
 
@@ -11,7 +12,7 @@ from ..config import Settings
 from .errors import SourceLayoutChanged, SourceUnavailable
 from .types import Job
 
-WORKPLACE_TYPES = {"remoto": "remote", "hibrido": "hybrid", "presencial": "on-site"}
+MODALIDADE_DA_GUPY = {"remote": "remoto", "hybrid": "hibrido", "on-site": "presencial"}
 REQUIRED_FIELDS = ("id", "name", "jobUrl")
 
 
@@ -38,26 +39,27 @@ class GupySource:
             if self._client is None:
                 client.close()
 
-    def enrich(self, jobs: list[Job]) -> list[Job]:
+    def enrich(self, jobs: list[Job], on_job: Callable[[Job], None] | None = None) -> list[Job]:
         """A lista da Gupy já traz a descrição; não há página de detalhe a abrir."""
+        for job in jobs:
+            if on_job:
+                on_job(job)
         return jobs
 
     def _collect(self, client: httpx.Client, termos: list[str]) -> list[Job]:
         limit = self._settings.limites.max_vagas_lista
         found: dict[str, Job] = {}
-        workplaces = [WORKPLACE_TYPES[name] for name in self._settings.busca.modalidade] or [None]
         for termo in termos:
-            for workplace in workplaces:
-                for job in self._pages(client, termo, workplace):
-                    found.setdefault(job.id, job)
-                    if len(found) >= limit:
-                        return list(found.values())
+            for job in self._pages(client, termo):
+                found.setdefault(job.id, job)
+                if len(found) >= limit:
+                    return list(found.values())
         return list(found.values())
 
-    def _pages(self, client: httpx.Client, termo: str, workplace: str | None):
+    def _pages(self, client: httpx.Client, termo: str):
         offset = 0
         while True:
-            payload = self._request(client, termo, offset, workplace)
+            payload = self._request(client, termo, offset)
             items = payload["data"]
             for item in items:
                 yield self._to_job(item)
@@ -66,10 +68,8 @@ class GupySource:
             if not items or offset >= total:
                 return
 
-    def _request(self, client: httpx.Client, termo: str, offset: int, workplace: str | None) -> dict:
+    def _request(self, client: httpx.Client, termo: str, offset: int) -> dict:
         params = {"jobName": termo, "limit": self._settings.gupy.page_size, "offset": offset}
-        if workplace:
-            params["workplaceType"] = workplace
         try:
             response = client.get(self._settings.gupy.base_url, params=params)
         except httpx.HTTPError as error:
@@ -95,4 +95,5 @@ class GupySource:
             fonte=self.name,
             localidade=", ".join(part.strip() for part in (item.get("city"), item.get("state")) if part and part.strip()),
             publicada_em=item.get("publishedDate") or None,
+            modalidade=MODALIDADE_DA_GUPY.get(item.get("workplaceType"), ""),
         )

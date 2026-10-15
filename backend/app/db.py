@@ -7,6 +7,7 @@ from .config import Settings
 from .errors import Conflict
 from .services import keywords
 from .services.filters import normalize
+from .services.localizacao import split_localidade
 from .sources.types import Job
 
 _SCHEMA_V1 = """
@@ -109,8 +110,10 @@ DROP TABLE jobs;
 ALTER TABLE jobs_novo RENAME TO jobs;
 """
 
+_MIGRATION_V6 = "ALTER TABLE jobs ADD COLUMN modalidade TEXT NOT NULL DEFAULT '';"
+
 # Versão do esquema → script. Banco existente é copiado para backup_dir antes de qualquer migração.
-MIGRATIONS = {1: _SCHEMA_V1, 2: _MIGRATION_V2, 3: _MIGRATION_V3, 4: _MIGRATION_V4, 5: _MIGRATION_V5}
+MIGRATIONS = {1: _SCHEMA_V1, 2: _MIGRATION_V2, 3: _MIGRATION_V3, 4: _MIGRATION_V4, 5: _MIGRATION_V5, 6: _MIGRATION_V6}
 SCHEMA_VERSION = max(MIGRATIONS)
 
 
@@ -121,6 +124,8 @@ def connect(path: Path) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys=ON")
     conn.create_function("norm", 1, normalize, deterministic=True)
+    conn.create_function("cidade_de", 1, lambda texto: normalize(split_localidade(texto)[0]), deterministic=True)
+    conn.create_function("estado_de", 1, lambda texto: split_localidade(texto)[1], deterministic=True)
     return conn
 
 
@@ -205,11 +210,11 @@ def insert_new_jobs(conn: sqlite3.Connection, jobs: list[Job], scores: dict[str,
     inserted = 0
     for job in jobs:
         cursor = conn.execute(
-            "INSERT OR IGNORE INTO jobs (fonte, id_da_vaga, titulo, empresa, link, trecho, pontos, run_id, encontrada_em, localidade, publicada_em) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT OR IGNORE INTO jobs (fonte, id_da_vaga, titulo, empresa, link, trecho, pontos, run_id, encontrada_em, localidade, publicada_em, modalidade) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 job.fonte, job.id, job.titulo, job.empresa, job.link, job.trecho,
-                scores.get(job.id, 0), run_id, now, job.localidade, job.publicada_em,
+                scores.get(job.id, 0), run_id, now, job.localidade, job.publicada_em, job.modalidade,
             ),
         )
         inserted += cursor.rowcount

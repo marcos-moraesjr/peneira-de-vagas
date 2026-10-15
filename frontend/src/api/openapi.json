@@ -132,10 +132,10 @@
         }
       }
     },
-    "/api/runs/{run_id}/cancel": {
-      "post": {
-        "summary": "Cancel Run",
-        "operationId": "cancel_run_api_runs__run_id__cancel_post",
+    "/api/runs/{run_id}": {
+      "delete": {
+        "summary": "Delete Run",
+        "operationId": "delete_run_api_runs__run_id__delete",
         "parameters": [
           {
             "name": "run_id",
@@ -148,12 +148,12 @@
           }
         ],
         "responses": {
-          "202": {
+          "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RunStarted"
+                  "$ref": "#/components/schemas/RunsCleared"
                 }
               }
             }
@@ -169,9 +169,7 @@
             }
           }
         }
-      }
-    },
-    "/api/runs/{run_id}": {
+      },
       "get": {
         "summary": "Get Run",
         "operationId": "get_run_api_runs__run_id__get",
@@ -335,6 +333,54 @@
                 }
               ],
               "title": "Max Dias"
+            }
+          },
+          {
+            "name": "cidade",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cidade"
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Estado"
+            }
+          },
+          {
+            "name": "modalidade",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Modalidade"
             }
           }
         ],
@@ -1030,10 +1076,6 @@
       },
       "ConfigLimites": {
         "properties": {
-          "max_paginas_detalhe": {
-            "type": "integer",
-            "title": "Max Paginas Detalhe"
-          },
           "max_vagas_lista": {
             "type": "integer",
             "title": "Max Vagas Lista"
@@ -1041,7 +1083,6 @@
         },
         "type": "object",
         "required": [
-          "max_paginas_detalhe",
           "max_vagas_lista"
         ],
         "title": "ConfigLimites"
@@ -1252,6 +1293,18 @@
             "type": "string",
             "title": "Localidade"
           },
+          "cidade": {
+            "type": "string",
+            "title": "Cidade"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "modalidade": {
+            "type": "string",
+            "title": "Modalidade"
+          },
           "publicada_em": {
             "anyOf": [
               {
@@ -1281,6 +1334,9 @@
           "run_id",
           "encontrada_em",
           "localidade",
+          "cidade",
+          "estado",
+          "modalidade",
           "publicada_em",
           "visto"
         ],
@@ -1400,6 +1456,39 @@
               }
             ],
             "title": "Max Dias"
+          },
+          "cidade": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cidade"
+          },
+          "estado": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estado"
+          },
+          "modalidade": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modalidade"
           }
         },
         "type": "object",

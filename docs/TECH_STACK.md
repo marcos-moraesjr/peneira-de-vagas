@@ -22,7 +22,6 @@ busca pela API e exibe os resultados; **não há Telegram nem agendador externo*
 | --- | --- | --- |
 | **LinkedIn** | Navegador real (Chrome dedicado, controlado via CDP) | Navegador logado em automação viola os termos de uso; risco de restrição da conta aceito conscientemente. |
 | **Indeed** | Navegador real (mesmo Chrome dedicado) | Protegido por Cloudflare. Verificação anti-bot é esperada e tratada como falha, nunca contornada. |
-| **Google** | Navegador real (mesmo Chrome dedicado), consultas booleanas em `google.com/search` | Quarta fonte de dados enviada a terceiros, **por decisão do usuário** (14/10/2026): as consultas montadas das suas palavras-chave, localidades e modalidade vão ao Google. Páginas de ATS (lever, greenhouse…) só aparecem como resultado; não são abertas. CAPTCHA é esperado e tratado como falha, nunca contornado; sem API paga nem chave. |
 | **Gupy** | API JSON do portal (`portal.gupy.io`) via HTTP | Endpoint não documentado: capturado pelo DevTools (aba Network) e tratado como instável. |
 
 ## Backend
@@ -49,6 +48,7 @@ busca pela API e exibe os resultados; **não há Telegram nem agendador externo*
 | Framework | **React 18 + TypeScript** (`strict`) | |
 | Build / dev | **Vite** | Dev com proxy para a API; build estático servido pelo FastAPI em uso diário. |
 | Estilo | **Tailwind CSS** | Sem biblioteca de componentes. |
+| Fonte | **Noto Sans** via `@fontsource/noto-sans` (pesos 400, 500, 600, 700; a mesma do Indeed), com a pilha do sistema como reserva | Fonte única em todo o front; empacotada localmente (sem CDN nem requisição a terceiros). |
 | Dados do servidor | **TanStack Query** | Cache, polling do andamento da execução e invalidação após mutações. |
 | Tipos da API | **openapi-typescript** | Tipos gerados do OpenAPI do backend; nunca escritos à mão. |
 | Navegação | `useState` (abas) | São duas telas (Vagas, Execuções); sem roteador. |
@@ -73,7 +73,7 @@ jobscanner/
 │   │   ├── main.py        # create_app(): rotas, lifespan, build estático
 │   │   ├── routes/        # rotas finas
 │   │   ├── services/      # execução da busca, vagas, filtro
-│   │   ├── sources/       # linkedin.py, indeed.py, google.py (Playwright/CDP) e gupy.py (httpx)
+│   │   ├── sources/       # linkedin.py, indeed.py (Playwright/CDP) e gupy.py (httpx)
 │   │   ├── db.py          # SQLite e deduplicação
 │   │   └── config.py      # config.toml tipado
 │   ├── config.toml

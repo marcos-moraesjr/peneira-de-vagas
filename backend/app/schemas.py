@@ -67,6 +67,9 @@ class JobOut(BaseModel):
     run_id: int | None
     encontrada_em: str
     localidade: str
+    cidade: str
+    estado: str
+    modalidade: str
     publicada_em: str | None
     visto: bool
 
@@ -84,6 +87,9 @@ class MarkSeenIn(BaseModel):
     fonte: str | None = None
     q: str | None = None
     max_dias: int | None = None
+    cidade: str | None = None
+    estado: str | None = None
+    modalidade: str | None = None
 
 
 class MarkSeenOut(BaseModel):
@@ -131,7 +137,6 @@ class ConfigFiltro(BaseModel):
 
 
 class ConfigLimites(BaseModel):
-    max_paginas_detalhe: int
     max_vagas_lista: int
 
 

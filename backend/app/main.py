@@ -1,6 +1,5 @@
 """create_app(): rotas sob /api, abertura do banco, tradução de erros e build estático em /."""
 import logging
-import threading
 from collections.abc import Callable
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -76,7 +75,6 @@ def create_app(
     app.state.settings = settings
     app.state.sources_factory = sources_factory or (lambda: build_sources(app.state.settings, app.state.gate))
     app.state.spawn = spawn or spawn_thread
-    app.state.cancel = threading.Event()
     app.state.gate = VerificationGate()
     app.state.now = now or utc_now
     app.state.config_path = config_path or DEFAULT_CONFIG

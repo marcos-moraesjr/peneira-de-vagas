@@ -8,7 +8,7 @@ export function FailureBanner({ run, onRestart, restarting }: { run: Run | undef
   if (failures.length === 0) return null;
   const running = run?.status === "executando";
   return (
-    <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+    <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-painel border border-l-[3px] border-falha-bg border-l-falha bg-falha-bg px-[18px] py-3.5 text-[13px] font-medium text-falha-fg">
       <div className="space-y-1">
         {failures.map((source) => {
           const { message, action } = describeFailure(source.fonte, source.motivo ?? "erro_interno");

@@ -29,6 +29,7 @@ class Padrao:
 @dataclass(frozen=True)
 class Busca:
     keyword_max_length: int
+    max_termos_busca: int
     janela_horas: int
     localidades: list[str]
     modalidade: list[str]
@@ -40,11 +41,11 @@ class Filtro:
     peso_descricao: int
     min_score: int
     trecho_max_chars: int
+    aceitar_desconhecido: bool
 
 
 @dataclass(frozen=True)
 class Limites:
-    max_paginas_detalhe: int
     max_vagas_lista: int
 
 
@@ -87,13 +88,6 @@ class SearchSite:
 
 
 @dataclass(frozen=True)
-class Google:
-    base_url: str
-    page_size: int
-    modalidade_termos: dict[str, list[str]]
-
-
-@dataclass(frozen=True)
 class Versionamento:
     falhas_consecutivas: int
     max_idade_dias: int
@@ -113,7 +107,6 @@ class Settings:
     gupy: Gupy
     linkedin: SearchSite
     indeed: SearchSite
-    google: Google
     versionamento: Versionamento
 
 
@@ -171,13 +164,13 @@ def validate(settings: Settings) -> None:
         )
     positives = {
         "keyword_max_length": settings.busca.keyword_max_length,
+        "max_termos_busca": settings.busca.max_termos_busca,
         "janela_horas": settings.busca.janela_horas,
         "trecho_max_chars": settings.filtro.trecho_max_chars,
         "poll_interval_ms": settings.api.poll_interval_ms,
         "max_vagas_lista": settings.limites.max_vagas_lista,
         "jobs_page_size": settings.api.jobs_page_size,
         "gupy.page_size": settings.gupy.page_size,
-        "google.page_size": settings.google.page_size,
     }
     for name, value in positives.items():
         if value <= 0:
@@ -192,14 +185,6 @@ def validate(settings: Settings) -> None:
     for name, value in non_negatives.items():
         if value < 0:
             raise ConfigError(f"Config inválida: {name}={value} (esperado >= 0)")
-    termos = settings.google.modalidade_termos
-    if not isinstance(termos, dict) or set(termos) != set(MODALIDADES) or any(
-        not isinstance(lista, list) or not lista or any(not isinstance(t, str) or not t.strip() for t in lista)
-        for lista in termos.values()
-    ):
-        raise ConfigError(
-            f"Config inválida: google.modalidade_termos={termos!r} (esperado {MODALIDADES}, cada uma com lista não vazia de textos)"
-        )
     versionamento = settings.versionamento
     for name in ("falhas_consecutivas", "max_idade_dias"):
         if getattr(versionamento, name) <= 0:
@@ -207,10 +192,6 @@ def validate(settings: Settings) -> None:
     invalid = [motivo for motivo in versionamento.motivos_de_quebra if motivo not in MOTIVOS]
     if invalid:
         raise ConfigError(f"Config inválida: motivos_de_quebra={invalid} (esperado subconjunto de {MOTIVOS})")
-    if settings.limites.max_paginas_detalhe < 0:
-        raise ConfigError(
-            f"Config inválida: max_paginas_detalhe={settings.limites.max_paginas_detalhe} (esperado >= 0)"
-        )
 
 
 def settings_from_dict(raw: dict, root: Path) -> Settings:

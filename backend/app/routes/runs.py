@@ -1,6 +1,4 @@
 import sqlite3
-import threading
-
 from fastapi import APIRouter, Depends, Request
 
 from ..config import Settings
@@ -28,20 +26,7 @@ def start_run(
         if not fontes or unknown:
             raise DomainError(f"fontes={unknown or fontes}: esperado ao menos uma entre {names}")
         sources = [source for source in sources if source.name in fontes]
-    request.app.state.gate.reset()
-    cancel = threading.Event()
-    run_id = run_service.start_run(
-        conn, settings, sources, now, request.app.state.spawn, request.app.state.manifest, cancel
-    )
-    request.app.state.cancel = cancel
-    return RunStarted(id=run_id)
-
-
-@router.post("/runs/{run_id}/cancel", response_model=RunStarted, status_code=202)
-def cancel_run(run_id: int, request: Request, conn: sqlite3.Connection = Depends(get_conn)) -> RunStarted:
-    runs.ensure_running(conn, run_id)
-    request.app.state.cancel.set()
-    request.app.state.gate.cancel()
+    run_id = run_service.start_run(conn, settings, sources, now, request.app.state.spawn, request.app.state.manifest)
     return RunStarted(id=run_id)
 
 
@@ -57,6 +42,11 @@ def list_runs(
 @router.delete("/runs", response_model=RunsCleared)
 def clear_runs(conn: sqlite3.Connection = Depends(get_conn)) -> RunsCleared:
     return RunsCleared(removidas=runs.clear_history(conn))
+
+
+@router.delete("/runs/{run_id}", response_model=RunsCleared)
+def delete_run(run_id: int, conn: sqlite3.Connection = Depends(get_conn)) -> RunsCleared:
+    return RunsCleared(removidas=runs.delete_run(conn, run_id))
 
 
 @router.get("/runs/{run_id}", response_model=RunOut)

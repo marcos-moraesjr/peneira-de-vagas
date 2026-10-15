@@ -10,10 +10,11 @@ from typing import Protocol
 from .. import db
 from ..config import Settings
 from ..errors import DomainError
-from ..sources.errors import SourceEmpty, SourceError, SourceInterrupted
+from ..sources.errors import SourceEmpty, SourceError
 from ..sources.types import Job
 from . import keywords, scanners
 from .filters import Filter
+from .localizacao import passes_localidade, passes_modalidade
 from .scanners import Manifest
 
 log = logging.getLogger(__name__)
@@ -24,7 +25,7 @@ class Source(Protocol):
 
     def search(self, termos: list[str]) -> list[Job]: ...
 
-    def enrich(self, jobs: list[Job]) -> list[Job]: ...
+    def enrich(self, jobs: list[Job], on_job: Callable[[Job], None] | None = None) -> list[Job]: ...
 
 
 def _build_filter(conn: sqlite3.Connection, settings: Settings) -> tuple[list[str], Filter]:
@@ -40,37 +41,38 @@ def _update_source(conn: sqlite3.Connection, run_id: int, fonte: str, **fields) 
     conn.commit()
 
 
-def _approve(jobs: list[Job], flt: Filter) -> tuple[list[Job], dict[str, int]]:
+def _approve(jobs: list[Job], flt: Filter, settings: Settings) -> tuple[list[Job], dict[str, int]]:
+    """Palavras-chave/exclusões (título e trecho) e, igual para todas as fontes, localidade e modalidade da config."""
+    busca, aceitar = settings.busca, settings.filtro.aceitar_desconhecido
     approved, scores = [], {}
     for job in jobs:
         result = flt.evaluate(job.titulo, job.trecho)
-        if result.approved:
+        if (
+            result.approved
+            and passes_localidade(job.localidade, job.modalidade, busca.localidades, aceitar)
+            and passes_modalidade(job.modalidade, busca.modalidade, aceitar)
+        ):
             approved.append(job)
             scores[job.id] = result.score
     return approved, scores
 
 
-def _check_cancel(cancel: threading.Event | None) -> None:
-    if cancel is not None and cancel.is_set():
-        raise SourceInterrupted("Execução interrompida pelo usuário")
-
-
-def _run_source(conn, settings, source: Source, termos, flt, run_id: int, now: str, cancel=None) -> None:
-    _check_cancel(cancel)
+def _run_source(conn, settings, source: Source, termos, flt, run_id: int, now: str) -> None:
     jobs = source.search(termos)
-    _check_cancel(cancel)
     if not jobs:
         raise SourceEmpty("A fonte não devolveu nenhuma vaga")
     local_filter = getattr(source, "local_filter", True)
-    approved, scores = _approve(jobs, flt) if local_filter else (jobs, {})
+    approved, scores = _approve(jobs, flt, settings) if local_filter else (jobs, {})
     unknown = db.filter_unknown(conn, approved)
-    cap = settings.limites.max_paginas_detalhe
-    detailed = source.enrich(unknown[:cap])
-    _check_cancel(cancel)
-    detailed_ok, detailed_scores = _approve(detailed, flt) if local_filter else (detailed, {})
-    final = detailed_ok + unknown[cap:]
-    scores.update(detailed_scores)
-    novas = db.insert_new_jobs(conn, final, scores, run_id, now)
+    novas = 0
+
+    def save(job: Job) -> None:
+        """Grava a vaga assim que o detalhe dela é lido, para aparecer na lista antes de a fonte terminar."""
+        nonlocal novas
+        ok, pontos = _approve([job], flt, settings) if local_filter else ([job], {})
+        novas += db.insert_new_jobs(conn, ok, pontos, run_id, now)
+
+    source.enrich(unknown, on_job=save)
     _update_source(conn, run_id, source.name, status="ok", lidas=len(jobs), aprovadas=len(approved), novas=novas)
 
 
@@ -89,20 +91,18 @@ def execute_run(
     sources: list[Source],
     now: Callable[[], str],
     manifest: Manifest | None = None,
-    cancel: threading.Event | None = None,
 ) -> None:
     """Roda cada fonte isolada: a falha de uma é registrada e a execução segue para a próxima.
 
-    Em sequência por padrão; com `navegador.abas_paralelas` todas rodam ao mesmo tempo, uma aba por fonte.
-    `cancel` aceso interrompe: a fonte em andamento é descartada ao fim da etapa atual e as seguintes nem começam."""
+    Em sequência por padrão; com `navegador.abas_paralelas` todas rodam ao mesmo tempo, uma aba por fonte."""
     conn = db.connect(settings.geral.db_path)
     try:
         termos, flt = _build_filter(conn, settings)
         if settings.navegador.abas_paralelas and len(sources) > 1:
-            _run_sources_in_parallel(settings, run_id, sources, termos, flt, now, cancel)
+            _run_sources_in_parallel(settings, run_id, sources, termos, flt, now)
         else:
             for source in sources:
-                _run_isolated(conn, settings, source, termos, flt, run_id, now, cancel)
+                _run_isolated(conn, settings, source, termos, flt, run_id, now)
         conn.execute("UPDATE runs SET status='concluida', fim=? WHERE id=?", (now(), run_id))
         conn.commit()
         if manifest:
@@ -111,10 +111,10 @@ def execute_run(
         conn.close()
 
 
-def _run_isolated(conn, settings, source: Source, termos, flt, run_id: int, now, cancel) -> None:
+def _run_isolated(conn, settings, source: Source, termos, flt, run_id: int, now) -> None:
     _update_source(conn, run_id, source.name, status="buscando")
     try:
-        _run_source(conn, settings, source, termos, flt, run_id, now(), cancel)
+        _run_source(conn, settings, source, termos, flt, run_id, now())
     except SourceError as error:
         log.warning("Fonte %s falhou: %s (%s)", source.name, error.motivo, error.detalhe)
         _update_source(conn, run_id, source.name, status="falha", motivo=error.motivo, detalhe=error.detalhe)
@@ -123,13 +123,13 @@ def _run_isolated(conn, settings, source: Source, termos, flt, run_id: int, now,
         _update_source(conn, run_id, source.name, status="falha", motivo="erro_interno", detalhe=str(error))
 
 
-def _run_sources_in_parallel(settings, run_id: int, sources, termos, flt, now, cancel) -> None:
+def _run_sources_in_parallel(settings, run_id: int, sources, termos, flt, now) -> None:
     """Uma thread, uma conexão de banco e uma aba por fonte; cada uma segue com as próprias pausas."""
 
     def work(source: Source) -> None:
         conn = db.connect(settings.geral.db_path)
         try:
-            _run_isolated(conn, settings, source, termos, flt, run_id, now, cancel)
+            _run_isolated(conn, settings, source, termos, flt, run_id, now)
         finally:
             conn.close()
 
@@ -148,12 +148,11 @@ def start_run(
     now: Callable[[], str],
     spawn: Callable[[Callable[[], None]], None] = spawn_thread,
     manifest: Manifest | None = None,
-    cancel: threading.Event | None = None,
 ) -> int:
     """Valida, abre a execução (uma por vez) e a dispara em segundo plano, gravando a versão de cada scanner."""
     if not keywords.list_all(conn, "busca"):
         raise DomainError("Adicione ao menos uma palavra-chave para buscar")
     versions = manifest.versions() if manifest else None
     run_id = db.create_run(conn, [source.name for source in sources], now(), versions)
-    spawn(lambda: execute_run(settings, run_id, sources, now, manifest, cancel))
+    spawn(lambda: execute_run(settings, run_id, sources, now, manifest))
     return run_id

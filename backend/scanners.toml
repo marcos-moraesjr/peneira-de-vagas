@@ -3,25 +3,19 @@
 # registre no changelog de docs/SCANNERS.md. Regras de versão e procedimento: docs/SCANNERS.md.
 
 [linkedin]
-versao = "1.4.0"
+versao = "1.6.0"
 explorado_em = "2026-10-14"
 gerado_por = "Claude"
 referencia = "docs/EXPLORACAO_PLATAFORMAS.md §2.2"
 
 [indeed]
-versao = "1.4.0"
+versao = "1.7.0"
 explorado_em = "2026-10-14"
 gerado_por = "Claude"
 referencia = "docs/EXPLORACAO_PLATAFORMAS.md §2.3"
 
 [gupy]
-versao = "1.2.0"
+versao = "1.3.0"
 explorado_em = "2026-10-14"
 gerado_por = "Claude"
 referencia = "docs/EXPLORACAO_PLATAFORMAS.md §2.4"
-
-[google]
-versao = "0.3.0"
-explorado_em = "2026-10-14"
-gerado_por = "Claude"
-referencia = "docs/SCANNERS.md (seletores não observados no DOM real; falta explorar)"

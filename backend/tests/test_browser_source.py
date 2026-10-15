@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import pytest
 
 from backend.app.sources.browser import BrowserSource
-from backend.app.sources.errors import SourceBlocked, SourceInterrupted, SourceLayoutChanged, SourceUnavailable
+from backend.app.sources.errors import SourceBlocked, SourceLayoutChanged, SourceUnavailable
 from backend.app.sources.types import Job
 from backend.app.sources.verification import VerificationGate
 
@@ -20,8 +20,8 @@ class FakeSite:
     def __init__(self, lazy_cards=False):
         self.lazy_cards = lazy_cards
 
-    def search_url(self, termo, start, localidade=""):
-        return f"https://site/?q={termo}&start={start}" + (f"&l={localidade}" if localidade else "")
+    def search_url(self, termo, start):
+        return f"https://site/?q={termo}&start={start}"
 
     def classify(self, url, title, text):
         return "login" if "login" in url else ("cloudflare" if "Just a moment" in title else None)
@@ -119,7 +119,7 @@ def test_para_quando_a_pagina_so_traz_vagas_repetidas(settings):
 
 
 def test_respeita_o_teto_de_vagas_lidas(settings):
-    teto = settings.limites.__class__(settings.limites.max_paginas_detalhe, 3)
+    teto = settings.limites.__class__(max_vagas_lista=3)
     limitada = settings.__class__(**{**settings.__dict__, "limites": teto})
     nav = FakeNavigator({f"https://site/?q=x&start={s}": {"raw": [card(s), card(s + 1)]} for s in (0, 2, 4)})
     source, *_ = make_source(limitada, nav)
@@ -158,41 +158,11 @@ def with_localidades(settings, localidades):
     return settings.__class__(**{**settings.__dict__, "busca": busca})
 
 
-def test_cada_palavra_chave_e_localidade_gera_uma_busca(settings):
-    nav = FakeNavigator(
-        {
-            "https://site/?q=a&start=0&l=SP": {"raw": [card(1)]},
-            "https://site/?q=a&start=0&l=Minas Gerais": {"raw": [card(2), card(1)]},
-            "https://site/?q=b&start=0&l=SP": {"raw": [card(3)]},
-            "https://site/?q=b&start=0&l=Minas Gerais": {"raw": [card(4)]},
-        }
-    )
+def test_localidades_da_config_nao_multiplicam_as_buscas(settings):
+    nav = FakeNavigator({"https://site/?q=a&start=0": {"raw": [card(1)]}, "https://site/?q=b&start=0": {"raw": [card(2)]}})
     source, *_ = make_source(with_localidades(settings, ["SP", "Minas Gerais"]), nav)
-    assert [j.id for j in source.search(["a", "b"])] == ["1", "2", "3", "4"]
-    assert [url for url in nav.opened if "start=0" in url] == [
-        "https://site/?q=a&start=0&l=SP",
-        "https://site/?q=a&start=0&l=Minas Gerais",
-        "https://site/?q=b&start=0&l=SP",
-        "https://site/?q=b&start=0&l=Minas Gerais",
-    ]
-
-
-def test_sem_localidades_faz_uma_busca_sem_local(settings):
-    nav = FakeNavigator({"https://site/?q=a&start=0": {"raw": [card(1)]}})
-    source, *_ = make_source(with_localidades(settings, []), nav)
-    assert [j.id for j in source.search(["a"])] == ["1"]
-    assert nav.opened[0] == "https://site/?q=a&start=0"
-
-
-def test_localidades_respeitam_o_teto_de_vagas_lidas(settings):
-    teto = settings.limites.__class__(settings.limites.max_paginas_detalhe, 2)
-    limitada = with_localidades(settings.__class__(**{**settings.__dict__, "limites": teto}), ["SP", "MG"])
-    nav = FakeNavigator(
-        {"https://site/?q=a&start=0&l=SP": {"raw": [card(1), card(2)]}, "https://site/?q=a&start=0&l=MG": {"raw": [card(3)]}}
-    )
-    source, *_ = make_source(limitada, nav)
-    assert [j.id for j in source.search(["a"])] == ["1", "2"]
-    assert not any("l=MG" in url for url in nav.opened)
+    assert [j.id for j in source.search(["a", "b"])] == ["1", "2"]
+    assert [url for url in nav.opened if "start=0" in url] == ["https://site/?q=a&start=0", "https://site/?q=b&start=0"]
 
 
 @pytest.mark.parametrize("pagina,motivo", [({"url": "https://site/login"}, "login"), ({"title": "Just a moment..."}, "cloudflare")])
@@ -223,6 +193,20 @@ def test_enrich_substitui_o_trecho_pela_descricao_completa(settings):
     source, pauses, _ = make_source(settings, nav)
     assert source.enrich([job])[0].trecho == "descrição completa"
     assert pauses
+
+
+def test_enrich_entrega_cada_vaga_ao_callback_assim_que_o_detalhe_e_lido(settings):
+    um = Job("1", "Vaga 1", "ACME", "https://site/job/1", "curto", "fake")
+    dois = Job("2", "Vaga 2", "ACME", "https://site/job/2", "curto", "fake")
+    nav = FakeNavigator({}, details={
+        "https://site/job/1": {"detail": "descrição 1"},
+        "https://site/job/2": {"url": "https://site/login"},
+    })
+    source, *_ = make_source(settings, nav)
+    entregues = []
+    with pytest.raises(SourceBlocked):
+        source.enrich([um, dois], on_job=entregues.append)
+    assert [(j.id, j.trecho) for j in entregues] == [("1", "descrição 1")]
 
 
 def test_enrich_mantem_a_vaga_quando_nao_acha_a_descricao(settings):
@@ -379,30 +363,55 @@ def test_enrich_sem_data_no_detalhe_mantem_publicada_em_vazia(settings):
     assert source.enrich([Job("1", "Vaga 1", "ACME", link, "curto", "fake")])[0].publicada_em is None
 
 
-def test_cancelar_durante_a_busca_para_antes_da_proxima_pagina(settings):
-    nav = FakeNavigator({"https://site/?q=x&start=0": {"raw": [card(1), card(2)]}})
-    gate = VerificationGate()
-
+def _fonte_datada(settings, nav, site=None):
     @contextmanager
     def session():
         yield nav
 
-    source = BrowserSource(FakeSite(), settings, session, pause=gate.cancel, scroll_pause=lambda: None, gate=gate)
-    with pytest.raises(SourceInterrupted):
-        source.search(["x"])
-    assert nav.opened == ["https://site/?q=x&start=0"]
+    agora = datetime(2026, 10, 14, 12, 0, tzinfo=timezone.utc)
+    return BrowserSource(
+        site or FakeDatedSite(), settings, session, pause=lambda: None, scroll_pause=lambda: None, clock=lambda: agora
+    )
 
 
-def test_cancelar_durante_o_detalhe_para_antes_da_proxima_vaga(settings):
-    nav = FakeNavigator({}, details={"https://site/job/1": {"detail": "d1"}, "https://site/job/2": {"detail": "d2"}})
-    gate = VerificationGate()
+def test_enrich_sem_data_no_seletor_procura_a_linha_da_data_no_texto_da_pagina(settings):
+    link = "https://site/job/1"
+    corpo = "Engenheiro\nACME\nBelo Horizonte · Há 3 dias · 95 candidaturas\nSobre a vaga"
+    nav = FakeNavigator({}, details={link: {"detail": corpo, "published": ""}})
+    job = Job("1", "Vaga 1", "ACME", link, "curto", "fake")
+    assert _fonte_datada(settings, nav).enrich([job])[0].publicada_em == "2026-10-11T12:00:00Z"
 
-    @contextmanager
-    def session():
-        yield nav
 
-    source = BrowserSource(FakeSite(), settings, session, pause=gate.cancel, scroll_pause=lambda: None, gate=gate)
-    jobs = [Job(str(n), f"Vaga {n}", "ACME", f"https://site/job/{n}", "r", "fake") for n in (1, 2)]
-    with pytest.raises(SourceInterrupted):
-        source.enrich(jobs)
-    assert nav.opened == ["https://site/job/1"]
+def test_enrich_avisa_no_log_quantas_vagas_ficaram_sem_data(settings, caplog):
+    um, dois = "https://site/job/1", "https://site/job/2"
+    nav = FakeNavigator({}, details={um: {"detail": "d", "published": "há 3 dias"}, dois: {"detail": "d"}})
+    jobs = [Job("1", "V1", "ACME", um, "c", "fake"), Job("2", "V2", "ACME", dois, "c", "fake")]
+    with caplog.at_level("WARNING"):
+        _fonte_datada(settings, nav).enrich(jobs)
+    assert "1 de 2 vagas abertas no detalhe ficaram sem data" in caplog.text
+
+
+def test_enrich_nao_avisa_quando_todas_as_vagas_tem_data(settings, caplog):
+    um = "https://site/job/1"
+    nav = FakeNavigator({}, details={um: {"detail": "d", "published": "há 3 dias"}})
+    with caplog.at_level("WARNING"):
+        _fonte_datada(settings, nav).enrich([Job("1", "V1", "ACME", um, "c", "fake")])
+    assert "sem data" not in caplog.text
+
+
+class FakeNavigatorPorSeletor(FakeNavigator):
+    def first_text(self, selectors):
+        if selectors == ["body"]:
+            return self._current.get("detail", "")
+        return self._current.get("por_seletor", {}).get(selectors[0], "")
+
+
+class FakeDoisSeletores(FakeDatedSite):
+    published_selectors = ["#a", "#b"]
+
+
+def test_enrich_tenta_cada_seletor_da_data_ate_um_dar_data(settings):
+    link = "https://site/job/1"
+    nav = FakeNavigatorPorSeletor({}, details={link: {"detail": "descrição", "por_seletor": {"#a": "", "#b": "há 2 dias"}}})
+    job = Job("1", "Vaga 1", "ACME", link, "curto", "fake")
+    assert _fonte_datada(settings, nav, FakeDoisSeletores()).enrich([job])[0].publicada_em == "2026-10-14|há 2 dias"

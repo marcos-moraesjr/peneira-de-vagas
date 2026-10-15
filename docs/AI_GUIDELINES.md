@@ -34,7 +34,7 @@ por "testo depois".
 - Únicas dispensas (lista fechada em `CODE_QUALITY.md` §1): `requirements.txt`/`package.json`,
   `config.toml` de exemplo, scaffolding sem lógica, ajuste puramente visual e texto fixo.
 - Testes automatizados (`pytest` comum) nunca acessam a rede nem os sites reais; usam amostras salvas e fontes
-  simuladas. Exceção: verificação manual do **Google** pelo agente (§5).
+  simuladas.
 
 ## 4. Escopo
 
@@ -60,15 +60,9 @@ por "testo depois".
 - Abrir a API além de `127.0.0.1` ou enviar dados a terceiros além das três fontes de vagas: decisão **exclusiva do usuário**.
 - Frontend não repete regra de negócio nem validação: exibe e envia; quem decide é o backend.
 - Ritmo humano é regra, não detalhe: uma aba por plataforma (paralelismo entre plataformas só com `navegador.abas_paralelas`, opção do usuário; nunca várias abas na mesma plataforma), sem remover as pausas variáveis, sem aumentar o
-  teto de páginas por execução sem pedido explícito.
-- Testes automatizados nunca acessam LinkedIn, Indeed, Gupy ou Google; usam amostras salvas. A execução real
+  teto de vagas lidas por fonte (`limites.max_vagas_lista`) sem pedido explícito.
+- Testes automatizados nunca acessam LinkedIn, Indeed ou Gupy; usam amostras salvas. A execução real
   (`integration`) de LinkedIn, Indeed e Gupy é do usuário: não executar, automatizar nem agendar.
-- **Google — verificação real pelo agente (autorizada pelo usuário):** o agente pode executar manualmente, no
-  Chrome dedicado, a busca do Google para diagnosticar ou validar o adaptador (consulta, seletor, HTML de amostra).
-  Condições: só quando o pedido envolver a fonte Google; poucas requisições (o mínimo para o diagnóstico), com as
-  pausas da config; nunca em rotina, laço ou agendamento; CAPTCHA/"tráfego incomum"/consentimento/login
-  encerram a tentativa e são relatados (§5, sem contornar); sem ler cookies nem o perfil do Chrome; o HTML salvo
-  como amostra não pode conter dados pessoais.
 - Nunca apagar nem sobrescrever o `.db` do usuário; migração destrutiva só com pedido explícito e cópia prévia.
   Testes usam banco temporário.
 

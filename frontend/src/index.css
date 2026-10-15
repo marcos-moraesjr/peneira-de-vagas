@@ -1,5 +1,135 @@
 @import "tailwindcss";
 
+/* Peneira — tokens de identidade v2 (design "Peneira Identidade v2", assets/peneira-tokens.css) */
 :root {
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --pn-grafite-900: #16181b;
+  --pn-grafite-700: #3a3e44;
+  --pn-grafite-500: #5a5f67;
+  --pn-grafite-400: #8a8f96;
+  --pn-linha: #e2e3df;
+  --pn-linha-2: #ecedea;
+  --pn-papel: #f4f4f1;
+  --pn-branco: #ffffff;
+
+  --pn-sinal: oklch(0.72 0.17 150);
+  --pn-sinal-ponto: oklch(0.65 0.17 150);
+  --pn-sinal-bg: oklch(0.96 0.04 150);
+  --pn-sinal-fg: oklch(0.42 0.12 150);
+  --pn-falha: oklch(0.62 0.17 45);
+  --pn-falha-bg: oklch(0.96 0.03 55);
+  --pn-falha-fg: oklch(0.42 0.13 45);
+  --pn-atencao: oklch(0.78 0.13 85);
+  --pn-atencao-bg: oklch(0.97 0.04 90);
+  --pn-atencao-fg: oklch(0.45 0.1 75);
+  --pn-erro: oklch(0.55 0.19 25);
+  --pn-erro-bg: oklch(0.96 0.025 25);
+  --pn-erro-fg: oklch(0.46 0.16 25);
+
+  --pn-linkedin-bg: oklch(0.94 0.03 250);
+  --pn-linkedin-fg: oklch(0.42 0.12 250);
+  --pn-indeed-bg: oklch(0.94 0.03 300);
+  --pn-indeed-fg: oklch(0.42 0.12 300);
+  --pn-google-bg: oklch(0.94 0.03 200);
+  --pn-google-fg: oklch(0.42 0.12 200);
+  --pn-gupy-bg: oklch(0.94 0.03 340);
+  --pn-gupy-fg: oklch(0.42 0.12 340);
+
+  --pn-barra-alta: var(--pn-grafite-900);
+  --pn-barra-baixa: #b8bab5;
+
+  --pn-foco: 0 0 0 2px var(--pn-branco), 0 0 0 4px oklch(0.62 0.16 150);
+}
+
+[data-theme="dark"] {
+  --pn-grafite-900: #ecedea;
+  --pn-grafite-700: #c3c7cc;
+  --pn-grafite-500: #9ba1a9;
+  --pn-grafite-400: #7d838b;
+  --pn-linha: #2a2e33;
+  --pn-linha-2: #1e2125;
+  --pn-papel: #0f1113;
+  --pn-branco: #16181b;
+  --pn-falha-bg: oklch(0.25 0.04 45);
+  --pn-falha-fg: oklch(0.92 0.05 55);
+  --pn-erro-bg: oklch(0.25 0.04 25);
+  --pn-erro-fg: oklch(0.88 0.06 25);
+  --pn-linkedin-bg: oklch(0.3 0.05 250);
+  --pn-linkedin-fg: oklch(0.86 0.07 250);
+  --pn-indeed-bg: oklch(0.3 0.05 300);
+  --pn-indeed-fg: oklch(0.86 0.07 300);
+  --pn-google-bg: oklch(0.3 0.05 200);
+  --pn-google-fg: oklch(0.86 0.07 200);
+  --pn-gupy-bg: oklch(0.3 0.05 340);
+  --pn-gupy-fg: oklch(0.86 0.07 340);
+  --pn-barra-alta: var(--pn-sinal);
+  --pn-barra-baixa: #4a4f56;
+}
+
+@theme inline {
+  --font-sans: "Noto Sans", -apple-system, system-ui, "Segoe UI", Roboto, Arial, sans-serif;
+  --color-grafite-900: var(--pn-grafite-900);
+  --color-grafite-700: var(--pn-grafite-700);
+  --color-grafite-500: var(--pn-grafite-500);
+  --color-grafite-400: var(--pn-grafite-400);
+  --color-linha: var(--pn-linha);
+  --color-linha-2: var(--pn-linha-2);
+  --color-papel: var(--pn-papel);
+  --color-painel: var(--pn-branco);
+  --color-sinal: var(--pn-sinal);
+  --color-sinal-ponto: var(--pn-sinal-ponto);
+  --color-sinal-bg: var(--pn-sinal-bg);
+  --color-sinal-fg: var(--pn-sinal-fg);
+  --color-falha: var(--pn-falha);
+  --color-falha-bg: var(--pn-falha-bg);
+  --color-falha-fg: var(--pn-falha-fg);
+  --color-atencao: var(--pn-atencao);
+  --color-atencao-bg: var(--pn-atencao-bg);
+  --color-atencao-fg: var(--pn-atencao-fg);
+  --color-erro: var(--pn-erro);
+  --color-erro-bg: var(--pn-erro-bg);
+  --color-erro-fg: var(--pn-erro-fg);
+  --color-barra-alta: var(--pn-barra-alta);
+  --color-barra-baixa: var(--pn-barra-baixa);
+  --color-fonte-linkedin-bg: var(--pn-linkedin-bg);
+  --color-fonte-linkedin-fg: var(--pn-linkedin-fg);
+  --color-fonte-indeed-bg: var(--pn-indeed-bg);
+  --color-fonte-indeed-fg: var(--pn-indeed-fg);
+  --color-fonte-google-bg: var(--pn-google-bg);
+  --color-fonte-google-fg: var(--pn-google-fg);
+  --color-fonte-gupy-bg: var(--pn-gupy-bg);
+  --color-fonte-gupy-fg: var(--pn-gupy-fg);
+  --radius-selo: 3px;
+  --radius-botao: 4px;
+  --radius-painel: 4px;
+  --shadow-foco: var(--pn-foco);
+  --text-display: 28px;
+  --text-display--line-height: 36px;
+  --text-display--font-weight: 600;
+  --text-display--letter-spacing: -0.02em;
+  --text-titulo: 16px;
+  --text-titulo--line-height: 24px;
+  --text-titulo--font-weight: 600;
+  --text-corpo: 14px;
+  --text-corpo--line-height: 20px;
+  --text-dado: 13px;
+  --text-dado--line-height: 18px;
+  --text-dado--font-weight: 400;
+  --text-legenda: 12px;
+  --text-legenda--line-height: 16px;
+  --text-rotulo: 11px;
+  --text-rotulo--line-height: 14px;
+  --text-rotulo--font-weight: 500;
+  --text-rotulo--letter-spacing: 0.05em;
+}
+
+body {
+  background: var(--pn-papel);
+  color: var(--pn-grafite-900);
+  font-family: "Noto Sans", -apple-system, system-ui, "Segoe UI", Roboto, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--pn-foco);
 }

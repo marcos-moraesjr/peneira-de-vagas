@@ -7,8 +7,8 @@ function CopyInstruction({ instruction }: { instruction: string }) {
   return (
     <div className="mt-2 space-y-2">
       <details className="text-xs">
-        <summary className="cursor-pointer text-red-800">Ver instrução</summary>
-        <pre className="mt-1 whitespace-pre-wrap rounded bg-white/70 p-2 text-slate-800">{instruction}</pre>
+        <summary className="cursor-pointer text-erro-fg">Ver instrução</summary>
+        <pre className="mt-1 whitespace-pre-wrap rounded bg-painel/70 p-2 text-grafite-900">{instruction}</pre>
       </details>
       <CopyButton text={instruction} />
     </div>
@@ -17,7 +17,7 @@ function CopyInstruction({ instruction }: { instruction: string }) {
 
 function RedoAlert({ scanner }: { scanner: Scanner }) {
   return (
-    <div role="alert" className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
+    <div role="alert" className="rounded-painel border border-l-[3px] border-erro bg-erro-bg px-4 py-3 text-sm text-erro-fg">
       <p>
         <strong>
           O scanner do {sourceLabel(scanner.fonte)} (v{scanner.versao}) precisa ser refeito.
@@ -40,7 +40,7 @@ export function ScannerBanner() {
         <RedoAlert key={scanner.fonte} scanner={scanner} />
       ))}
       {watch.map((scanner) => (
-        <p key={scanner.fonte} role="note" className="rounded-md bg-slate-100 px-3 py-2 text-xs text-slate-700">
+        <p key={scanner.fonte} role="note" className="rounded-painel border border-l-[3px] border-atencao bg-atencao-bg px-3 py-2 text-xs text-atencao-fg">
           <strong>{sourceLabel(scanner.fonte)}</strong> (scanner v{scanner.versao}): {scanner.mensagem}
         </p>
       ))}

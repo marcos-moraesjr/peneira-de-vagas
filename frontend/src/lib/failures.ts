@@ -1,4 +1,7 @@
-const LABELS: Record<string, string> = { linkedin: "LinkedIn", indeed: "Indeed", google: "Google", gupy: "Gupy" };
+const LABELS: Record<string, string> = { linkedin: "LinkedIn", indeed: "Indeed", gupy: "Gupy" };
+
+/** Plataformas de busca, na ordem em que aparecem na tela. */
+export const SOURCES = ["linkedin", "indeed", "gupy"];
 
 export function sourceLabel(fonte: string): string {
   return LABELS[fonte] ?? fonte;

@@ -63,7 +63,7 @@ Detalhe em [`DESIGN_BRIEF.md`](DESIGN_BRIEF.md).
 ### 5.1 Vagas
 - Botão **Buscar agora**, com andamento por fonte enquanto executa.
 - Lista de vagas: título, empresa, fonte, pontuação, data em que foi vista, link para a vaga original.
-- Filtros: **Novas** (não vistas), fonte, busca por texto. Marcar como vista (individual e em lote).
+- Filtros: **Não lidas** (não vistas), fonte, busca por texto. Marcar como vista (ao abrir o link da vaga e em lote).
 - Faixa de alerta por fonte com falha na última execução.
 - **Painel de palavras-chave**: campo de texto + botão Adicionar (Enter também), lista com remover; mesma interface para **exclusões**. Valem a partir da próxima busca.
 

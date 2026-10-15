@@ -38,9 +38,9 @@ def evaluate(conn, settings, manifest=None, today=TODAY):
 
 # ---------- manifesto ----------
 
-def test_manifesto_do_projeto_cobre_as_quatro_fontes_com_versao_e_data():
+def test_manifesto_do_projeto_cobre_as_tres_fontes_com_versao_e_data():
     manifest = load_manifest(MANIFEST_PATH)
-    assert list(manifest.scanners) == ["linkedin", "indeed", "gupy", "google"]
+    assert list(manifest.scanners) == ["linkedin", "indeed", "gupy"]
     for info in manifest.scanners.values():
         assert info.versao.count(".") == 2 and info.gerado_por and info.referencia
         assert info.explorado_em >= date(2026, 10, 14)
@@ -206,10 +206,11 @@ def full_manifest():
 def test_instrucao_de_documentacao_cobre_todas_as_plataformas_com_versao_e_data():
     manifesto = full_manifest()
     texto = scanners.documentation_instruction(manifesto, None, ["Engenheiro Mecânico"])
-    for rotulo in ("LinkedIn", "Indeed", "Gupy", "Google"):
+    for rotulo in ("LinkedIn", "Indeed", "Gupy"):
         assert rotulo in texto
     assert all(info.versao in texto for info in manifesto.scanners.values()) and "2026-10-14" in texto
-    for arquivo in ("backend/app/sources/linkedin.py", "backend/app/sources/indeed.py", "backend/app/sources/gupy.py", "backend/app/sources/google.py"):
+    assert "Google" not in texto
+    for arquivo in ("backend/app/sources/linkedin.py", "backend/app/sources/indeed.py", "backend/app/sources/gupy.py"):
         assert arquivo in texto
 
 

@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import httpx
@@ -63,7 +64,7 @@ def test_pagina_ate_o_total_informado(settings):
 
 
 def test_respeita_o_teto_de_vagas_lidas(settings):
-    teto = settings.limites.__class__(settings.limites.max_paginas_detalhe, 1)
+    teto = settings.limites.__class__(max_vagas_lista=1)
     limitada = settings.__class__(**{**settings.__dict__, "limites": teto})
     source = make_source(limitada, lambda request: httpx.Response(200, json=SAMPLE))
     assert len(source.search(["x"])) == 1
@@ -75,40 +76,18 @@ def test_mesma_vaga_em_duas_palavras_chave_aparece_uma_vez(settings):
     assert sorted(ids) == ["1001", "1002"]
 
 
-def test_filtro_de_modalidade_vai_para_a_api(settings):
+def test_modalidade_e_localidade_da_config_nao_vao_para_a_api(settings):
     vistos = []
 
     def handler(request):
         vistos.append(dict(request.url.params))
         return httpx.Response(200, json=SAMPLE)
 
-    remoto = settings.busca.__class__(settings.busca.keyword_max_length, 24, "Brasil", ["remoto"])
-    make_source(settings.__class__(**{**settings.__dict__, "busca": remoto}), handler).search(["x"])
-    assert vistos[0]["workplaceType"] == "remote"
-
-
-def test_varias_modalidades_fazem_uma_busca_por_modalidade_sem_repetir_vagas(settings):
-    vistos = []
-
-    def handler(request):
-        vistos.append(request.url.params.get("workplaceType"))
-        return httpx.Response(200, json=SAMPLE)
-
-    busca = settings.busca.__class__(settings.busca.keyword_max_length, 24, "Brasil", ["remoto", "hibrido"])
-    jobs = make_source(settings.__class__(**{**settings.__dict__, "busca": busca}), handler).search(["x"])
-    assert vistos == ["remote", "hybrid"]
+    busca = replace(settings.busca, localidades=["Campinas, SP"], modalidade=["remoto", "hibrido"])
+    jobs = make_source(replace(settings, busca=busca), handler).search(["x"])
+    assert len(vistos) == 1
+    assert "workplaceType" not in vistos[0] and "location" not in vistos[0]
     assert sorted(job.id for job in jobs) == ["1001", "1002"]
-
-
-def test_sem_modalidade_faz_uma_busca_sem_filtro(settings):
-    vistos = []
-
-    def handler(request):
-        vistos.append(request.url.params.get("workplaceType"))
-        return httpx.Response(200, json=SAMPLE)
-
-    make_source(settings, handler).search(["x"])
-    assert vistos == [None]
 
 
 def test_resposta_sem_data_e_mudanca_de_layout(settings):
@@ -144,3 +123,23 @@ def test_enrich_devolve_as_vagas_sem_tocar_na_rede(settings):
 
     jobs = make_source(settings, lambda r: httpx.Response(200, json=SAMPLE)).search(["x"])
     assert make_source(settings, handler).enrich(jobs) == jobs
+
+
+def test_modalidade_da_gupy_vem_do_workplace_type(settings):
+    source = make_source(settings, lambda request: httpx.Response(200, json=SAMPLE))
+    jobs = source.search(["x"])
+    assert [j.modalidade for j in jobs[:2]] == ["presencial", "remoto"]
+
+
+def test_vaga_da_gupy_com_workplace_type_ausente_ou_desconhecido_fica_sem_modalidade(settings):
+    sem = {k: v for k, v in SAMPLE["data"][0].items() if k != "workplaceType"}
+    outro = {**SAMPLE["data"][1], "workplaceType": "nova-forma"}
+    source = make_source(settings, lambda request: httpx.Response(200, json={**SAMPLE, "data": [sem, outro]}))
+    assert [j.modalidade for j in source.search(["x"])] == ["", ""]
+
+
+def test_enrich_entrega_cada_vaga_ao_callback(settings):
+    jobs = make_source(settings, lambda r: httpx.Response(200, json=SAMPLE)).search(["x"])
+    entregues = []
+    make_source(settings, lambda r: None).enrich(jobs, on_job=entregues.append)
+    assert entregues == jobs

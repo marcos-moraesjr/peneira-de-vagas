@@ -5,6 +5,7 @@ from datetime import date, timedelta
 from ..errors import DomainError, NotFound
 from . import runs
 from .filters import normalize
+from .localizacao import split_localidade
 
 
 def cutoff_date(now: str, max_dias: int | None) -> str | None:
@@ -16,7 +17,12 @@ def cutoff_date(now: str, max_dias: int | None) -> str | None:
     return (date.fromisoformat(now[:10]) - timedelta(days=max_dias)).isoformat()
 
 
-def _where(visto: bool | None, fonte: str | None, q: str | None, corte: str | None = None) -> tuple[str, list]:
+def _where(
+    visto: bool | None, fonte: str | None, q: str | None, corte: str | None = None,
+    cidade: str | None = None, estado: str | None = None, modalidade: str | None = None,
+) -> tuple[str, list]:
+    if modalidade and modalidade not in MODALIDADES:
+        raise DomainError(f"modalidade={modalidade!r}: esperado um de {list(MODALIDADES)}")
     clauses, params = [], []
     if visto is not None:
         clauses.append("visto=?")
@@ -27,22 +33,37 @@ def _where(visto: bool | None, fonte: str | None, q: str | None, corte: str | No
     if q and normalize(q):
         clauses.append("(norm(titulo) LIKE ? OR norm(empresa) LIKE ?)")
         params += [f"%{normalize(q)}%"] * 2
-    if corte:  # vaga sem data de publicação (LinkedIn/Indeed/Google) nunca é descartada por idade
+    if cidade and normalize(cidade):
+        clauses.append("cidade_de(localidade) LIKE ?")
+        params.append(f"%{normalize(cidade)}%")
+    if estado and normalize(estado):
+        clauses.append("lower(estado_de(localidade)) LIKE ?")
+        params.append(f"%{normalize(estado)}%")
+    if modalidade:
+        clauses.append("modalidade=?")
+        params.append(modalidade)
+    if corte:  # vaga sem data de publicação (LinkedIn/Indeed) nunca é descartada por idade
         clauses.append("(publicada_em IS NULL OR substr(publicada_em, 1, 10) >= ?)")
         params.append(corte)
     return (" WHERE " + " AND ".join(clauses)) if clauses else "", params
 
 
 def _to_dict(row: sqlite3.Row) -> dict:
-    return {**dict(row), "visto": bool(row["visto"])}
+    cidade, estado = split_localidade(row["localidade"])
+    return {**dict(row), "cidade": cidade, "estado": estado, "visto": bool(row["visto"])}
 
 
+MODALIDADES = ("remoto", "hibrido", "presencial")
 DEFAULT_ORDER = "run_id DESC, pontos DESC, id DESC"
 # coluna ordenável → expressão SQL (texto compara sem acento nem maiúscula)
 SORT_COLUMNS = {
     "titulo": "norm(titulo)",
     "empresa": "norm(empresa)",
     "localidade": "norm(localidade)",
+    "cidade": "cidade_de(localidade)",
+    "estado": "estado_de(localidade)",
+    "modalidade": "modalidade",
+    "modalidade": "modalidade",
     "publicada_em": "publicada_em",
     "encontrada_em": "encontrada_em",
     "fonte": "fonte",
@@ -66,9 +87,10 @@ def _order_by(ordenar: str | None, direcao: str | None) -> str:
 def list_jobs(
     conn, visto: bool | None, fonte: str | None, q: str | None, limit: int, offset: int,
     ordenar: str | None = None, direcao: str | None = None, corte: str | None = None,
+    cidade: str | None = None, estado: str | None = None, modalidade: str | None = None,
 ) -> dict:
     order = _order_by(ordenar, direcao)
-    where, params = _where(visto, fonte, q, corte)
+    where, params = _where(visto, fonte, q, corte, cidade, estado, modalidade)
     total = conn.execute(f"SELECT COUNT(*) FROM jobs{where}", params).fetchone()[0]
     rows = conn.execute(
         f"SELECT * FROM jobs{where} ORDER BY {order} LIMIT ? OFFSET ?",
@@ -93,9 +115,12 @@ def clear_all(conn) -> int:
     return removidas
 
 
-def mark_seen(conn, fonte: str | None, q: str | None, corte: str | None = None) -> int:
+def mark_seen(
+    conn, fonte: str | None, q: str | None, corte: str | None = None,
+    cidade: str | None = None, estado: str | None = None, modalidade: str | None = None,
+) -> int:
     """Marca como vistas as ainda não vistas que casam com os filtros."""
-    where, params = _where(False, fonte, q, corte)
+    where, params = _where(False, fonte, q, corte, cidade, estado, modalidade)
     cursor = conn.execute(f"UPDATE jobs SET visto=1{where}", params)
     conn.commit()
     return cursor.rowcount

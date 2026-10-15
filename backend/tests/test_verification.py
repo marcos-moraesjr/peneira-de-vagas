@@ -3,22 +3,14 @@ import threading
 
 import pytest
 
-from backend.app.sources.errors import SourceInterrupted
 from backend.app.sources.verification import VerificationGate
 
 
 def wait_in_thread(gate, fonte, timeout_s=5):
     result = {}
-    thread = threading.Thread(target=lambda: result.update(value=_safe_wait(gate, fonte, timeout_s)))
+    thread = threading.Thread(target=lambda: result.update(value=gate.wait(fonte, timeout_s)))
     thread.start()
     return thread, result
-
-
-def _safe_wait(gate, fonte, timeout_s):
-    try:
-        return gate.wait(fonte, timeout_s)
-    except SourceInterrupted:
-        return "interrompida"
 
 
 def wait_until_waiting(gate, fonte):
@@ -47,19 +39,3 @@ def test_tempo_esgotado_devolve_falso_e_sai_da_espera():
     gate = VerificationGate()
     assert gate.wait("indeed", 0.05) is False
     assert gate.waiting() == []
-
-
-def test_cancelar_acorda_quem_espera_com_interrupcao():
-    gate = VerificationGate()
-    thread, result = wait_in_thread(gate, "indeed")
-    wait_until_waiting(gate, "indeed")
-    gate.cancel()
-    thread.join(2)
-    assert result["value"] == "interrompida"
-
-
-def test_reset_limpa_o_cancelamento_da_execucao_anterior():
-    gate = VerificationGate()
-    gate.cancel()
-    gate.reset()
-    assert gate.wait("indeed", 0.05) is False

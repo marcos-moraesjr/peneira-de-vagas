@@ -1,10 +1,10 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { CONFIG, makeRun, makeScanner, makeSource, mockApi, renderWithClient } from "../../test/mockApi";
 import { ExecucoesPage } from "./ExecucoesPage";
 
 describe("ExecucoesPage", () => {
-  it("lista execuções e, ao expandir, o resultado de cada fonte", async () => {
+  it("lista execuções e, ao clicar, abre o card com o resultado de cada fonte", async () => {
     const user = userEvent.setup();
     mockApi({
       "GET /api/config": CONFIG,
@@ -16,14 +16,24 @@ describe("ExecucoesPage", () => {
       ],
     });
     renderWithClient(<ExecucoesPage />);
-    await user.click(await screen.findByRole("button", { name: /execução #2/i }));
-    const table = await screen.findByRole("table");
-    const rows = within(table).getAllByRole("row");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: "Execução #2" }));
+    const dialog = await screen.findByRole("dialog", { name: /execução #2/i });
+    const rows = within(within(dialog).getByRole("table")).getAllByRole("row");
     expect(rows[1]).toHaveTextContent("LinkedIn");
     expect(rows[1]).toHaveTextContent(/sessão está deslogada/i);
     expect(rows[2]).toHaveTextContent("Gupy");
     expect(rows[2]).toHaveTextContent("40");
     expect(rows[2]).toHaveTextContent("5");
+  });
+
+  it("o card fecha no botão Fechar", async () => {
+    const user = userEvent.setup();
+    mockApi({ "GET /api/config": CONFIG, "GET /api/runs": [makeRun(2, "concluida", [makeSource("gupy")])] });
+    renderWithClient(<ExecucoesPage />);
+    await user.click(await screen.findByRole("button", { name: "Execução #2" }));
+    await user.click(screen.getByRole("button", { name: "Fechar" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("sem execuções mostra estado vazio", async () => {
@@ -44,6 +54,105 @@ describe("ExecucoesPage", () => {
     mockApi({ "GET /api/config": CONFIG, "GET /api/runs": { status: 500, json: {} } });
     renderWithClient(<ExecucoesPage />);
     expect(await screen.findByText(/não foi possível carregar as execuções/i)).toBeInTheDocument();
+  });
+});
+
+describe("ExecucoesPage — lista ordenável", () => {
+  const RUNS = [
+    { ...makeRun(1, "concluida", [makeSource("gupy")]), inicio: "2026-10-14T12:00:00+00:00", fim: "2026-10-14T12:05:00+00:00" },
+    {
+      ...makeRun(2, "concluida", [makeSource("gupy", { status: "falha", motivo: "login" })]),
+      inicio: "2026-10-14T13:00:00+00:00",
+      fim: "2026-10-14T13:01:00+00:00",
+    },
+    { ...makeRun(3, "concluida", [makeSource("gupy")]), inicio: "2026-10-14T11:00:00+00:00", fim: "2026-10-14T11:03:00+00:00" },
+  ];
+
+  function ids() {
+    const table = screen.getByRole("table", { name: "Execuções" });
+    return within(table)
+      .getAllByRole("row")
+      .slice(1)
+      .map((row) => (row as HTMLTableRowElement).cells[0].textContent?.replace("Execução #", ""));
+  }
+
+  it("mostra as execuções numa tabela com cabeçalho, da mais recente para a mais antiga", async () => {
+    mockApi({ "GET /api/config": CONFIG, "GET /api/runs": RUNS });
+    renderWithClient(<ExecucoesPage />);
+    await screen.findByRole("table", { name: "Execuções" });
+    for (const name of ["Execução", "Início", "Duração", "Resultado"]) {
+      expect(screen.getByRole("button", { name })).toBeInTheDocument();
+    }
+    expect(ids()).toEqual(["3", "2", "1"]);
+  });
+
+  it("clicar no cabeçalho ordena e clicar de novo inverte", async () => {
+    const user = userEvent.setup();
+    mockApi({ "GET /api/config": CONFIG, "GET /api/runs": RUNS });
+    renderWithClient(<ExecucoesPage />);
+    await screen.findByRole("table", { name: "Execuções" });
+    await user.click(screen.getByRole("button", { name: "Duração" }));
+    expect(ids()).toEqual(["2", "3", "1"]);
+    await user.click(screen.getByRole("button", { name: "Duração" }));
+    expect(ids()).toEqual(["1", "3", "2"]);
+    await user.click(screen.getByRole("button", { name: "Início" }));
+    expect(ids()).toEqual(["3", "1", "2"]);
+    expect(screen.getByRole("columnheader", { name: /início/i })).toHaveAttribute("aria-sort", "ascending");
+  });
+
+  it("ordena por resultado (com falhas primeiro ao inverter)", async () => {
+    const user = userEvent.setup();
+    mockApi({ "GET /api/config": CONFIG, "GET /api/runs": RUNS });
+    renderWithClient(<ExecucoesPage />);
+    await screen.findByRole("table", { name: "Execuções" });
+    await user.click(screen.getByRole("button", { name: "Resultado" }));
+    await user.click(screen.getByRole("button", { name: "Resultado" }));
+    expect(ids()[0]).toBe("2");
+  });
+});
+
+describe("ExecucoesPage — excluir uma execução", () => {
+  const RUNS = [makeRun(2, "concluida", [makeSource("gupy")]), makeRun(1, "concluida", [makeSource("gupy")])];
+
+  it("após confirmar, exclui só a linha escolhida e recarrega a lista", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    let apagada = false;
+    const { calls } = mockApi({
+      "GET /api/config": CONFIG,
+      "GET /api/runs": () => (apagada ? [RUNS[1]] : RUNS),
+      "DELETE /api/runs/2": () => {
+        apagada = true;
+        return { removidas: 1 };
+      },
+    });
+    renderWithClient(<ExecucoesPage />);
+    await user.click(await screen.findByRole("button", { name: "Excluir execução #2" }));
+    await waitFor(() => expect(screen.queryByText("Execução #2")).not.toBeInTheDocument());
+    expect(screen.getByText("Execução #1")).toBeInTheDocument();
+    expect(calls.some((c) => c.method === "DELETE" && c.path === "/api/runs/2")).toBe(true);
+  });
+
+  it("se o usuário cancelar a confirmação, não exclui nada", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    const { calls } = mockApi({ "GET /api/config": CONFIG, "GET /api/runs": RUNS });
+    renderWithClient(<ExecucoesPage />);
+    await user.click(await screen.findByRole("button", { name: "Excluir execução #1" }));
+    expect(calls.some((c) => c.method === "DELETE")).toBe(false);
+  });
+
+  it("erro da API aparece em linguagem simples", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    mockApi({
+      "GET /api/config": CONFIG,
+      "GET /api/runs": RUNS,
+      "DELETE /api/runs/1": { status: 409, json: { detail: "A execução está em andamento" } },
+    });
+    renderWithClient(<ExecucoesPage />);
+    await user.click(await screen.findByRole("button", { name: "Excluir execução #1" }));
+    expect(await screen.findByText(/a execução está em andamento/i)).toBeInTheDocument();
   });
 });
 
@@ -127,8 +236,8 @@ describe("ExecucoesPage — scanners", () => {
       "GET /api/runs": [makeRun(3, "concluida", [makeSource("gupy", { scanner_versao: "1.1.0" })])],
     });
     renderWithClient(<ExecucoesPage />);
-    await user.click(await screen.findByRole("button", { name: /execução #3/i }));
-    expect(await screen.findByRole("cell", { name: "v1.1.0" })).toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: "Execução #3" }));
+    expect(await within(await screen.findByRole("dialog")).findByRole("cell", { name: "v1.1.0" })).toBeInTheDocument();
   });
 });
 

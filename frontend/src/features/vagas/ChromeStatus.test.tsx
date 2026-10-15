@@ -29,7 +29,7 @@ describe("ChromeStatus", () => {
   it("com o Chrome fechado explica o efeito e oferece o botão", async () => {
     setup({ aberto: false });
     expect(await screen.findByText(/Chrome dedicado fechado/)).toBeInTheDocument();
-    expect(screen.getByText(/LinkedIn, Indeed e Google/)).toBeInTheDocument();
+    expect(screen.getByText(/LinkedIn e Indeed/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Abrir Chrome dedicado" })).toBeEnabled();
   });
 

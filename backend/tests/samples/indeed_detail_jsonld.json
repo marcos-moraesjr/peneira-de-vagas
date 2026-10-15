@@ -1,0 +1,9 @@
+{
+ "@context": "http://schema.org",
+ "@type": "JobPosting",
+ "datePosted": "2026-10-14T21:58:45.795Z",
+ "description": "Descrição resumida da amostra.",
+ "directApply": false,
+ "title": "Assistente de Engenharia (Projetos de Saneamento e Infraestrutura)",
+ "validThrough": "2027-02-12T04:58:02.147Z"
+}

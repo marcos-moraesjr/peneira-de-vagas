@@ -10,8 +10,8 @@ from backend.app.sources.types import Job
 NOW = "2026-10-14T12:00:00+00:00"
 
 
-def make_job(id_da_vaga="1", fonte="gupy", titulo="Engenheiro Mecânico"):
-    return Job(id=id_da_vaga, titulo=titulo, empresa="ACME", link=f"https://x/{id_da_vaga}", trecho="texto", fonte=fonte)
+def make_job(id_da_vaga="1", fonte="gupy", titulo="Engenheiro Mecânico", modalidade=""):
+    return Job(id=id_da_vaga, titulo=titulo, empresa="ACME", link=f"https://x/{id_da_vaga}", trecho="texto", fonte=fonte, modalidade=modalidade)
 
 
 def test_init_db_cria_tabelas_e_semeia_palavra_chave_padrao(conn):
@@ -157,3 +157,30 @@ def test_conexao_pode_ser_usada_em_outra_thread(settings, abrir_conexao):
     thread.start()
     thread.join()
     assert erros == []
+
+
+def test_migracao_6_adiciona_a_modalidade_e_preserva_as_vagas(settings, abrir_conexao):
+    arquivo = settings.geral.db_path
+    arquivo.parent.mkdir(parents=True, exist_ok=True)
+    antigo = sqlite3.connect(arquivo)
+    antigo.executescript("".join(db.MIGRATIONS[versao] for versao in (1, 2, 3, 4, 5)))
+    antigo.execute("CREATE TABLE schema_version (version INTEGER NOT NULL)")
+    antigo.execute("INSERT INTO schema_version VALUES (5)")
+    antigo.execute("INSERT INTO runs (inicio, status) VALUES ('x', 'concluida')")
+    antigo.execute(
+        "INSERT INTO jobs (fonte, id_da_vaga, titulo, empresa, link, trecho, pontos, run_id, encontrada_em, visto) "
+        "VALUES ('gupy','9','Antiga','ACME','https://x/9','t',1,1,'x',1)"
+    )
+    antigo.commit()
+    antigo.close()
+    connection = abrir_conexao(arquivo)
+    init_db(connection, settings)
+    linha = connection.execute("SELECT titulo, visto, modalidade FROM jobs").fetchone()
+    assert (linha["titulo"], linha["visto"], linha["modalidade"]) == ("Antiga", 1, "")
+    assert list(settings.geral.backup_dir.glob("*.db"))
+
+
+def test_vaga_nova_grava_a_modalidade(conn):
+    job = make_job(modalidade="remoto")
+    db.insert_new_jobs(conn, [job], {job.id: 3}, db.create_run(conn, ["gupy"], NOW), NOW)
+    assert conn.execute("SELECT modalidade FROM jobs").fetchone()["modalidade"] == "remoto"

@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { CONFIG, makeJob, makeRun, makeSource, mockApi, renderWithClient } from "../../test/mockApi";
 import { VagasPage } from "./VagasPage";
@@ -13,7 +13,6 @@ function setup(opts: { jobs?: unknown[]; runs?: unknown[] | (() => unknown[]); k
     "GET /api/jobs": () => ({ items: jobs, total: jobs.length }),
     "GET /api/runs": () => (typeof opts.runs === "function" ? opts.runs() : (opts.runs ?? [])),
     "POST /api/runs": { status: 202, json: { id: 5 } },
-    "POST /api/runs/5/cancel": { status: 202, json: { id: 5 } },
     "PATCH /api/jobs/1": () => ({ ...(jobs[0] as object), visto: true }),
     "POST /api/jobs/mark-seen": { atualizadas: 2 },
     ...opts.extra,
@@ -32,7 +31,7 @@ describe("VagasPage", () => {
     expect(screen.getByText(/Beta/)).toBeInTheDocument();
   });
 
-  it("abre na aba Novas (visto=false) e Todas remove o filtro", async () => {
+  it("abre na aba Não lidas (visto=false) e Todas remove o filtro", async () => {
     const user = userEvent.setup();
     const { calls } = setup({ jobs: [makeJob(1)] });
     await screen.findByRole("link", { name: "Engenheiro Mecânico 1" });
@@ -72,13 +71,6 @@ describe("VagasPage", () => {
     await waitFor(() => expect(ultima()).toContain("ordenar=pontos&direcao=desc"));
   });
 
-  it("marca como vista pelo botão", async () => {
-    const user = userEvent.setup();
-    const { calls } = setup({ jobs: [makeJob(1)] });
-    await user.click(await screen.findByRole("button", { name: "Marcar como vista" }));
-    await waitFor(() => expect(calls.find((c) => c.method === "PATCH")?.body).toEqual({ visto: true }));
-  });
-
   it("abrir o link de uma vaga nova também a marca como vista", async () => {
     const user = userEvent.setup();
     const { calls } = setup({ jobs: [makeJob(1)] });
@@ -86,6 +78,19 @@ describe("VagasPage", () => {
     link.addEventListener("click", (event) => event.preventDefault());
     await user.click(link);
     await waitFor(() => expect(calls.some((c) => c.method === "PATCH")).toBe(true));
+  });
+
+  it("ao abrir o link a linha muda para lida na hora, sem esperar a resposta do servidor", async () => {
+    const user = userEvent.setup();
+    let liberar: () => void = () => {};
+    const segura = new Promise<void>((resolve) => (liberar = resolve));
+    setup({ jobs: [makeJob(1)], extra: { "PATCH /api/jobs/1": async () => { await segura; return { ...makeJob(1), visto: true }; } } });
+    const link = await screen.findByRole("link", { name: "Engenheiro Mecânico 1" });
+    link.addEventListener("click", (event) => event.preventDefault());
+    expect(screen.getAllByLabelText("Vaga nova")).toHaveLength(1);
+    await user.click(link);
+    await waitFor(() => expect(screen.queryAllByLabelText("Vaga nova")).toHaveLength(0));
+    liberar();
   });
 
   it("vaga nova é destacada e vista não", async () => {
@@ -123,6 +128,60 @@ describe("VagasPage", () => {
     });
   });
 
+  it("filtra por cidade e por estado: envia cada um na listagem e em marcar como vistas; vazio remove", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const { calls } = setup({ jobs: [makeJob(1)] });
+    await screen.findByRole("link", { name: "Engenheiro Mecânico 1" });
+    const cidade = screen.getByLabelText("Filtrar por cidade");
+    const estado = screen.getByLabelText("Filtrar por estado");
+    await user.type(cidade, "campinas");
+    await user.type(estado, "sp");
+    await waitFor(() => {
+      const last = [...calls].reverse().find((c) => c.path.startsWith("/api/jobs?"));
+      expect(last?.path).toContain("cidade=campinas");
+      expect(last?.path).toContain("estado=sp");
+      expect(last?.path).not.toContain("localidade");
+    });
+    await user.click(screen.getByRole("button", { name: "Marcar todas como vistas" }));
+    await waitFor(() => expect(calls.find((c) => c.path === "/api/jobs/mark-seen")?.body).toEqual({ cidade: "campinas", estado: "sp" }));
+    await user.clear(cidade);
+    await user.clear(estado);
+    await waitFor(() => {
+      const last = [...calls].reverse().find((c) => c.path.startsWith("/api/jobs?"));
+      expect(last?.path).not.toContain("cidade");
+      expect(last?.path).not.toContain("estado");
+    });
+  });
+
+  it("filtra por modalidade: envia na listagem e em marcar como vistas; Todas remove", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const { calls } = setup({ jobs: [makeJob(1)] });
+    await screen.findByRole("link", { name: "Engenheiro Mecânico 1" });
+    await user.selectOptions(screen.getByLabelText("Modalidade"), "remoto");
+    await waitFor(() => {
+      const last = [...calls].reverse().find((c) => c.path.startsWith("/api/jobs?"));
+      expect(last?.path).toContain("modalidade=remoto");
+    });
+    await user.click(screen.getByRole("button", { name: "Marcar todas como vistas" }));
+    await waitFor(() => expect(calls.find((c) => c.path === "/api/jobs/mark-seen")?.body).toEqual({ modalidade: "remoto" }));
+    await user.selectOptions(screen.getByLabelText("Modalidade"), "");
+    await waitFor(() => {
+      const last = [...calls].reverse().find((c) => c.path.startsWith("/api/jobs?"));
+      expect(last?.path).not.toContain("modalidade");
+    });
+  });
+
+  it("a busca por título ou empresa vem antes dos filtros de cidade e estado", async () => {
+    setup({ jobs: [makeJob(1)] });
+    await screen.findByRole("link", { name: "Engenheiro Mecânico 1" });
+    const campos = screen.getAllByRole("textbox").map((campo) => campo.getAttribute("aria-label"));
+    expect(campos.indexOf("Buscar vagas")).toBeLessThan(campos.indexOf("Filtrar por cidade"));
+    expect(campos.indexOf("Filtrar por cidade")).toBeLessThan(campos.indexOf("Filtrar por estado"));
+  });
+
+
   it("excluir todas as vagas pede confirmação e chama DELETE /api/jobs", async () => {
     const user = userEvent.setup();
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
@@ -153,85 +212,9 @@ describe("VagasPage", () => {
     expect(await screen.findByText(/clique em buscar agora/i)).toBeInTheDocument();
   });
 
-  it("depois de uma busca sem vagas novas mostra a data da última busca", async () => {
+  it("depois de uma busca sem vagas novas mostra que não há vagas novas", async () => {
     setup({ jobs: [], runs: [makeRun(1, "concluida", [makeSource("gupy", { novas: 0 })])] });
     expect(await screen.findByText(/nenhuma vaga nova/i)).toBeInTheDocument();
-    expect(screen.getByText(/última busca/i)).toBeInTheDocument();
-  });
-
-  it("sem palavra-chave desabilita Buscar agora e explica", async () => {
-    setup({ keywords: [] });
-    expect(await screen.findByRole("button", { name: "Buscar agora" })).toBeDisabled();
-    expect((await screen.findAllByText(/adicione ao menos uma palavra-chave/i)).length).toBeGreaterThan(0);
-  });
-
-  it("Buscar agora dispara POST /api/runs", async () => {
-    const user = userEvent.setup();
-    const { calls } = setup({ jobs: [] });
-    const button = await screen.findByRole("button", { name: "Buscar agora" });
-    await waitFor(() => expect(button).toBeEnabled());
-    await user.click(button);
-    await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.path === "/api/runs")).toBe(true));
-  });
-
-  it("vem com todas as plataformas marcadas e Buscar agora busca em todas", async () => {
-    const user = userEvent.setup();
-    const { calls } = setup({ jobs: [] });
-    const button = await screen.findByRole("button", { name: "Buscar agora" });
-    await waitFor(() => expect(button).toBeEnabled());
-    for (const nome of ["LinkedIn", "Indeed", "Gupy", "Google"]) expect(screen.getByRole("checkbox", { name: nome })).toBeChecked();
-    await user.click(button);
-    await waitFor(() => expect(calls.find((c) => c.method === "POST" && c.path === "/api/runs")?.body).toEqual({ fontes: null }));
-  });
-
-  it("desmarcar plataformas busca só nas marcadas (mais de uma)", async () => {
-    const user = userEvent.setup();
-    const { calls } = setup({ jobs: [] });
-    const button = await screen.findByRole("button", { name: "Buscar agora" });
-    await waitFor(() => expect(button).toBeEnabled());
-    await user.click(screen.getByRole("checkbox", { name: "Indeed" }));
-    await user.click(button);
-    await waitFor(() => expect(calls.find((c) => c.method === "POST" && c.path === "/api/runs")?.body).toEqual({ fontes: ["linkedin", "google", "gupy"] }));
-  });
-
-  it("sem nenhuma plataforma marcada o botão fica desabilitado", async () => {
-    const user = userEvent.setup();
-    setup({ jobs: [] });
-    const button = await screen.findByRole("button", { name: "Buscar agora" });
-    await waitFor(() => expect(button).toBeEnabled());
-    for (const nome of ["LinkedIn", "Indeed", "Gupy", "Google"]) await user.click(screen.getByRole("checkbox", { name: nome }));
-    expect(button).toBeDisabled();
-  });
-
-  it("durante a execução mostra o andamento por fonte e bloqueia novo clique", async () => {
-    setup({
-      runs: [
-        makeRun(5, "executando", [
-          makeSource("linkedin", { status: "ok" }),
-          makeSource("indeed", { status: "buscando" }),
-          makeSource("gupy", { status: "aguardando" }),
-        ]),
-      ],
-    });
-    const button = await screen.findByRole("button", { name: "Buscando…" });
-    expect(button).toBeDisabled();
-    const progress = screen.getByRole("status");
-    expect(within(progress).getByText(/LinkedIn/)).toBeInTheDocument();
-    expect(within(progress).getByText(/buscando/i)).toBeInTheDocument();
-    expect(within(progress).getByText(/aguardando/i)).toBeInTheDocument();
-  });
-
-  it("durante a execução, Interromper dispara POST /api/runs/{id}/cancel", async () => {
-    const user = userEvent.setup();
-    const { calls } = setup({ runs: [makeRun(5, "executando", [makeSource("linkedin", { status: "buscando" })])] });
-    await user.click(await screen.findByRole("button", { name: "Interromper" }));
-    await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.path === "/api/runs/5/cancel")).toBe(true));
-  });
-
-  it("sem execução em andamento não há botão Interromper", async () => {
-    setup({ runs: [makeRun(5, "concluida", [makeSource("gupy")])] });
-    await screen.findByRole("button", { name: "Buscar agora" });
-    expect(screen.queryByRole("button", { name: "Interromper" })).not.toBeInTheDocument();
   });
 
   it("acompanha a execução por polling e recarrega as vagas ao concluir", async () => {
@@ -240,43 +223,15 @@ describe("VagasPage", () => {
       jobs: [makeJob(1)],
       runs: () => (ciclo++ < 1 ? [makeRun(5, "executando", [makeSource("gupy", { status: "buscando" })])] : [makeRun(5, "concluida", [makeSource("gupy", { novas: 3 })])]),
     });
-    expect(await screen.findByRole("button", { name: "Buscando…" })).toBeInTheDocument();
-    expect(await screen.findByRole("button", { name: "Buscar agora" })).toBeInTheDocument();
-    expect(await screen.findByText(/3 vagas novas/i)).toBeInTheDocument();
-    expect(calls.filter((c) => c.path.startsWith("/api/jobs")).length).toBeGreaterThan(1);
+    await waitFor(() => expect(calls.filter((c) => c.path.startsWith("/api/jobs")).length).toBeGreaterThan(1));
   });
 
-  it("falha de fonte aparece em destaque com motivo e ação, não como lista vazia", async () => {
-    setup({
-      jobs: [],
-      runs: [makeRun(5, "concluida", [makeSource("linkedin", { status: "falha", motivo: "captcha", novas: 0 }), makeSource("gupy")])],
-    });
-    const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent("LinkedIn");
-    expect(alert).toHaveTextContent(/verificação de segurança/i);
-    expect(alert).toHaveTextContent(/Chrome dedicado/);
-    expect(alert).not.toHaveTextContent("Gupy");
-  });
-
-  it("falha de fonte oferece Reiniciar, que busca de novo só nas fontes que falharam", async () => {
-    const user = userEvent.setup();
+  it("enquanto a execução roda, recarrega a lista de vagas a cada polling (vagas aparecem conforme são encontradas)", async () => {
     const { calls } = setup({
-      runs: [
-        makeRun(5, "concluida", [
-          makeSource("linkedin", { status: "falha", motivo: "interrompida", novas: 0 }),
-          makeSource("indeed", { status: "falha", motivo: "interrompida", novas: 0 }),
-          makeSource("gupy"),
-        ]),
-      ],
+      jobs: [makeJob(1)],
+      runs: [makeRun(5, "executando", [makeSource("linkedin", { status: "buscando" })])],
     });
-    await user.click(await screen.findByRole("button", { name: "Reiniciar" }));
-    await waitFor(() => expect(calls.find((c) => c.method === "POST" && c.path === "/api/runs")?.body).toEqual({ fontes: ["linkedin", "indeed"] }));
-  });
-
-  it("sem falha ou com busca em andamento não há botão Reiniciar", async () => {
-    setup({ runs: [makeRun(5, "concluida", [makeSource("gupy")])] });
-    await screen.findByRole("button", { name: "Buscar agora" });
-    expect(screen.queryByRole("button", { name: "Reiniciar" })).not.toBeInTheDocument();
+    await waitFor(() => expect(calls.filter((c) => c.path.startsWith("/api/jobs?")).length).toBeGreaterThan(2));
   });
 
   it("mostra o erro de API em linguagem simples", async () => {
@@ -284,9 +239,52 @@ describe("VagasPage", () => {
     expect(await screen.findByText(/não foi possível carregar as vagas/i)).toBeInTheDocument();
   });
 
-  it("exibe os painéis de palavras-chave e de exclusões", async () => {
-    setup({});
-    expect(await screen.findByLabelText("Nova palavra-chave")).toBeInTheDocument();
-    expect(screen.getByLabelText("Nova exclusão")).toBeInTheDocument();
+  describe("paginação", () => {
+    const paginado = { "GET /api/jobs": () => ({ items: [makeJob(1)], total: 120 }) };
+    const ultima = (calls: { path: string }[]) => [...calls].reverse().find((c) => c.path.startsWith("/api/jobs?"))?.path;
+
+    it("mostra páginas numeradas em vez de Carregar mais e pede só a página escolhida", async () => {
+      const user = userEvent.setup();
+      const { calls } = setup({ jobs: [makeJob(1)], extra: paginado });
+      await screen.findByRole("link", { name: "Engenheiro Mecânico 1" });
+      expect(screen.queryByRole("button", { name: /Carregar mais/ })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Página 1" })).toHaveAttribute("aria-current", "page");
+      expect(screen.getByRole("button", { name: "Página 3" })).toBeInTheDocument();
+      expect(ultima(calls)).toContain("limit=50");
+      expect(ultima(calls)).not.toContain("offset");
+      await user.click(screen.getByRole("button", { name: "Página 2" }));
+      await waitFor(() => expect(ultima(calls)).toContain("offset=50"));
+      expect(ultima(calls)).toContain("limit=50");
+      expect(screen.getByRole("button", { name: "Página 2" })).toHaveAttribute("aria-current", "page");
+    });
+
+    it("Anterior e Próxima andam uma página e ficam desabilitados nas pontas", async () => {
+      const user = userEvent.setup();
+      const { calls } = setup({ jobs: [makeJob(1)], extra: paginado });
+      await screen.findByRole("link", { name: "Engenheiro Mecânico 1" });
+      expect(screen.getByRole("button", { name: "Anterior" })).toBeDisabled();
+      await user.click(screen.getByRole("button", { name: "Próxima" }));
+      await waitFor(() => expect(ultima(calls)).toContain("offset=50"));
+      await user.click(screen.getByRole("button", { name: "Página 3" }));
+      await waitFor(() => expect(ultima(calls)).toContain("offset=100"));
+      expect(screen.getByRole("button", { name: "Próxima" })).toBeDisabled();
+    });
+
+    it("mudar um filtro volta para a página 1", async () => {
+      const user = userEvent.setup();
+      const { calls } = setup({ jobs: [makeJob(1)], extra: paginado });
+      await screen.findByRole("link", { name: "Engenheiro Mecânico 1" });
+      await user.click(screen.getByRole("button", { name: "Página 2" }));
+      await waitFor(() => expect(ultima(calls)).toContain("offset=50"));
+      await user.type(screen.getByLabelText("Filtrar por cidade"), "c");
+      await waitFor(() => expect(ultima(calls)).toContain("cidade=c"));
+      expect(ultima(calls)).not.toContain("offset");
+    });
+
+    it("sem mais que uma página não mostra a paginação", async () => {
+      setup({ jobs: [makeJob(1)] });
+      await screen.findByRole("link", { name: "Engenheiro Mecânico 1" });
+      expect(screen.queryByRole("navigation", { name: "Paginação" })).not.toBeInTheDocument();
+    });
   });
 });

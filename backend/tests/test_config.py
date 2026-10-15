@@ -125,28 +125,7 @@ def test_modalidade_invalida_informa_valor_e_esperado(valor):
         settings_from_dict(raw, CONFIG_PATH.parents[1])
 
 
-def test_google_traz_url_pagina_e_termos_de_modalidade_da_config():
-    google = load_settings(CONFIG_PATH).google
-    assert google.base_url == "https://www.google.com/search"
-    assert google.page_size == 10
-    assert set(google.modalidade_termos) == {"remoto", "hibrido", "presencial"}
 
 
-@pytest.mark.parametrize(
-    ("chave", "valor"),
-    [
-        ("page_size", 0),
-        ("modalidade_termos", {"remoto": []}),
-        ("modalidade_termos", {"outra": ["x"]}),
-        ("modalidade_termos", {"remoto": [""]}),
-    ],
-)
-def test_google_rejeita_valores_invalidos(chave, valor):
-    import tomllib
-
-    from backend.app.config import settings_from_dict
-
-    raw = tomllib.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-    raw["google"][chave] = valor
-    with pytest.raises(ConfigError, match=rf"google.{chave}"):
-        settings_from_dict(raw, CONFIG_PATH.parents[1])
+def test_filtro_traz_aceitar_desconhecido_como_booleano():
+    assert load_settings(CONFIG_PATH).filtro.aceitar_desconhecido is True

@@ -1,7 +1,7 @@
 import { useRef, useState, type FormEvent } from "react";
 import { useAddKeyword, useDeleteKeyword, useKeywords } from "../api/hooks";
 import type { KeywordType } from "../api/types";
-import { buttonSecondary, card, inputClass } from "./ui";
+import { buttonDark, buttonSecondary, card, inputClass } from "./ui";
 
 const TEXTS: Record<KeywordType, { titulo: string; campo: string; vazio: string; dica: string }> = {
   busca: {
@@ -41,7 +41,7 @@ export function KeywordsPanel({ tipo, titulo }: { tipo: KeywordType; titulo?: st
 
   return (
     <section className={card} aria-label={titulo ?? texts.titulo}>
-      <h2 className="mb-2 text-sm font-semibold text-slate-800">{titulo ?? texts.titulo}</h2>
+      <h2 className="mb-3 text-base font-semibold text-grafite-900">{titulo ?? texts.titulo}</h2>
       <form onSubmit={submit} className="flex gap-2">
         <input
           ref={input}
@@ -50,32 +50,32 @@ export function KeywordsPanel({ tipo, titulo }: { tipo: KeywordType; titulo?: st
           onChange={(event) => setTermo(event.target.value)}
           className={`${inputClass} min-w-0 flex-1`}
         />
-        <button type="submit" className={buttonSecondary}>
+        <button type="submit" className={tipo === "busca" ? buttonDark : buttonSecondary}>
           Adicionar
         </button>
       </form>
       {error && (
-        <p role="alert" className="mt-2 text-sm text-red-700">
+        <p role="alert" className="mt-2 text-sm text-erro-fg">
           {error}
         </p>
       )}
-      {keywords.data?.length === 0 && <p className="mt-2 text-sm text-slate-500">{texts.vazio}</p>}
+      {keywords.data?.length === 0 && <p className="mt-2 text-sm text-grafite-500">{texts.vazio}</p>}
       <ul className="mt-2 flex flex-wrap gap-2">
         {keywords.data?.map((keyword) => (
-          <li key={keyword.id} className="flex items-center gap-1 rounded-full bg-slate-100 py-1 pl-3 pr-1 text-sm">
+          <li key={keyword.id} className={`flex items-center gap-2 rounded-selo border py-1 pl-2.5 pr-1.5 text-dado ${tipo === "busca" ? "border-linha bg-papel text-grafite-900" : "border-dashed border-grafite-400 text-grafite-700"}`}>
             <span>{keyword.termo}</span>
             <button
               type="button"
               aria-label={`Remover ${keyword.termo}`}
               onClick={() => remove.mutate(keyword.id)}
-              className="rounded-full px-2 text-slate-500 hover:bg-slate-200 hover:text-slate-900"
+              className="rounded-full px-1 text-grafite-400 no-underline hover:text-grafite-900"
             >
               ✕
             </button>
           </li>
         ))}
       </ul>
-      <p className="mt-2 text-xs text-slate-500">{texts.dica}</p>
+      <p className="mt-2 text-xs text-grafite-500">{texts.dica}</p>
     </section>
   );
 }

@@ -106,7 +106,7 @@ Ao carregar, o Indeed acrescenta `vjk=<jk>` sozinho. A ordenação padrão é
 | Local | `[data-testid="text-location"]` |
 | Atributos e trecho | itens `li` dentro do card ("Tempo integral", salário, trecho da descrição) |
 
-- **Não há data de publicação no card.** Dependendo só do `fromage=1` e da deduplicação.
+- **Não há data de publicação no card.** A data exata vem do detalhe da vaga (JSON-LD `datePosted`, observado em 15/10/2026). `fromage=1` e a deduplicação seguem como filtro de recência da lista.
 - Link da vaga: `https://br.indeed.com/viewjob?jk=<jk>` (formato conhecido, não validado nesta exploração).
 
 **Paginação:** `nav[role="navigation"]` com `a[data-testid="pagination-page-current"]`, `pagination-page-2` até `pagination-page-5` e `pagination-page-next`.

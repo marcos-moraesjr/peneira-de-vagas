@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Run } from "../../api/types";
-import { buttonPrimary, buttonSecondary } from "../../components/ui";
+import { buttonPrimary } from "../../components/ui";
 import { sourceLabel } from "../../lib/failures";
 import { timeAgo } from "../../lib/format";
 
@@ -23,8 +23,6 @@ type Props = {
   sources: string[];
   /** `null` = todas as plataformas. */
   onSearch: (sources: string[] | null) => void;
-  cancelling: boolean;
-  onCancel: (runId: number) => void;
   hint?: string;
 };
 
@@ -34,8 +32,6 @@ export function RunBar({
   starting,
   sources,
   onSearch,
-  cancelling,
-  onCancel,
   hint,
 }: Props) {
   const [selected, setSelected] = useState<string[]>(sources);
@@ -46,7 +42,7 @@ export function RunBar({
     setSelected((current) => (current.includes(name) ? current.filter((item) => item !== name) : [...current, name]));
   }
   return (
-    <div className="space-y-2">
+    <div className="space-y-1.5 rounded-painel border border-linha bg-painel px-4 py-3">
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
@@ -56,12 +52,7 @@ export function RunBar({
         >
           {running ? "Buscando…" : "Buscar agora"}
         </button>
-        {running && (
-          <button type="button" className={buttonSecondary} disabled={cancelling} onClick={() => onCancel(latest.id)}>
-            {cancelling ? "Interrompendo…" : "Interromper"}
-          </button>
-        )}
-        <fieldset className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-700" disabled={running}>
+        <fieldset className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-grafite-700" disabled={running}>
           <legend className="sr-only">Plataformas da busca</legend>
           {sources.map((name) => (
             <label key={name} className="flex items-center gap-2">
@@ -71,17 +62,17 @@ export function RunBar({
           ))}
         </fieldset>
         {latest?.status === "concluida" && (
-          <span className="text-sm text-slate-600">
+          <span className="text-legenda text-grafite-500">
             Última busca {timeAgo(latest.fim ?? latest.inicio)}:{" "}
             {newJobsText(latest)}
           </span>
         )}
-        {hint && <span className="text-sm text-amber-700">{hint}</span>}
+        {hint && <span className="text-sm text-atencao-fg">{hint}</span>}
       </div>
       {running && (
         <ul
           role="status"
-          className="flex flex-wrap gap-3 text-sm text-slate-600"
+          className="flex flex-wrap gap-3 text-sm text-grafite-500"
         >
           {latest.fontes.map((source) => (
             <li key={source.fonte}>

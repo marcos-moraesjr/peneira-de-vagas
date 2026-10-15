@@ -30,7 +30,7 @@ export function ConjuntosPanel() {
 
   return (
     <section className={card} aria-label="Conjuntos de busca">
-      <h2 className="mb-2 text-sm font-semibold text-slate-800">Conjuntos de busca</h2>
+      <h2 className="mb-2 text-sm font-semibold text-grafite-900">Conjuntos de busca</h2>
       <div className="flex flex-wrap items-center gap-2">
         <select
           aria-label="Conjunto ativo"
@@ -64,11 +64,11 @@ export function ConjuntosPanel() {
         </form>
       </div>
       {error && (
-        <p role="alert" className="mt-2 text-sm text-red-700">
+        <p role="alert" className="mt-2 text-sm text-erro-fg">
           {error}
         </p>
       )}
-      <p className="mt-2 text-xs text-slate-500">A busca usa só o conjunto ativo, com as palavras-chave e exclusões dele.</p>
+      <p className="mt-2 text-xs text-grafite-500">A busca usa só o conjunto ativo, com as palavras-chave e exclusões dele.</p>
     </section>
   );
 }

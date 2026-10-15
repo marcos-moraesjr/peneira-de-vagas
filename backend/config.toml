@@ -15,23 +15,24 @@ exclusoes = []
 
 [busca]
 keyword_max_length = 80
-janela_horas = 24
-localidades = []        # lista de cidades ou estados ("Campinas, SP", "Minas Gerais"); vazia = sem filtro de local. Uma busca por termo e localidade
-modalidade = []         # lista: "remoto", "hibrido", "presencial"; vazia = todas
+max_termos_busca = 10   # máximo de palavras-chave de busca por conjunto (cada termo vira uma consulta por fonte; consultas demais levam a bloqueio)
+janela_horas = 72
+localidades = []        # lista de cidades ou estados ("Campinas, SP", "Minas Gerais"); vazia = sem filtro de local. Filtra as vagas listadas (não vai na busca da plataforma)
+modalidade = []         # lista: "remoto", "hibrido", "presencial"; vazia = todas. Filtra as vagas listadas (não vai na busca da plataforma)
 
 [filtro]
 peso_titulo = 3
 peso_descricao = 1
-min_score = 3
-trecho_max_chars = 4000
+min_score = 4
+trecho_max_chars = 500
+aceitar_desconhecido = true   # vaga sem localidade/modalidade informada (ou só "Brasil", ou remota) passa pelo filtro de local e modalidade; false descarta
 
 [limites]
-max_paginas_detalhe = 15
-max_vagas_lista = 100
+max_vagas_lista = 300
 
 [ritmo]
-pausa_min_s = 2.0
-pausa_max_s = 6.0
+pausa_min_s = 4.0
+pausa_max_s = 8.0
 rolagem_min_s = 0.25     # pausa ao rolar a lista, card a card
 rolagem_max_s = 0.7
 
@@ -50,9 +51,9 @@ chrome_paths = [
 ]
 
 [api]
-jobs_page_size = 50
+jobs_page_size = 20
 runs_history_limit = 30
-poll_interval_ms = 2000
+poll_interval_ms = 1000
 
 [gupy]
 base_url = "https://portal.gupy.io/api/job-search/jobs"
@@ -66,11 +67,6 @@ page_size = 25
 [indeed]
 base_url = "https://br.indeed.com/jobs"
 page_size = 10
-
-[google]
-base_url = "https://www.google.com/search"
-page_size = 10
-modalidade_termos = { remoto = ["remote", "remoto"], hibrido = ["hybrid", "híbrido"], presencial = ["on-site", "presencial"] }   # palavras que representam cada modalidade na consulta
 
 [versionamento]
 falhas_consecutivas = 2   # falhas seguidas de "quebra", na versão atual, para pedir que o scanner seja refeito

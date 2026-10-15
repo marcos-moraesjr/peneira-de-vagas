@@ -24,3 +24,19 @@ def parse_relative_date(text: str, now: datetime) -> str | None:
     unit = found.group("unit") or found.group("unit_en")
     delta = next(value for prefix, value in _UNIT_DELTA.items() if unit.startswith(prefix))
     return (now - amount * delta).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+_SEGMENT_SPLIT = re.compile(r"[\n·|•]")
+_DATE_LINE = re.compile(
+    r"(?:(?:publicad[oa]|postad[oa]|anunciad[oa]|reposted|posted)\s+(?:novamente\s+)?)?(?:" + _RELATIVE.pattern + ")"
+)
+
+
+def find_published_line(text: str, now: datetime) -> str | None:
+    """Data relativa de um trecho do texto da página, sem depender de classe CSS: só vale um trecho (separado por
+    quebra de linha, "·" ou "|") que seja inteiro a data ("Há 3 dias", "Anunciada novamente há 8 horas").
+    Frase de descrição ("trabalha há 2 anos com…") e "Ativa há 2 dias" (reativação) não contam."""
+    for segment in _SEGMENT_SPLIT.split(text):
+        cleaned = normalize(segment).strip()
+        if cleaned and _DATE_LINE.fullmatch(cleaned):
+            return parse_relative_date(cleaned, now)
+    return None

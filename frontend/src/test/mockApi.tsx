@@ -32,7 +32,7 @@ export function mockApi(userRoutes: Record<string, Handler | unknown>) {
     calls.push({ method, path: url.pathname + url.search, body });
     const route = routes[`${method} ${url.pathname}`];
     if (route === undefined) return new Response(JSON.stringify({ detail: `sem rota ${method} ${url.pathname}` }), { status: 404 });
-    const result = typeof route === "function" ? (route as Handler)(body, url) : route;
+    const result = await (typeof route === "function" ? (route as Handler)(body, url) : route);
     const reply = result as { status?: number; json?: unknown };
     if (reply && typeof reply === "object" && typeof reply.status === "number") {
       return new Response(reply.status === 204 ? null : JSON.stringify(reply.json ?? {}), { status: reply.status });
@@ -51,7 +51,7 @@ export function renderWithClient(ui: ReactElement) {
 export const CONFIG = {
   busca: { localidades: ["Brasil"], modalidade: [], janela_horas: 24, keyword_max_length: 80 },
   filtro: { peso_titulo: 3, peso_descricao: 1, min_score: 3, trecho_max_chars: 4000 },
-  limites: { max_paginas_detalhe: 15, max_vagas_lista: 100 },
+  limites: { max_vagas_lista: 100 },
   ritmo: { pausa_min_s: 2, pausa_max_s: 6, rolagem_min_s: 0.25, rolagem_max_s: 0.7 },
   navegador: { abas_paralelas: false },
   api: { jobs_page_size: 50, poll_interval_ms: 50 },
@@ -70,6 +70,9 @@ export function makeJob(id: number, overrides: Record<string, unknown> = {}) {
     run_id: 1,
     encontrada_em: "2026-10-14T12:00:00+00:00",
     localidade: "",
+    cidade: "",
+    estado: "",
+    modalidade: "",
     publicada_em: null,
     visto: false,
     ...overrides,

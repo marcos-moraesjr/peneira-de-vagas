@@ -73,14 +73,6 @@ export function useStartRun() {
   });
 }
 
-export function useCancelRun() {
-  const client = useQueryClient();
-  return useMutation({
-    mutationFn: (id: number) => apiSend<{ id: number }>("POST", `/api/runs/${id}/cancel`),
-    onSuccess: () => client.invalidateQueries({ queryKey: ["runs"] }),
-  });
-}
-
 export function useClearRuns() {
   const client = useQueryClient();
   return useMutation({
@@ -89,23 +81,49 @@ export function useClearRuns() {
   });
 }
 
-export type JobFilters = { visto?: boolean; fonte?: string; q?: string; ordenar?: string; direcao?: "asc" | "desc"; maxDias?: number };
+export function useDeleteRun() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => apiSend<{ removidas: number }>("DELETE", `/api/runs/${id}`),
+    onSuccess: () => client.invalidateQueries({ queryKey: ["runs"] }),
+  });
+}
 
-export function useJobs(filters: JobFilters, pages: number) {
-  const pageSize = useConfig().data?.api.jobs_page_size;
+export type JobFilters = {
+  visto?: boolean;
+  fonte?: string;
+  q?: string;
+  cidade?: string;
+  estado?: string;
+  modalidade?: string;
+  ordenar?: string;
+  direcao?: "asc" | "desc";
+  maxDias?: number;
+};
+
+/** `live`: com uma execução rodando, recarrega no intervalo da config para as vagas aparecerem conforme são gravadas. */
+export function useJobs(filters: JobFilters, page: number, live = false) {
+  const config = useConfig().data;
+  const pageSize = config?.api.jobs_page_size;
+  const pollMs = config?.api.poll_interval_ms;
   const params = new URLSearchParams();
   if (filters.visto !== undefined) params.set("visto", String(filters.visto));
   if (filters.fonte) params.set("fonte", filters.fonte);
   if (filters.q) params.set("q", filters.q);
+  if (filters.cidade) params.set("cidade", filters.cidade);
+  if (filters.estado) params.set("estado", filters.estado);
+  if (filters.modalidade) params.set("modalidade", filters.modalidade);
   if (filters.maxDias !== undefined) params.set("max_dias", String(filters.maxDias));
   if (filters.ordenar) params.set("ordenar", filters.ordenar);
   if (filters.ordenar && filters.direcao) params.set("direcao", filters.direcao);
-  if (pageSize) params.set("limit", String(pageSize * pages));
+  if (pageSize) params.set("limit", String(pageSize));
+  if (pageSize && page > 1) params.set("offset", String(pageSize * (page - 1)));
   return useQuery({
-    queryKey: ["jobs", filters, pages, pageSize],
+    queryKey: ["jobs", filters, page, pageSize],
     queryFn: () => apiGet<JobsPage>(`/api/jobs?${params}`),
     enabled: pageSize !== undefined,
     placeholderData: keepPreviousData,
+    refetchInterval: live && pollMs ? pollMs : false,
   });
 }
 
@@ -113,14 +131,21 @@ export function useSetSeen() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: ({ id, visto }: { id: number; visto: boolean }) => apiSend<Job>("PATCH", `/api/jobs/${id}`, { visto }),
-    onSuccess: () => client.invalidateQueries({ queryKey: ["jobs"] }),
+    // Atualização otimista: a linha muda na hora; a recarga (onSettled) confirma ou desfaz conforme o servidor.
+    onMutate: async ({ id, visto }) => {
+      await client.cancelQueries({ queryKey: ["jobs"] });
+      client.setQueriesData<JobsPage>({ queryKey: ["jobs"] }, (page) =>
+        page && { ...page, items: page.items.map((job) => (job.id === id ? { ...job, visto } : job)) },
+      );
+    },
+    onSettled: () => client.invalidateQueries({ queryKey: ["jobs"] }),
   });
 }
 
 export function useMarkAllSeen() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (filters: { fonte?: string; q?: string; max_dias?: number }) =>
+    mutationFn: (filters: { fonte?: string; q?: string; cidade?: string; estado?: string; modalidade?: string; max_dias?: number }) =>
       apiSend<{ atualizadas: number }>("POST", "/api/jobs/mark-seen", filters),
     onSuccess: () => client.invalidateQueries({ queryKey: ["jobs"] }),
   });

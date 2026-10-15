@@ -9,7 +9,7 @@ type Field = {
   section: Section;
   key: string;
   label: string;
-  kind: "number" | "text" | "slider" | "modalidade" | "localidades" | "checkbox";
+  kind: "number" | "text" | "slider" | "checkbox";
   step?: string;
   dica?: string;
 };
@@ -18,19 +18,6 @@ const GROUPS: { titulo: string; fields: Field[] }[] = [
   {
     titulo: "Busca",
     fields: [
-      {
-        section: "busca",
-        key: "localidades",
-        label: "Localidades",
-        kind: "localidades",
-        dica: "Cidades ou estados (ex.: Campinas, SP · Minas Gerais). Uma busca por palavra-chave e localidade, no LinkedIn e no Indeed. Nenhuma = sem filtro de local.",
-      },
-      {
-        section: "busca",
-        key: "modalidade",
-        label: "Modalidade",
-        kind: "modalidade",
-      },
       {
         section: "busca",
         key: "janela_horas",
@@ -77,12 +64,6 @@ const GROUPS: { titulo: string; fields: Field[] }[] = [
   {
     titulo: "Limites",
     fields: [
-      {
-        section: "limites",
-        key: "max_paginas_detalhe",
-        label: "Páginas de detalhe por execução",
-        kind: "number",
-      },
       {
         section: "limites",
         key: "max_vagas_lista",
@@ -156,47 +137,24 @@ const GROUPS: { titulo: string; fields: Field[] }[] = [
 ];
 
 const FIELDS = GROUPS.flatMap((group) => group.fields);
-const MODALIDADES = [
-  ["remoto", "Remoto"],
-  ["hibrido", "Híbrido"],
-  ["presencial", "Presencial"],
-];
-
 type Draft = Record<string, string>;
 const SLIDER_MAX = 10;
-const LOCALIDADE_SEP = "\n";
 const id = (field: Field) => `${field.section}.${field.key}`;
 const valueOf = (config: Config, field: Field) => {
-  const value = (config[field.section] as Record<string, unknown>)[field.key];
-  if (Array.isArray(value)) return value.join(field.kind === "localidades" ? LOCALIDADE_SEP : ",");
-  return String(value);
+  return String((config[field.section] as Record<string, unknown>)[field.key]);
 };
 
 function toDraft(config: Config): Draft {
   return Object.fromEntries(FIELDS.map((field) => [id(field), valueOf(config, field)]));
 }
 
-function toConfig(draft: Draft): Config {
-  const config: Record<string, Record<string, unknown>> = {};
+/** Parte da config devolvida pelo servidor e troca só os campos da tela (o resto, como busca.localidades, segue como veio). */
+function toConfig(draft: Draft, base: Config): Config {
+  const config = structuredClone(base) as unknown as Record<string, Record<string, unknown>>;
   for (const field of FIELDS) {
     const raw = draft[id(field)];
-    config[field.section] ??= {};
     config[field.section][field.key] =
-      field.kind === "modalidade"
-        ? raw
-          ? raw.split(",")
-          : []
-        : field.kind === "localidades"
-          ? raw
-            ? raw.split(LOCALIDADE_SEP)
-            : []
-          : field.kind === "checkbox"
-            ? raw === "true"
-            : field.kind === "text"
-          ? raw
-          : raw === ""
-            ? null
-            : Number(raw);
+      field.kind === "checkbox" ? raw === "true" : field.kind === "text" ? raw : raw === "" ? null : Number(raw);
   }
   return config as unknown as Config;
 }
@@ -206,7 +164,6 @@ function ConfigForm({ config }: { config: Config }) {
   const [draft, setDraft] = useState<Draft>(() => toDraft(config));
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
-  const [entry, setEntry] = useState("");
   const dirty = FIELDS.some((field) => draft[id(field)] !== valueOf(config, field));
 
   function change(field: Field, value: string) {
@@ -214,36 +171,10 @@ function ConfigForm({ config }: { config: Config }) {
     setSaved(false);
   }
 
-  function toggle(field: Field, value: string) {
-    const current = draft[id(field)].split(",");
-    const next = MODALIDADES.map(([name]) => name).filter((name) =>
-      name === value ? !current.includes(name) : current.includes(name),
-    );
-    change(field, next.join(","));
-  }
-
-  function addLocalidade(field: Field) {
-    const name = entry.trim();
-    if (!name) return;
-    const current = draft[id(field)];
-    change(field, current ? `${current}${LOCALIDADE_SEP}${name}` : name);
-    setEntry("");
-  }
-
-  function removeLocalidade(field: Field, name: string) {
-    change(
-      field,
-      draft[id(field)]
-        .split(LOCALIDADE_SEP)
-        .filter((item) => item !== name)
-        .join(LOCALIDADE_SEP),
-    );
-  }
-
   function submit(event: FormEvent) {
     event.preventDefault();
     setError(null);
-    save.mutate(toConfig(draft), {
+    save.mutate(toConfig(draft, config), {
       onSuccess: (result) => {
         setDraft(toDraft(result));
         setSaved(true);
@@ -254,7 +185,6 @@ function ConfigForm({ config }: { config: Config }) {
 
   function discard() {
     setDraft(toDraft(config));
-    setEntry("");
     setError(null);
   }
 
@@ -262,67 +192,12 @@ function ConfigForm({ config }: { config: Config }) {
     <form onSubmit={submit} className="space-y-4">
       {GROUPS.map((group) => (
         <section key={group.titulo} className={card} aria-label={group.titulo}>
-          <h2 className="mb-3 text-sm font-semibold text-slate-800">{group.titulo}</h2>
+          <h2 className="mb-3 text-sm font-semibold text-grafite-900">{group.titulo}</h2>
           <div className="grid gap-3 sm:grid-cols-2">
             {group.fields.map((field) => (
               <div key={id(field)} className="flex flex-col gap-1">
-                {field.kind === "localidades" ? (
-                  <div className="flex flex-col gap-2 text-sm text-slate-700 sm:col-span-2">
-                    <label htmlFor={id(field)}>{field.label}</label>
-                    <div className="flex gap-2">
-                      <input
-                        id={id(field)}
-                        className={`${inputClass} w-full`}
-                        value={entry}
-                        onChange={(e) => setEntry(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            addLocalidade(field);
-                          }
-                        }}
-                      />
-                      <button type="button" className={buttonSecondary} onClick={() => addLocalidade(field)}>
-                        Adicionar localidade
-                      </button>
-                    </div>
-                    {draft[id(field)] && (
-                      <ul className="flex flex-wrap gap-2">
-                        {draft[id(field)].split(LOCALIDADE_SEP).map((name) => (
-                          <li key={name} className="flex items-center gap-1 rounded-full bg-slate-100 py-1 pl-3 pr-1">
-                            {name}
-                            <button
-                              type="button"
-                              aria-label={`Remover ${name}`}
-                              className="rounded-full px-2 text-slate-500 hover:bg-slate-200 focus-visible:outline-2 focus-visible:outline-sky-600"
-                              onClick={() => removeLocalidade(field, name)}
-                            >
-                              ✕
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                ) : field.kind === "modalidade" ? (
-                  <fieldset className="flex flex-col gap-1 text-sm text-slate-700">
-                    <legend className="mb-1">{field.label}</legend>
-                    <div className="flex flex-wrap gap-4">
-                      {MODALIDADES.map(([value, label]) => (
-                        <label key={value} className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={draft[id(field)].split(",").includes(value)}
-                            onChange={() => toggle(field, value)}
-                          />
-                          {label}
-                        </label>
-                      ))}
-                    </div>
-                    <span className="text-xs text-slate-500">Nenhuma marcada = todas as modalidades.</span>
-                  </fieldset>
-                ) : field.kind === "checkbox" ? (
-                  <label className="flex items-center gap-2 text-sm text-slate-700">
+                {field.kind === "checkbox" ? (
+                  <label className="flex items-center gap-2 text-sm text-grafite-700">
                     <input
                       type="checkbox"
                       checked={draft[id(field)] === "true"}
@@ -332,7 +207,7 @@ function ConfigForm({ config }: { config: Config }) {
                   </label>
                 ) : field.kind === "slider" ? (
                   <>
-                    <label htmlFor={id(field)} className="text-sm text-slate-700">
+                    <label htmlFor={id(field)} className="text-sm text-grafite-700">
                       {field.label}
                     </label>
                     <div className="flex items-center gap-3">
@@ -342,7 +217,7 @@ function ConfigForm({ config }: { config: Config }) {
                         min={0}
                         max={Math.max(SLIDER_MAX, Number(valueOf(config, field)), Number(draft[id(field)]))}
                         step={1}
-                        className="w-full accent-slate-900"
+                        className="w-full accent-[var(--pn-grafite-900)]"
                         value={draft[id(field)]}
                         onChange={(e) => change(field, e.target.value)}
                       />
@@ -355,7 +230,7 @@ function ConfigForm({ config }: { config: Config }) {
                     </div>
                   </>
                 ) : (
-                  <label className="flex flex-col gap-1 text-sm text-slate-700">
+                  <label className="flex flex-col gap-1 text-sm text-grafite-700">
                     {field.label}
                     <input
                       className={inputClass}
@@ -366,7 +241,7 @@ function ConfigForm({ config }: { config: Config }) {
                     />
                   </label>
                 )}
-                {field.dica && <span className="text-xs text-slate-500">{field.dica}</span>}
+                {field.dica && <span className="text-xs text-grafite-500">{field.dica}</span>}
               </div>
             ))}
           </div>
@@ -380,7 +255,7 @@ function ConfigForm({ config }: { config: Config }) {
         <button type="button" className={buttonSecondary} disabled={!dirty} onClick={discard}>
           Descartar
         </button>
-        {saved && <span className="text-sm text-emerald-700">Configuração salva. Vale a partir da próxima busca.</span>}
+        {saved && <span className="text-sm text-sinal-fg">Configuração salva. Vale a partir da próxima busca.</span>}
       </div>
     </form>
   );
@@ -389,6 +264,6 @@ function ConfigForm({ config }: { config: Config }) {
 export function ConfigPage() {
   const config = useConfig();
   if (config.isError) return <ErrorBox message="Não foi possível carregar a configuração." />;
-  if (!config.data) return <p className="text-sm text-slate-500">Carregando…</p>;
+  if (!config.data) return <p className="text-sm text-grafite-500">Carregando…</p>;
   return <ConfigForm config={config.data} />;
 }

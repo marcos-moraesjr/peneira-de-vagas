@@ -43,3 +43,13 @@ def test_remover_e_remover_inexistente(conn, settings):
     assert keywords.list_all(conn, "busca") == []
     with pytest.raises(NotFound):
         keywords.remove(conn, existente["id"])
+
+
+def test_limite_de_termos_de_busca_por_conjunto(conn, settings):
+    limite = settings.busca.max_termos_busca
+    existentes = len(keywords.list_all(conn, "busca"))
+    for n in range(limite - existentes):
+        keywords.add(conn, settings, f"termo {n}", "busca", NOW)
+    with pytest.raises(DomainError, match=rf"esperado <= {limite}"):
+        keywords.add(conn, settings, "um a mais", "busca", NOW)
+    keywords.add(conn, settings, "exclusão livre", "exclusao", NOW)

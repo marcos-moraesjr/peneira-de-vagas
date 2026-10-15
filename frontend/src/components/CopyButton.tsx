@@ -17,8 +17,8 @@ export function CopyButton({ text }: { text: string }) {
       <button type="button" className={buttonSecondary} onClick={copy}>
         Copiar instrução para o Claude
       </button>
-      {state === "copied" && <span className="text-xs text-emerald-700">Copiado</span>}
-      {state === "failed" && <span className="text-xs text-red-700">Não foi possível copiar: selecione o texto e copie à mão.</span>}
+      {state === "copied" && <span className="text-xs text-sinal-fg">Copiado</span>}
+      {state === "failed" && <span className="text-xs text-erro-fg">Não foi possível copiar: selecione o texto e copie à mão.</span>}
     </div>
   );
 }

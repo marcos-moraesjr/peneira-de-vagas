@@ -1,13 +1,13 @@
 """Partes puras das fontes de navegador: URLs, detecção de bloqueio e mapeamento de vagas."""
 from datetime import datetime, timezone
+from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
-from backend.app.sources.google import GoogleSite
 from backend.app.sources.indeed import IndeedSite
 from backend.app.sources.linkedin import LinkedInSite
-from backend.app.sources.relative_date import parse_relative_date
+from backend.app.sources.relative_date import find_published_line, parse_relative_date
 
 
 def with_busca(settings, **changes):
@@ -17,25 +17,12 @@ def with_busca(settings, **changes):
 
 # ---------- LinkedIn ----------
 
-def test_linkedin_url_traz_termo_local_janela_e_pagina(settings):
-    url = LinkedInSite(settings).search_url("Engenheiro Mecânico", start=25, localidade="Brasil")
+def test_linkedin_url_traz_termo_janela_e_pagina(settings):
+    url = LinkedInSite(settings).search_url("Engenheiro Mecânico", start=25)
     assert url.startswith("https://www.linkedin.com/jobs/search/?")
     assert "keywords=Engenheiro+Mec%C3%A2nico" in url
-    assert "location=Brasil" in url
     assert "f_TPR=r86400" in url
     assert "start=25" in url
-    assert "f_WT" not in url
-
-
-@pytest.mark.parametrize("modalidade,codigo", [("presencial", "1"), ("remoto", "2"), ("hibrido", "3")])
-def test_linkedin_modalidade_vira_f_wt(settings, modalidade, codigo):
-    url = LinkedInSite(with_busca(settings, modalidade=[modalidade])).search_url("x", 0)
-    assert f"f_WT={codigo}" in url
-
-
-def test_linkedin_varias_modalidades_viram_f_wt_separado_por_virgula(settings):
-    url = LinkedInSite(with_busca(settings, modalidade=["hibrido", "remoto"])).search_url("x", 0)
-    assert "f_WT=2%2C3" in url
 
 
 @pytest.mark.parametrize(
@@ -68,11 +55,10 @@ def test_linkedin_card_sem_id_ou_titulo_e_ignorado(settings):
 
 # ---------- Indeed ----------
 
-def test_indeed_url_traz_termo_local_dias_e_pagina(settings):
-    url = IndeedSite(settings).search_url("Engenheiro Mecânico", start=10, localidade="Brasil")
+def test_indeed_url_traz_termo_dias_e_pagina(settings):
+    url = IndeedSite(settings).search_url("Engenheiro Mecânico", start=10)
     assert url.startswith("https://br.indeed.com/jobs?")
     assert "q=Engenheiro+Mec%C3%A2nico" in url
-    assert "l=Brasil" in url
     assert "fromage=1" in url
     assert "start=10" in url
 
@@ -116,11 +102,12 @@ def test_marcadores_de_pagina_sem_resultado(settings):
     assert not LinkedInSite(settings).is_empty_page("Resultados da busca")
 
 
-# ---------- Busca como observada (sem localidade) ----------
+# ---------- Localidade e modalidade não vão para a busca (o filtro local decide) ----------
 
-def test_sem_localidade_a_url_nao_envia_location_nem_l(settings):
-    assert "location" not in LinkedInSite(settings).search_url("x", 0)
-    assert "l=" not in IndeedSite(settings).search_url("x", 0)
+def test_localidade_e_modalidade_da_config_nao_entram_na_url_de_busca(settings):
+    configurada = with_busca(settings, localidades=["Campinas, SP"], modalidade=["remoto", "hibrido"])
+    for url in (LinkedInSite(configurada).search_url("x", 0), IndeedSite(configurada).search_url("x", 0)):
+        assert "location" not in url and "f_WT" not in url and "l=" not in url and "Campinas" not in url
 
 
 def test_linkedin_card_nao_renderizado_so_com_id_e_ignorado(settings):
@@ -131,86 +118,6 @@ def test_somente_o_linkedin_le_cards_de_forma_incremental(settings):
     assert LinkedInSite(settings).lazy_cards is True
     assert IndeedSite(settings).lazy_cards is False
     assert LinkedInSite(settings).card_selector == "li[data-occludable-job-id]"
-
-
-# ---------- Google (busca booleana) ----------
-
-def google_q(settings, termo, localidade=""):
-    return parse_qs(urlsplit(GoogleSite(settings).search_url(termo, 0, localidade)).query)["q"][0]
-
-
-def test_google_url_traz_a_consulta_montada_janela_em_dias_e_pagina(settings):
-    url = GoogleSite(settings).search_url("Engenheiro Mecânico", start=10)
-    assert url.startswith("https://www.google.com/search?")
-    assert parse_qs(urlsplit(url).query) == {
-        "q": ['"Engenheiro Mecânico"'],
-        "tbs": ["qdr:d"],
-        "start": ["10"],
-    }
-
-
-def test_google_consulta_inclui_a_localidade_entre_aspas(settings):
-    assert google_q(settings, "x", "Campinas, SP").endswith('"x" "Campinas, SP"')
-
-
-def test_google_consulta_inclui_os_termos_das_modalidades_escolhidas(settings):
-    consulta = google_q(with_busca(settings, modalidade=["remoto", "hibrido"]), "x")
-    assert consulta.endswith('"x" ("remote" OR "remoto" OR "hybrid" OR "híbrido")')
-
-
-def test_google_consulta_remove_aspas_do_termo(settings):
-    assert google_q(settings, 'dev "senior"').endswith('"dev senior"')
-
-def test_google_janela_em_horas_vira_dias_arredondando_para_cima(settings):
-    query = parse_qs(urlsplit(GoogleSite(with_busca(settings, janela_horas=30)).search_url("x", 0)).query)
-    assert query["tbs"] == ["qdr:d2"]
-
-
-@pytest.mark.parametrize(
-    "url,title,text,motivo",
-    [
-        ("https://www.google.com/sorry/index?continue=x", "https://www.google.com/search", "", "captcha"),
-        ("https://www.google.com/search?q=x", "Google", "Nossos sistemas detectaram tráfego incomum", "captcha"),
-        ("https://www.google.com/search?q=x", "Google", "Our systems have detected unusual traffic", "captcha"),
-        ("https://consent.google.com/m?continue=x", "Antes de continuar", "", "login"),
-        ("https://accounts.google.com/signin", "Fazer login", "", "login"),
-        ("https://www.google.com/search?q=x", "x - Pesquisa Google", "Resultados da pesquisa", None),
-    ],
-)
-def test_google_detecta_bloqueios(settings, url, title, text, motivo):
-    assert GoogleSite(settings).classify(url, title, text) == motivo
-
-
-def test_google_marcadores_de_pagina_sem_resultado(settings):
-    site = GoogleSite(settings)
-    assert site.is_empty_page("Sua pesquisa - x - não encontrou nenhum documento correspondente.")
-    assert site.is_empty_page("Your search - x - did not match any documents.")
-    assert not site.is_empty_page("Resultados da pesquisa")
-
-
-def test_google_mapeia_resultado_para_vaga_com_link_canonico_sem_rastreio(settings):
-    raw = {"id": "https://jobs.lever.co/acme/123-abc?lever-source=x#apply", "title": "Senior .NET Engineer", "text": "Remote, LATAM"}
-    job = GoogleSite(settings).to_job(raw)
-    assert (job.id, job.link) == ("https://jobs.lever.co/acme/123-abc",) * 2
-    assert (job.titulo, job.trecho, job.fonte, job.empresa) == ("Senior .NET Engineer", "Remote, LATAM", "google", "")
-
-
-def test_google_desembrulha_link_de_redirecionamento(settings):
-    raw = {"id": "/url?q=https://boards.greenhouse.io/acme/jobs/9%3Fgh_src%3Dx&sa=U", "title": "Dev", "text": ""}
-    assert GoogleSite(settings).to_job(raw).link == "https://boards.greenhouse.io/acme/jobs/9"
-
-
-@pytest.mark.parametrize(
-    "raw",
-    [
-        {"id": "", "title": "x", "text": ""},
-        {"id": "https://jobs.lever.co/acme/1", "title": "", "text": ""},
-        {"id": "https://www.google.com/search?q=outra", "title": "x", "text": ""},
-        {"id": "javascript:void(0)", "title": "x", "text": ""},
-    ],
-)
-def test_google_resultado_sem_link_valido_ou_titulo_e_ignorado(settings, raw):
-    assert GoogleSite(settings).to_job(raw) is None
 
 
 # ---------- LinkedIn: data de publicação relativa do detalhe ----------
@@ -245,7 +152,10 @@ def test_linkedin_sem_data_relativa_devolve_none():
     [
         ("Engenheiro Mecânico\nACME\nPublicada há 3 dias\nDescrição…", "2026-10-11T12:00:00Z"),
         ("Posted 5 days ago · Active 2 days ago", "2026-10-09T12:00:00Z"),
+        ("Postado há 3 dias", "2026-10-11T12:00:00Z"),
+        ("Vaga publicado há 2 semanas", "2026-09-30T12:00:00Z"),
         ("Publicada hoje", "2026-10-14T12:00:00Z"),
+        ("Postado hoje", "2026-10-14T12:00:00Z"),
         ("Just posted", "2026-10-14T12:00:00Z"),
         ("Publicada há mais de 30 dias", None),
         ("Vaga sem data. Ativa há 2 dias", None),
@@ -256,5 +166,74 @@ def test_indeed_converte_a_data_publicada_do_detalhe(settings, texto, esperado):
     assert IndeedSite(settings).parse_published(texto, AGORA) == esperado
 
 
-def test_indeed_le_a_data_do_corpo_da_pagina_de_detalhe(settings):
-    assert IndeedSite(settings).published_selectors == ["body"]
+def test_indeed_le_a_data_do_json_ld_e_depois_do_corpo_da_pagina_de_detalhe(settings):
+    assert IndeedSite(settings).published_selectors == ['script[type="application/ld+json"]', "body"]
+
+
+def test_indeed_le_a_data_exata_do_json_ld_do_detalhe(settings):
+    amostra = (Path(__file__).parent / "samples" / "indeed_detail_jsonld.json").read_text(encoding="utf-8")
+    assert IndeedSite(settings).parse_published(amostra, AGORA) == "2026-10-14T21:58:45.795Z"
+
+
+@pytest.mark.parametrize("texto", ['{"@type": "JobPosting"}', '{"datePosted": "ontem"}', "{quebrado"])
+def test_indeed_json_ld_sem_data_valida_nao_gera_data(settings, texto):
+    assert IndeedSite(settings).parse_published(texto, AGORA) is None
+
+
+# ---------- data por linha: independe de classe CSS ----------
+
+@pytest.mark.parametrize(
+    "texto,esperado",
+    [
+        ("Engenheiro\nACME\nBelo Horizonte, MG · Há 3 dias · 95 candidaturas\nSobre a vaga", "2026-10-11T12:00:00Z"),
+        ("ACME\nAnunciada novamente há 8 horas\nSobre a vaga", "2026-10-14T04:00:00Z"),
+        ("ACME\nPostado há 4 dias\nDescrição", "2026-10-10T12:00:00Z"),
+        ("ACME\nReposted 5 days ago\nDescription", "2026-10-09T12:00:00Z"),
+        ("ACME\nBelo Horizonte\nHá 1 semana", "2026-10-07T12:00:00Z"),
+    ],
+)
+def test_data_por_linha_acha_a_linha_que_e_so_a_data(texto, esperado):
+    assert find_published_line(texto, AGORA) == esperado
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        "Precisamos de quem trabalha há 2 anos com projetos de HVAC e quer crescer na empresa",
+        "ACME\nAtiva há 2 dias\nDescrição",
+        "ACME\nPublicada há mais de 30 dias",
+        "",
+    ],
+)
+def test_data_por_linha_ignora_frase_de_descricao_reativacao_e_texto_sem_data(texto):
+    assert find_published_line(texto, AGORA) is None
+
+
+# ---------- modalidade lida do card (o filtro local decide) ----------
+
+@pytest.mark.parametrize(
+    "legenda,esperado",
+    [
+        ("Belo Horizonte e Região (Presencial)", "presencial"),
+        ("São Paulo, SP (Híbrido)", "hibrido"),
+        ("Brasil (Remoto)", "remoto"),
+        ("Campinas", ""),
+    ],
+)
+def test_linkedin_modalidade_vem_da_legenda_do_card(settings, legenda, esperado):
+    raw = {"id": "1", "title": "Engenheiro", "company": "ACME", "text": legenda}
+    assert LinkedInSite(settings).to_job(raw).modalidade == esperado
+
+
+@pytest.mark.parametrize(
+    "location,texto,esperado",
+    [
+        ("Remoto", "", "remoto"),
+        ("Campinas, SP", "Híbrido | R$ 8 mil por mês", "hibrido"),
+        ("Campinas, SP", "Presencial", "presencial"),
+        ("Campinas, SP", "Salário a combinar", ""),
+    ],
+)
+def test_indeed_modalidade_vem_da_localidade_e_dos_itens_do_card(settings, location, texto, esperado):
+    raw = {"id": "a", "title": "Engenheiro", "company": "ACME", "location": location, "text": texto}
+    assert IndeedSite(settings).to_job(raw).modalidade == esperado

@@ -1,6 +1,7 @@
 """Base comum das fontes de navegador (LinkedIn e Indeed): Chrome dedicado via CDP, ritmo humano,
 detecção de bloqueio e leitura da lista. Nada aqui tenta contornar bloqueio: ao detectá-lo, a fonte para.
 """
+import logging
 import random
 import time
 from collections.abc import Callable
@@ -15,8 +16,11 @@ from playwright.sync_api import sync_playwright
 
 from ..config import Settings
 from .errors import SourceBlocked, SourceLayoutChanged, SourceUnavailable
+from .relative_date import find_published_line
 from .types import Job
 from .verification import VerificationGate
+
+log = logging.getLogger(__name__)
 
 SNAPSHOT_TEXT_CHARS = 3000
 
@@ -31,7 +35,7 @@ class Site(Protocol):
     lazy_cards: bool  # True: os cards só renderizam ao rolar até eles (LinkedIn)
     detail_selectors: list[str]
 
-    def search_url(self, termo: str, start: int, localidade: str = "") -> str: ...
+    def search_url(self, termo: str, start: int) -> str: ...
 
     def classify(self, url: str, title: str, text: str) -> str | None: ...
 
@@ -162,14 +166,15 @@ class BrowserSource:
         found: dict[str, Job] = {}
         with self._session() as navigator:
             for termo in termos:
-                for localidade in self._localidades():
-                    if len(found) >= limit:
-                        break
-                    self._search_term(navigator, termo, localidade, found)
+                if len(found) >= limit:
+                    break
+                self._search_term(navigator, termo, found)
         return list(found.values())[:limit]
 
-    def enrich(self, jobs: list[Job]) -> list[Job]:
-        """Abre a página de cada vaga e troca o trecho pela descrição completa (quando encontrada)."""
+    def enrich(self, jobs: list[Job], on_job: Callable[[Job], None] | None = None) -> list[Job]:
+        """Abre a página de cada vaga e troca o trecho pela descrição completa (quando encontrada).
+
+        `on_job` recebe cada vaga assim que o detalhe dela é lido (antes de abrir a próxima)."""
         if not jobs:
             return jobs
         max_chars = self._settings.filtro.trecho_max_chars
@@ -178,7 +183,17 @@ class BrowserSource:
             for job in jobs:
                 self._open_checked(navigator, job.link)
                 text = " ".join(navigator.first_text(self._site.detail_selectors).split())[:max_chars]
-                enriched.append(self._with_detail(navigator, job, text))
+                detailed = self._with_detail(navigator, job, text)
+                enriched.append(detailed)
+                if on_job:
+                    on_job(detailed)
+        if getattr(self._site, "published_selectors", None):
+            undated = sum(1 for job in enriched if not job.publicada_em)
+            if undated:
+                log.warning(
+                    "Fonte %s: %d de %d vagas abertas no detalhe ficaram sem data de publicação (o texto da página pode ter mudado)",
+                    self.name, undated, len(enriched),
+                )
         return enriched
 
     def _with_detail(self, navigator: Navigator, job: Job, text: str) -> Job:
@@ -186,20 +201,25 @@ class BrowserSource:
         changes = {"trecho": text} if text else {}
         selectors = getattr(self._site, "published_selectors", [])
         if selectors:
-            published = self._site.parse_published(navigator.first_text(selectors), self._clock())
+            published = self._published_at(navigator, selectors)
             if published:
                 changes["publicada_em"] = published
         return replace(job, **changes) if changes else job
 
-    def _localidades(self) -> list[str]:
-        """Uma busca por localidade da config; sem nenhuma, uma única busca sem filtro de local ("")."""
-        return self._settings.busca.localidades or [""]
+    def _published_at(self, navigator: Navigator, selectors: list[str]) -> str | None:
+        """Cada seletor do site, em ordem; sem data em nenhum (classe mudou), procura a linha da data no texto da página."""
+        now = self._clock()
+        for selector in selectors:
+            published = self._site.parse_published(navigator.first_text([selector]), now)
+            if published:
+                return published
+        return find_published_line(navigator.first_text(["body"]), now)
 
-    def _search_term(self, navigator: Navigator, termo: str, localidade: str, found: dict[str, Job]) -> None:
+    def _search_term(self, navigator: Navigator, termo: str, found: dict[str, Job]) -> None:
         limit = self._settings.limites.max_vagas_lista
         start = 0
         while len(found) < limit:
-            self._open_checked(navigator, self._site.search_url(termo, start, localidade))
+            self._open_checked(navigator, self._site.search_url(termo, start))
             raws = self._read_cards(navigator)
             if not raws:
                 self._check_layout(navigator, start)
@@ -218,10 +238,8 @@ class BrowserSource:
     def _open_checked(self, navigator: Navigator, url: str) -> None:
         """Abre a página; se bloqueada, espera o usuário concluir a verificação à mão e reabre **a mesma página**
         (a busca segue de onde parou). Sem portão, sem confirmação ou com o prazo esgotado, a fonte para."""
-        self._check_cancelled()
         navigator.open(url)
         self._pause()
-        self._check_cancelled()
         while True:
             try:
                 self._check_block(navigator)
@@ -231,10 +249,6 @@ class BrowserSource:
                     raise
             navigator.open(url)
             self._pause()
-
-    def _check_cancelled(self) -> None:
-        if self._gate is not None:
-            self._gate.check()
 
     def _check_block(self, navigator: Navigator) -> None:
         url, title, text = navigator.snapshot()

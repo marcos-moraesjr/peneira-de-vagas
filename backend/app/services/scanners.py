@@ -16,7 +16,7 @@ from ..errors import DomainError
 
 SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
 REQUIRED_KEYS = ("versao", "explorado_em", "gerado_por", "referencia")
-LABELS = {"linkedin": "LinkedIn", "indeed": "Indeed", "gupy": "Gupy", "google": "Google"}
+LABELS = {"linkedin": "LinkedIn", "indeed": "Indeed", "gupy": "Gupy"}
 
 INSTRUCTION = (
     'O scanner da fonte "{label}" (versão {versao}, explorado em {explorado_em} por {gerado_por}) precisa ser refeito.\n'

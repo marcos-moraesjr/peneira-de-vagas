@@ -12,4 +12,5 @@ class Job:
     trecho: str
     fonte: str
     localidade: str = ""
+    modalidade: str = ""  # remoto | hibrido | presencial; vazio quando a fonte não informa
     publicada_em: str | None = None  # data de publicação em ISO 8601, quando a fonte informa

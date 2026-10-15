@@ -36,11 +36,16 @@ class FakeSource:
             raise self._error
         return list(self._jobs)
 
-    def enrich(self, jobs):
+    def enrich(self, jobs, on_job=None):
         self.enrich_calls.append([j.id for j in jobs])
-        if self._enriched_trecho is None:
-            return jobs
-        return [Job(j.id, j.titulo, j.empresa, j.link, self._enriched_trecho, j.fonte) for j in jobs]
+        enriched = []
+        for j in jobs:
+            if self._enriched_trecho is not None:
+                j = Job(j.id, j.titulo, j.empresa, j.link, self._enriched_trecho, j.fonte)
+            enriched.append(j)
+            if on_job:
+                on_job(j)
+        return enriched
 
 
 def run_all(conn, settings, sources):
@@ -63,33 +68,16 @@ def test_grava_apenas_vagas_aprovadas_e_conta_lidas_aprovadas_novas(conn, settin
     assert conn.execute("SELECT status FROM runs").fetchone()[0] == "concluida"
 
 
-def test_cancelar_antes_de_comecar_interrompe_todas_as_fontes_sem_buscar(conn, settings):
-    a, b = FakeSource("a", jobs=[job("1", fonte="a")]), FakeSource("b", jobs=[job("2", fonte="b")])
-    run_id = db.create_run(conn, ["a", "b"], NOW)
-    cancel = threading.Event()
-    cancel.set()
-    run_service.execute_run(settings, run_id, [a, b], now, cancel=cancel)
-    fontes = sources_of(conn, run_id)
-    assert [(f["status"], f["motivo"]) for f in fontes.values()] == [("falha", "interrompida")] * 2
-    assert a.search_calls == [] and b.search_calls == []
-    assert conn.execute("SELECT status FROM runs").fetchone()[0] == "concluida"
+def test_vaga_detalhada_e_gravada_na_hora_mesmo_se_a_fonte_falha_depois(conn, settings):
+    class FalhaNoSegundoDetalhe(FakeSource):
+        def enrich(self, jobs, on_job=None):
+            on_job(jobs[0])
+            raise SourceBlocked("bloqueio no detalhe", motivo="captcha")
 
-
-def test_cancelar_durante_a_busca_descarta_a_fonte_atual_e_interrompe_as_seguintes(conn, settings):
-    cancel = threading.Event()
-
-    class CancelaAoBuscar(FakeSource):
-        def search(self, termos):
-            cancel.set()
-            return super().search(termos)
-
-    a, b = CancelaAoBuscar("a", jobs=[job("1", fonte="a")]), FakeSource("b", jobs=[job("2", fonte="b")])
-    run_id = db.create_run(conn, ["a", "b"], NOW)
-    run_service.execute_run(com_abas_paralelas(settings, False), run_id, [a, b], now, cancel=cancel)
-    fontes = sources_of(conn, run_id)
-    assert [(f["status"], f["motivo"]) for f in fontes.values()] == [("falha", "interrompida")] * 2
-    assert a.enrich_calls == [] and b.search_calls == []
-    assert conn.execute("SELECT COUNT(*) FROM jobs").fetchone()[0] == 0
+    fonte = FalhaNoSegundoDetalhe(jobs=[job("1", trecho="engenheiro mecânico"), job("2", trecho="engenheiro mecânico")])
+    run_id = run_all(conn, settings, [fonte])
+    assert sources_of(conn, run_id)["fake"]["status"] == "falha"
+    assert [r["id_da_vaga"] for r in conn.execute("SELECT id_da_vaga FROM jobs")] == ["1"]
 
 
 def test_falha_de_uma_fonte_nao_impede_as_outras(conn, settings):
@@ -132,13 +120,11 @@ def test_vaga_ja_conhecida_nao_abre_pagina_de_detalhe(conn, settings):
     assert fonte.enrich_calls == [[]]
 
 
-def test_detalhe_respeita_o_teto_por_execucao(conn, settings):
-    teto = settings.limites.__class__(2, settings.limites.max_vagas_lista)
-    limitada = settings.__class__(**{**settings.__dict__, "limites": teto})
-    fonte = FakeSource(jobs=[job(str(n)) for n in range(5)])
-    run_all(conn, limitada, [fonte])
-    assert len(fonte.enrich_calls[0]) == 2
-    assert conn.execute("SELECT COUNT(*) FROM jobs").fetchone()[0] == 5
+def test_detalhe_abre_todas_as_vagas_novas_sem_teto(conn, settings):
+    fonte = FakeSource(jobs=[job(str(n)) for n in range(20)])
+    run_all(conn, settings, [fonte])
+    assert len(fonte.enrich_calls[0]) == 20
+    assert conn.execute("SELECT COUNT(*) FROM jobs").fetchone()[0] == 20
 
 
 def test_detalhe_com_exclusao_na_descricao_completa_descarta_a_vaga(conn, settings):
@@ -246,3 +232,52 @@ def test_sem_abas_paralelas_as_fontes_rodam_uma_por_vez(conn, settings):
     run_id = run_all(conn, com_abas_paralelas(settings, False), [a, b])
     assert pico[0] == 1
     assert [f["status"] for f in sources_of(conn, run_id).values()] == ["ok", "ok"]
+
+
+# ---------- filtro local de localidade e modalidade ----------
+
+def com_busca(settings, **campos):
+    return replace(settings, busca=replace(settings.busca, **campos))
+
+
+def vaga(id_da_vaga, localidade="", modalidade=""):
+    return replace(job(id_da_vaga), localidade=localidade, modalidade=modalidade)
+
+
+def ids_gravados(conn):
+    return sorted(row[0] for row in conn.execute("SELECT id_da_vaga FROM jobs"))
+
+
+def test_filtro_local_descarta_vaga_de_outra_localidade(conn, settings):
+    fonte = FakeSource(jobs=[vaga("1", "Campinas, SP"), vaga("2", "Recife, PE")])
+    run_id = run_all(conn, com_busca(settings, localidades=["Campinas, SP"]), [fonte])
+    assert ids_gravados(conn) == ["1"]
+    linha = sources_of(conn, run_id)["fake"]
+    assert (linha["lidas"], linha["aprovadas"], linha["novas"]) == (2, 1, 1)
+
+
+def test_filtro_local_descarta_vaga_de_outra_modalidade(conn, settings):
+    fonte = FakeSource(jobs=[vaga("1", modalidade="remoto"), vaga("2", modalidade="presencial")])
+    run_all(conn, com_busca(settings, modalidade=["remoto"]), [fonte])
+    assert ids_gravados(conn) == ["1"]
+
+
+def test_vaga_sem_localidade_ou_modalidade_passa_quando_aceitar_desconhecido(conn, settings):
+    fonte = FakeSource(jobs=[vaga("1"), vaga("2", "Recife, PE")])
+    run_all(conn, com_busca(settings, localidades=["Campinas, SP"], modalidade=["remoto"]), [fonte])
+    assert ids_gravados(conn) == ["1"]
+
+
+def test_vaga_sem_localidade_ou_modalidade_cai_quando_nao_aceita_desconhecido(conn, settings):
+    estrito = replace(
+        com_busca(settings, localidades=["Campinas, SP"]), filtro=replace(settings.filtro, aceitar_desconhecido=False)
+    )
+    fonte = FakeSource(jobs=[vaga("1"), vaga("2", "Campinas, SP")])
+    run_all(conn, estrito, [fonte])
+    assert ids_gravados(conn) == ["2"]
+
+
+def test_sem_localidade_nem_modalidade_na_config_nada_e_descartado(conn, settings):
+    sem = com_busca(settings, localidades=[], modalidade=[])
+    run_all(conn, sem, [FakeSource(jobs=[vaga("1", "Recife, PE", "presencial"), vaga("2")])])
+    assert ids_gravados(conn) == ["1", "2"]

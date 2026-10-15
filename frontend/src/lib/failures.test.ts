@@ -43,9 +43,3 @@ describe("FAILURE_REASONS", () => {
     for (const reason of FAILURE_REASONS) expect(describeFailure("gupy", reason).message).not.toMatch(/^falhou \(/);
   });
 });
-
-describe("sourceLabel", () => {
-  it("nomeia a fonte Google", () => {
-    expect(sourceLabel("google")).toBe("Google");
-  });
-});

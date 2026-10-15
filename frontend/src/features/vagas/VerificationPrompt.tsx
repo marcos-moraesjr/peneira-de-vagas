@@ -12,7 +12,7 @@ export function VerificationPrompt({ running }: { running: boolean }) {
   return (
     <div className="space-y-2">
       {fontes.map((fonte) => (
-        <div key={fonte} role="alert" className="flex flex-wrap items-center gap-3 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+        <div key={fonte} role="alert" className="flex flex-wrap items-center gap-3 rounded border border-atencao bg-atencao-bg p-3 text-sm text-atencao-fg">
           <span>
             {sourceLabel(fonte)} pediu uma verificação. Conclua-a à mão no Chrome dedicado e confirme: a busca segue de onde parou.
           </span>

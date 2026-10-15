@@ -6,7 +6,7 @@ from backend.app.sources.registry import build_sources
 
 
 def test_fontes_ativas_na_ordem_navegador_primeiro_e_api_por_ultimo(settings):
-    assert [source.name for source in build_sources(settings)] == ["linkedin", "indeed", "google", "gupy"]
+    assert [source.name for source in build_sources(settings)] == ["linkedin", "indeed", "gupy"]
 
 
 def test_chrome_dedicado_fechado_falha_com_cdp_indisponivel(settings):

@@ -9,10 +9,10 @@ from urllib.parse import urlencode
 
 from ..config import Settings
 from ..services.filters import normalize
+from ..services.localizacao import detect_modalidade
 from .relative_date import parse_relative_date
 from .types import Job
 
-WORK_TYPE = {"presencial": "1", "remoto": "2", "hibrido": "3"}
 SECONDS_PER_HOUR = 3600
 CARD_SELECTOR = "li[data-occludable-job-id]"
 EMPTY_MARKERS = ("nenhuma vaga correspondente", "no matching jobs", "nenhum resultado")
@@ -52,16 +52,13 @@ class LinkedInSite:
         self._settings = settings
         self.page_size = settings.linkedin.page_size
 
-    def search_url(self, termo: str, start: int, localidade: str = "") -> str:
-        busca = self._settings.busca
-        params = {"keywords": termo}
-        if localidade:
-            params["location"] = localidade
-        params["f_TPR"] = f"r{busca.janela_horas * SECONDS_PER_HOUR}"
-        codes = sorted(code for name, code in WORK_TYPE.items() if name in busca.modalidade)
-        if codes:
-            params["f_WT"] = ",".join(codes)
-        params["start"] = start
+    def search_url(self, termo: str, start: int) -> str:
+        """Só termo, janela e página: localidade e modalidade não vão na busca (o filtro local decide)."""
+        params = {
+            "keywords": termo,
+            "f_TPR": f"r{self._settings.busca.janela_horas * SECONDS_PER_HOUR}",
+            "start": start,
+        }
         return f"{self._settings.linkedin.base_url}?{urlencode(params)}"
 
     def classify(self, url: str, title: str, text: str) -> str | None:
@@ -89,4 +86,5 @@ class LinkedInSite:
             trecho=raw.get("text", ""),
             fonte=self.name,
             localidade=raw.get("text", ""),  # a legenda do card é a localidade (e a modalidade, entre parênteses)
+            modalidade=detect_modalidade(raw.get("text", "")),
         )

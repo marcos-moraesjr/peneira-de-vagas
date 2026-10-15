@@ -34,6 +34,13 @@ def add(conn: sqlite3.Connection, settings: Settings, termo: str, tipo: str, now
     limit = settings.busca.keyword_max_length
     if len(termo) > limit:
         raise DomainError(f"Valor inválido: termo={termo[:20]!r}... com {len(termo)} caracteres (esperado <= {limit})")
+    if tipo == "busca":
+        max_terms = settings.busca.max_termos_busca
+        count = conn.execute(
+            "SELECT COUNT(*) FROM keywords WHERE conjunto_id=? AND tipo='busca'", (conjuntos.active_id(conn),)
+        ).fetchone()[0]
+        if count >= max_terms:
+            raise DomainError(f"Valor inválido: {count + 1} palavras-chave de busca no conjunto (esperado <= {max_terms})")
     try:
         cursor = conn.execute(
             "INSERT INTO keywords (termo, termo_normalizado, tipo, criada_em, conjunto_id) VALUES (?,?,?,?,?)",

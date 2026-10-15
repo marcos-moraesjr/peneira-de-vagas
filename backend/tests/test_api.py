@@ -5,7 +5,6 @@ from fastapi.testclient import TestClient
 
 from backend.app import db
 from backend.app.main import create_app
-from backend.app.sources.errors import SourceInterrupted
 from backend.app.sources.types import Job
 
 NOW = "2026-10-14T12:00:00+00:00"
@@ -19,7 +18,10 @@ class StubSource:
     def search(self, termos):
         return list(self._jobs)
 
-    def enrich(self, jobs):
+    def enrich(self, jobs, on_job=None):
+        for j in jobs:
+            if on_job:
+                on_job(j)
         return jobs
 
 
@@ -104,39 +106,32 @@ def test_limpar_historico_com_execucao_em_andamento_devolve_409(settings):
     assert "andamento" in resposta.json()["detail"]
 
 
-def test_interromper_execucao_em_andamento_encerra_as_fontes_como_interrompidas(settings):
-    pendentes = []
-    with make_client(settings, [StubSource(jobs=[job("1")])], spawn=pendentes.append) as test_client:
+def test_excluir_uma_execucao_remove_so_ela_e_mantem_as_vagas(client):
+    primeira = client.post("/api/runs").json()["id"]
+    segunda = client.post("/api/runs").json()["id"]
+    resposta = client.delete(f"/api/runs/{primeira}")
+    assert resposta.status_code == 200
+    assert resposta.json() == {"removidas": 1}
+    assert [run["id"] for run in client.get("/api/runs").json()] == [segunda]
+    assert client.get(f"/api/runs/{primeira}").status_code == 404
+    assert client.get("/api/jobs").json()["total"] == 2
+
+
+def test_excluir_execucao_inexistente_devolve_404(client):
+    assert client.delete("/api/runs/999").status_code == 404
+
+
+def test_excluir_execucao_em_andamento_devolve_409(settings):
+    with make_client(settings, [StubSource()], spawn=lambda fn: None) as test_client:
         run_id = test_client.post("/api/runs").json()["id"]
-        resposta = test_client.post(f"/api/runs/{run_id}/cancel")
-        assert resposta.status_code == 202
-        assert resposta.json() == {"id": run_id}
-        pendentes[0]()
-        run = test_client.get(f"/api/runs/{run_id}").json()
-    assert run["status"] == "concluida"
-    assert [(f["status"], f["motivo"]) for f in run["fontes"]] == [("falha", "interrompida")]
-    assert run["fontes"][0]["novas"] == 0
+        resposta = test_client.delete(f"/api/runs/{run_id}")
+    assert resposta.status_code == 409
+    assert "andamento" in resposta.json()["detail"]
 
 
-def test_interromper_execucao_concluida_devolve_409(client):
+def test_nao_ha_rota_para_interromper_uma_execucao(client):
     run_id = client.post("/api/runs").json()["id"]
-    assert client.post(f"/api/runs/{run_id}/cancel").status_code == 409
-
-
-def test_interromper_execucao_inexistente_devolve_404(client):
-    assert client.post("/api/runs/999/cancel").status_code == 404
-
-
-def test_nova_execucao_nao_herda_o_cancelamento_da_anterior(settings):
-    pendentes = []
-    with make_client(settings, [StubSource(jobs=[job("1")])], spawn=pendentes.append) as test_client:
-        primeira = test_client.post("/api/runs").json()["id"]
-        test_client.post(f"/api/runs/{primeira}/cancel")
-        pendentes[0]()
-        segunda = test_client.post("/api/runs").json()["id"]
-        pendentes[1]()
-        run = test_client.get(f"/api/runs/{segunda}").json()
-    assert run["fontes"][0]["status"] == "ok"
+    assert client.post(f"/api/runs/{run_id}/cancel").status_code in (404, 405)
 
 
 def test_execucao_inexistente_devolve_404(client):
@@ -197,9 +192,9 @@ def test_vagas_excluidas_voltam_como_novas_na_proxima_busca(client):
 @pytest.fixture
 def client_ordenacao(settings):
     vagas = [
-        Job("1", "Engenheiro Mecânico 1", "Zeta", "https://x/1", "", "stub", localidade="Recife, PE", publicada_em="2026-10-01T10:00:00Z"),
-        Job("2", "Engenheiro Mecânico 2", "Álamo", "https://x/2", "", "stub", localidade="Campinas, SP", publicada_em="2026-10-09T10:00:00Z"),
-        Job("3", "Engenheiro Mecânico 3", "Beta", "https://x/3", "", "stub", localidade="", publicada_em=None),
+        Job("1", "Engenheiro Mecânico 1", "Zeta", "https://x/1", "", "stub", localidade="Recife, PE", publicada_em="2026-10-01T10:00:00Z", modalidade="presencial"),
+        Job("2", "Engenheiro Mecânico 2", "Álamo", "https://x/2", "", "stub", localidade="Campinas, SP", publicada_em="2026-10-09T10:00:00Z", modalidade="remoto"),
+        Job("3", "Engenheiro Mecânico 3", "Beta", "https://x/3", "", "stub", localidade="", publicada_em=None, modalidade="hibrido"),
     ]
     with make_client(settings, [StubSource(jobs=vagas)]) as test_client:
         test_client.post("/api/runs")
@@ -294,7 +289,7 @@ class BrokenLinkedIn:
 
 def test_scanners_lista_versao_e_estado_de_cada_fonte(client):
     corpo = client.get("/api/scanners").json()
-    assert [s["fonte"] for s in corpo] == ["linkedin", "indeed", "gupy", "google"]
+    assert [s["fonte"] for s in corpo] == ["linkedin", "indeed", "gupy"]
     primeiro = corpo[0]
     assert primeiro["status"] == "ok" and primeiro["versao"].count(".") == 2
     assert primeiro["gerado_por"] == "Claude" and primeiro["instrucao"] is None
@@ -405,38 +400,6 @@ def test_confirmar_fonte_que_nao_espera_devolve_409(client):
     assert "indeed" in resposta.json()["detail"]
 
 
-def test_interromper_execucao_acorda_a_fonte_que_espera_verificacao(settings):
-    pendentes = []
-    with make_client(settings, [StubSource()], spawn=pendentes.append) as test_client:
-        gate = test_client.app.state.gate
-        run_id = test_client.post("/api/runs").json()["id"]
-        resultado = {}
-
-        def espera():
-            try:
-                gate.wait("indeed", 5)
-            except SourceInterrupted:
-                resultado["interrompida"] = True
-
-        esperando = threading.Thread(target=espera)
-        esperando.start()
-        for _ in range(200):
-            if gate.waiting():
-                break
-            threading.Event().wait(0.01)
-        test_client.post(f"/api/runs/{run_id}/cancel")
-        esperando.join(2)
-    assert resultado == {"interrompida": True}
-
-
-def test_nova_execucao_nao_herda_o_cancelamento_do_portao(settings):
-    with make_client(settings, [StubSource()], spawn=lambda fn: None) as test_client:
-        gate = test_client.app.state.gate
-        gate.cancel()
-        test_client.post("/api/runs")
-        assert gate.wait("indeed", 0.05) is False
-
-
 def test_max_dias_descarta_vagas_publicadas_ha_mais_de_x_dias_e_mantem_as_sem_data(client_ordenacao):
     # "agora" = 2026-10-14: 7 dias → corte em 2026-10-07 (a vaga de 10-01 sai; a sem data fica)
     assert sorted(titulos(client_ordenacao, "max_dias=7")) == ["Engenheiro Mecânico 2", "Engenheiro Mecânico 3"]
@@ -453,3 +416,45 @@ def test_marcar_como_vistas_respeita_max_dias(client_ordenacao):
     assert resposta.json() == {"atualizadas": 2}
     restantes = client_ordenacao.get("/api/jobs?visto=false").json()["items"]
     assert [j["titulo"] for j in restantes] == ["Engenheiro Mecânico 1"]
+
+
+def test_cidade_e_estado_filtram_as_vagas_ja_encontradas_ignorando_acento_e_maiuscula(client_ordenacao):
+    assert titulos(client_ordenacao, "cidade=CAMPINAS") == ["Engenheiro Mecânico 2"]
+    assert titulos(client_ordenacao, "cidade=recife") == ["Engenheiro Mecânico 1"]
+    assert titulos(client_ordenacao, "estado=pe") == ["Engenheiro Mecânico 1"]
+    assert titulos(client_ordenacao, "estado=SP") == ["Engenheiro Mecânico 2"]
+    assert client_ordenacao.get("/api/jobs?cidade=campinas").json()["total"] == 1
+
+
+def test_cidade_e_estado_vazios_ou_em_branco_nao_filtram(client_ordenacao):
+    assert len(titulos(client_ordenacao, "cidade=&estado=")) == 3
+    assert len(titulos(client_ordenacao, "cidade=%20%20")) == 3
+
+
+def test_cidade_e_estado_combinam_entre_si_e_com_os_outros_filtros(client_ordenacao):
+    assert titulos(client_ordenacao, "cidade=campinas&estado=pe") == []
+    assert titulos(client_ordenacao, "cidade=campinas&q=zeta") == []
+    assert titulos(client_ordenacao, "estado=pe&q=zeta") == ["Engenheiro Mecânico 1"]
+
+
+def test_vagas_trazem_a_modalidade(client_ordenacao):
+    itens = {j["titulo"]: j["modalidade"] for j in client_ordenacao.get("/api/jobs").json()["items"]}
+    assert itens == {"Engenheiro Mecânico 1": "presencial", "Engenheiro Mecânico 2": "remoto", "Engenheiro Mecânico 3": "hibrido"}
+
+
+def test_modalidade_filtra_e_valor_invalido_devolve_422(client_ordenacao):
+    assert titulos(client_ordenacao, "modalidade=remoto") == ["Engenheiro Mecânico 2"]
+    assert titulos(client_ordenacao, "modalidade=") != []
+    resposta = client_ordenacao.get("/api/jobs?modalidade=nuvem")
+    assert resposta.status_code == 422 and "nuvem" in resposta.json()["detail"] and "remoto" in resposta.json()["detail"]
+
+
+def test_ordena_por_modalidade(client_ordenacao):
+    assert titulos(client_ordenacao, "ordenar=modalidade&direcao=asc") == ["Engenheiro Mecânico 3", "Engenheiro Mecânico 1", "Engenheiro Mecânico 2"]
+
+
+def test_marcar_como_vistas_respeita_cidade_estado_e_modalidade(client_ordenacao):
+    assert client_ordenacao.post("/api/jobs/mark-seen", json={"cidade": "recife"}).json() == {"atualizadas": 1}
+    assert client_ordenacao.post("/api/jobs/mark-seen", json={"estado": "sp"}).json() == {"atualizadas": 1}
+    assert client_ordenacao.post("/api/jobs/mark-seen", json={"modalidade": "hibrido"}).json() == {"atualizadas": 1}
+    assert client_ordenacao.get("/api/jobs?visto=false").json()["items"] == []

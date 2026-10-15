@@ -40,23 +40,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/runs/{run_id}/cancel": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Cancel Run */
-        post: operations["cancel_run_api_runs__run_id__cancel_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/runs/{run_id}": {
         parameters: {
             query?: never;
@@ -68,7 +51,8 @@ export interface paths {
         get: operations["get_run_api_runs__run_id__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /** Delete Run */
+        delete: operations["delete_run_api_runs__run_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -396,8 +380,6 @@ export interface components {
         };
         /** ConfigLimites */
         ConfigLimites: {
-            /** Max Paginas Detalhe */
-            max_paginas_detalhe: number;
             /** Max Vagas Lista */
             max_vagas_lista: number;
         };
@@ -481,6 +463,12 @@ export interface components {
             encontrada_em: string;
             /** Localidade */
             localidade: string;
+            /** Cidade */
+            cidade: string;
+            /** Estado */
+            estado: string;
+            /** Modalidade */
+            modalidade: string;
             /** Publicada Em */
             publicada_em: string | null;
             /** Visto */
@@ -524,6 +512,12 @@ export interface components {
             q?: string | null;
             /** Max Dias */
             max_dias?: number | null;
+            /** Cidade */
+            cidade?: string | null;
+            /** Estado */
+            estado?: string | null;
+            /** Modalidade */
+            modalidade?: string | null;
         };
         /** MarkSeenOut */
         MarkSeenOut: {
@@ -736,37 +730,6 @@ export interface operations {
             };
         };
     };
-    cancel_run_api_runs__run_id__cancel_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                run_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RunStarted"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_run_api_runs__run_id__get: {
         parameters: {
             query?: never;
@@ -798,6 +761,37 @@ export interface operations {
             };
         };
     };
+    delete_run_api_runs__run_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunsCleared"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_jobs_api_jobs_get: {
         parameters: {
             query?: {
@@ -809,6 +803,9 @@ export interface operations {
                 ordenar?: string | null;
                 direcao?: string | null;
                 max_dias?: number | null;
+                cidade?: string | null;
+                estado?: string | null;
+                modalidade?: string | null;
             };
             header?: never;
             path?: never;

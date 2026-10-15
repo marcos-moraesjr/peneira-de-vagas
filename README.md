@@ -1,11 +1,10 @@
 # JobScanner
 
-Aplicação **local** que busca vagas de emprego no **LinkedIn**, no **Indeed**, no **Google** (buscas booleanas) e na **Gupy**. Você cadastra
+Aplicação **local** que busca vagas de emprego no **LinkedIn**, no **Indeed** e na **Gupy**. Você cadastra
 as palavras-chave no front end (padrão de desenvolvimento: **Engenheiro Mecânico**), clica em **Buscar
-agora**, e a API consulta as quatro fontes, filtra, remove duplicadas e mostra as vagas novas na tela.
+agora**, e a API consulta as três fontes, filtra, remove duplicadas e mostra as vagas novas na tela.
 
-- LinkedIn, Indeed e Google: navegador Chrome real e dedicado, controlado via CDP (sem disfarce de automação).
-- Google: busca as suas palavras-chave, localidades e modalidade, sem restringir o site (ex.: `"engenheiro mecânico" "Campinas, SP"`).
+- LinkedIn e Indeed: navegador Chrome real e dedicado, controlado via CDP (sem disfarce de automação).
 - Gupy: API JSON do próprio portal.
 - Front end: React + TypeScript. API: FastAPI. Banco: SQLite.
 
@@ -54,7 +53,7 @@ npm install
 
 Usa um perfil próprio (`data/chrome-profile/`), nunca o seu pessoal; a porta de depuração fica só em `localhost`.
 
-**Pelo app (recomendado):** na aba Vagas, clique em **Abrir Chrome dedicado**. O indicador muda para "Chrome
+**Pelo app (recomendado):** na aba Busca, clique em **Abrir Chrome dedicado**. O indicador muda para "Chrome
 dedicado aberto" quando ele estiver pronto. Se o Chrome não for achado, ajuste `chrome_paths` em
 `backend/config.toml`.
 
@@ -62,7 +61,7 @@ dedicado aberto" quando ele estiver pronto. Se o Chrome não for achado, ajuste 
 
 Na primeira vez, faça login no LinkedIn e no Indeed **manualmente** nessa janela e deixe-a aberta durante a
 busca. Se o Chrome estiver fechado, a busca nessas fontes falha com o aviso "Chrome dedicado não encontrado"
-(a Gupy continua funcionando). O Google pode pedir verificação (CAPTCHA); nesse caso a fonte falha e a aba fica aberta para você resolver à mão.
+(a Gupy continua funcionando). O LinkedIn e o Indeed podem pedir verificação (CAPTCHA); nesse caso a fonte falha e a aba fica aberta para você resolver à mão.
 
 > O uso de navegador logado em automação pode violar os termos de uso do LinkedIn e do Indeed; o risco de
 > restrição da conta é aceito conscientemente. Se aparecer CAPTCHA ou verificação, resolva à mão: o

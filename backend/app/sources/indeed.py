@@ -4,6 +4,7 @@ Cloudflare e verificações são detectados e tratados como falha da fonte; nunc
 O card não traz data de publicação; o filtro de recência é só o `fromage` da URL (efeito não confirmado)
 mais a deduplicação. O trecho é o conjunto de itens <li> do card (tipo de vaga, salário, resumo).
 """
+import json
 import math
 import re
 from datetime import datetime
@@ -11,6 +12,7 @@ from urllib.parse import urlencode, urlsplit
 
 from ..config import Settings
 from ..services.filters import normalize
+from ..services.localizacao import detect_modalidade
 from .relative_date import parse_relative_date
 from .types import Job
 
@@ -44,8 +46,9 @@ class IndeedSite:
     card_selector = CARD_SELECTOR
     lazy_cards = False
     detail_selectors = ["#jobDescriptionText", ".jobsearch-JobComponent-description"]
-    # Seletor da data NÃO observado: lê o texto da página de detalhe e procura "Publicada há N dias" / "Posted N days ago".
-    published_selectors = ["body"]
+    # Observado em 15/10/2026: o detalhe traz a data exata em `datePosted` do JSON-LD (JobPosting); não há texto
+    # "Publicada há…" visível ("Recém publicada" só vem em JSON interno). O corpo da página fica como reserva.
+    published_selectors = ['script[type="application/ld+json"]', "body"]
 
     def __init__(self, settings: Settings):
         self._settings = settings
@@ -53,13 +56,13 @@ class IndeedSite:
         parts = urlsplit(settings.indeed.base_url)
         self._origin = f"{parts.scheme}://{parts.netloc}"
 
-    def search_url(self, termo: str, start: int, localidade: str = "") -> str:
-        busca = self._settings.busca
-        params = {"q": termo}
-        if localidade:
-            params["l"] = localidade
-        params["fromage"] = max(1, math.ceil(busca.janela_horas / HOURS_PER_DAY))
-        params["start"] = start
+    def search_url(self, termo: str, start: int) -> str:
+        """Só termo, janela e página: localidade e modalidade não vão na busca (o filtro local decide)."""
+        params = {
+            "q": termo,
+            "fromage": max(1, math.ceil(self._settings.busca.janela_horas / HOURS_PER_DAY)),
+            "start": start,
+        }
         return f"{self._settings.indeed.base_url}?{urlencode(params)}"
 
     def classify(self, url: str, title: str, text: str) -> str | None:
@@ -73,12 +76,22 @@ class IndeedSite:
         return None
 
     def parse_published(self, text: str, now: datetime) -> str | None:
-        """Só vale o texto de "Publicada…"/"Posted…" (o "Ativa há 2 dias" de vaga reativada não é publicação)."""
+        """JSON-LD do detalhe (`datePosted`) ou, na reserva, o texto de "Publicada…"/"Posted…" (o "Ativa há 2 dias" de vaga reativada não é publicação)."""
+        if text.lstrip().startswith("{"):
+            return self._date_posted(text)
         normalized = normalize(text)
-        if re.search(r"publicada hoje|just posted|posted today", normalized):
+        if re.search(r"publicad[oa] hoje|postad[oa] hoje|just posted|posted today", normalized):
             return now.strftime("%Y-%m-%dT%H:%M:%SZ")
-        found = re.search(r"(publicada|posted).{0,40}", normalized)
+        found = re.search(r"(publicad[oa]|postad[oa]|posted).{0,40}", normalized)
         return parse_relative_date(found.group(0), now) if found else None
+
+    @staticmethod
+    def _date_posted(json_ld: str) -> str | None:
+        try:
+            posted = json.loads(json_ld).get("datePosted")
+        except (ValueError, AttributeError):
+            return None
+        return posted if isinstance(posted, str) and re.match(r"\d{4}-\d{2}-\d{2}T", posted) else None
 
     def is_empty_page(self, text: str) -> bool:
         normalized = normalize(text)
@@ -95,4 +108,5 @@ class IndeedSite:
             trecho=raw.get("text", ""),
             fonte=self.name,
             localidade=raw.get("location", ""),
+            modalidade=detect_modalidade(f"{raw.get('location', '')} {raw.get('text', '')}"),
         )
