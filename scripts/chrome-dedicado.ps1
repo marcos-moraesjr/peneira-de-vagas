@@ -9,5 +9,5 @@ if (-not (Test-Path $chrome)) { Write-Error "Chrome não encontrado."; exit 1 }
 & $chrome `
   --remote-debugging-port=9222 `
   --remote-debugging-address=127.0.0.1 `
-  --user-data-dir="$root\chrome-profile" `
+  --user-data-dir="$root\data\chrome-profile" `
   --no-first-run

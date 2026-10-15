@@ -85,6 +85,12 @@ Faça, seguindo TDD (teste vermelho antes do código):
 | linkedin | 1.2.0 | 2026-10-14 | `search_url(termo, start, localidade)`: `location` vem de uma das `[busca] localidades` (uma busca por palavra-chave e localidade), não mais de um texto único. Não verificado: `location` com estado ("Minas Gerais") |
 | indeed | 1.2.0 | 2026-10-14 | `search_url(termo, start, localidade)`: `l` vem de uma das `[busca] localidades`. Não verificado: `l` com estado inteiro |
 | google | 0.1.1 | 2026-10-14 | `search_url` aceita `localidade` e a ignora; `GoogleSource` não multiplica as consultas pelas localidades |
+| linkedin | 1.3.0 | 2026-10-14 | Em bloqueio a fonte espera o usuário concluir a verificação (`VerificationGate`) e retoma reabrindo a página que bloqueou; sem confirmação no prazo, falha como antes. Sem mudança no que a fonte lê |
+| indeed | 1.3.0 | 2026-10-14 | Idem LinkedIn: espera e retoma após a verificação manual |
+| google | 0.2.0 | 2026-10-14 | Idem LinkedIn: espera e retoma após a verificação manual (`/sorry`, consentimento, login) |
+| google | 0.3.0 | 2026-10-14 | `search_url(termo, start, localidade)` monta a consulta de palavra-chave + localidade + termos da modalidade, em vez de receber a consulta pronta (sem `site:`; os sites foram removidos a pedido do usuário); `GoogleSource` volta a usar as palavras-chave do painel e o filtro local. Seletores do DOM seguem não observados. Não verificado: aceitação da consulta pelo Google (limite de 32 palavras) |
+| linkedin | 1.4.0 | 2026-10-14 | `publicada_em` passa a ser lida no detalhe da vaga (texto relativo "há N horas/dias/semanas/meses" → ISO), com o seletor já observado da descrição do topo. Só vagas cujo detalhe foi aberto ganham data. Não verificado: formato do texto em vagas sem "há" e com a interface em inglês |
+| indeed | 1.4.0 | 2026-10-14 | `publicada_em` passa a ser lida no detalhe da vaga: busca "Publicada há N dias"/"Posted N days ago"/"hoje" no texto do `body` (conversão em `relative_date.py`, compartilhada com o LinkedIn). **Não verificado no DOM real**: texto exato e posição da data na página de detalhe; se não achar, a vaga fica sem data |
 
 ## Refazer só a documentação das plataformas
 

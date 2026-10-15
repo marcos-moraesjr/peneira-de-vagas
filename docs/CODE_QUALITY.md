@@ -25,7 +25,8 @@ depois a correção.
 - API testada com `TestClient` do FastAPI; o serviço de execução é testado com fontes simuladas, chamado
   direto (síncrono). Segunda chamada a `POST /api/runs` durante uma execução devolve 409.
 - Sem `sleep` nem relógio real: pausas e "agora" são injetados (a pausa humana é função passada como parâmetro).
-- Testes `integration` (marker): contra os sites reais, rodados **só pelo usuário**, nunca em rotina nem por agente.
+- Testes `integration` (marker): contra os sites reais, rodados **só pelo usuário**, nunca em rotina nem por agente; exceção: a verificação manual do Google pelo
+  agente, nos termos de `AI_GUIDELINES.md` §5.
 - Nome de teste descreve comportamento: `test_vaga_com_termo_excluido_e_descartada`.
 
 ## 2. Estilo
@@ -76,7 +77,7 @@ depois a correção.
 - Sem `git add -A`/`.`/diretório puro: só caminhos explícitos.
 - Antes de commitar, `git diff --cached --name-only`: só o que pertence à mudança; documentação
   (`docs/`, `README.md`) vai no mesmo commit do código que a motivou.
-- Nunca commitar `*.db`, `chrome-profile/`, `.venv`, `node_modules`, `frontend/dist`, logs, nem amostras com dados pessoais (limpar
+- Nunca commitar `*.db`, `data/` (inclui `data/chrome-profile/`), `.venv`, `node_modules`, `frontend/dist`, logs, nem amostras com dados pessoais (limpar
   antes de salvar em `tests/samples/`).
 - Mensagem curta, no imperativo, em PT-BR: `adiciona filtro de exclusões por título`.
 - Sem `--no-verify` nem contorno de assinatura.
@@ -85,7 +86,7 @@ depois a correção.
 
 - [ ] Teste escrito antes e passando.
 - [ ] `pytest` verde no backend e `npm test` + `tsc --noEmit` verdes no frontend, quando tocados (exceto os
-      casos "sem teste" do §1); `integration` não é rodado por agente.
+      casos "sem teste" do §1); `integration` não é rodado por agente (exceto a verificação do Google, `AI_GUIDELINES.md` §5).
 - [ ] Funções ≤ 40 linhas, arquivos ≤ 600, docstring nas novas, sem código morto.
 - [ ] Nada hardcoded; config no lugar certo.
 - [ ] Nenhuma tentativa de contornar bloqueio; falhas de fonte geram alerta.

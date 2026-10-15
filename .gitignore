@@ -7,6 +7,5 @@ __pycache__/
 data/
 backups/
 logs/
-chrome-profile/
 node_modules/
 frontend/dist/

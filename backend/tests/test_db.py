@@ -3,7 +3,7 @@ import sqlite3
 import pytest
 
 from backend.app import db
-from backend.app.db import connect, init_db
+from backend.app.db import init_db
 from backend.app.errors import Conflict
 from backend.app.sources.types import Job
 
@@ -19,8 +19,8 @@ def test_init_db_cria_tabelas_e_semeia_palavra_chave_padrao(conn):
     assert termos == ["Engenheiro Mecânico"]
 
 
-def test_init_db_nao_semeia_de_novo_se_a_tabela_tem_dados(settings):
-    connection = connect(settings.geral.db_path)
+def test_init_db_nao_semeia_de_novo_se_a_tabela_tem_dados(settings, abrir_conexao):
+    connection = abrir_conexao(settings.geral.db_path)
     init_db(connection, settings)
     connection.execute("DELETE FROM keywords")
     connection.execute(
@@ -31,8 +31,8 @@ def test_init_db_nao_semeia_de_novo_se_a_tabela_tem_dados(settings):
     assert connection.execute("SELECT COUNT(*) FROM keywords").fetchone()[0] == 1
 
 
-def test_init_db_nao_semeia_se_usuario_apagou_tudo_depois_do_primeiro_uso(settings):
-    connection = connect(settings.geral.db_path)
+def test_init_db_nao_semeia_se_usuario_apagou_tudo_depois_do_primeiro_uso(settings, abrir_conexao):
+    connection = abrir_conexao(settings.geral.db_path)
     init_db(connection, settings)
     connection.execute("DELETE FROM keywords")
     connection.commit()
@@ -69,7 +69,7 @@ def test_vaga_grava_localidade_e_data_de_publicacao(conn):
     assert linhas == {"1": ("Campinas, São Paulo", "2026-10-08T11:04:27.057Z"), "2": ("", None)}
 
 
-def test_migracao_3_preserva_vagas_antigas_com_localidade_vazia_e_sem_data(settings):
+def test_migracao_3_preserva_vagas_antigas_com_localidade_vazia_e_sem_data(settings, abrir_conexao):
     arquivo = settings.geral.db_path
     arquivo.parent.mkdir(parents=True, exist_ok=True)
     antigo = sqlite3.connect(arquivo)
@@ -83,13 +83,13 @@ def test_migracao_3_preserva_vagas_antigas_com_localidade_vazia_e_sem_data(setti
     )
     antigo.commit()
     antigo.close()
-    connection = connect(arquivo)
+    connection = abrir_conexao(arquivo)
     init_db(connection, settings)
     linha = connection.execute("SELECT localidade, publicada_em, titulo FROM jobs").fetchone()
     assert (linha["titulo"], linha["localidade"], linha["publicada_em"]) == ("Antiga", "", None)
 
 
-def test_migracao_5_deixa_a_vaga_sem_execucao_quando_a_execucao_e_apagada_e_preserva_as_vagas(settings):
+def test_migracao_5_deixa_a_vaga_sem_execucao_quando_a_execucao_e_apagada_e_preserva_as_vagas(settings, abrir_conexao):
     arquivo = settings.geral.db_path
     arquivo.parent.mkdir(parents=True, exist_ok=True)
     antigo = sqlite3.connect(arquivo)
@@ -103,7 +103,7 @@ def test_migracao_5_deixa_a_vaga_sem_execucao_quando_a_execucao_e_apagada_e_pres
     )
     antigo.commit()
     antigo.close()
-    connection = connect(arquivo)
+    connection = abrir_conexao(arquivo)
     init_db(connection, settings)
     linha = connection.execute("SELECT titulo, visto, run_id FROM jobs").fetchone()
     assert (linha["titulo"], linha["visto"], linha["run_id"]) == ("Antiga", 1, 1)
@@ -127,7 +127,7 @@ def test_abrir_o_app_encerra_execucao_que_ficou_pendurada(conn):
     assert (fonte["status"], fonte["motivo"]) == ("falha", "interrompida")
 
 
-def test_esquema_antigo_gera_copia_do_banco_antes_de_migrar(settings):
+def test_esquema_antigo_gera_copia_do_banco_antes_de_migrar(settings, abrir_conexao):
     arquivo = settings.geral.db_path
     arquivo.parent.mkdir(parents=True, exist_ok=True)
     antigo = sqlite3.connect(arquivo)
@@ -135,16 +135,16 @@ def test_esquema_antigo_gera_copia_do_banco_antes_de_migrar(settings):
     antigo.execute("INSERT INTO schema_version VALUES (0)")
     antigo.commit()
     antigo.close()
-    connection = connect(arquivo)
+    connection = abrir_conexao(arquivo)
     init_db(connection, settings)
     assert list(settings.geral.backup_dir.glob("*.db"))
 
 
-def test_conexao_pode_ser_usada_em_outra_thread(settings):
+def test_conexao_pode_ser_usada_em_outra_thread(settings, abrir_conexao):
     """O FastAPI abre a conexão (dependência) e roda a rota em threads diferentes do pool."""
     import threading
 
-    connection = connect(settings.geral.db_path)
+    connection = abrir_conexao(settings.geral.db_path)
     erros = []
 
     def usar():

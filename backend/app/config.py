@@ -62,6 +62,8 @@ class Navegador:
     timeout_s: int
     probe_timeout_s: float
     chrome_paths: list[str]
+    abas_paralelas: bool
+    espera_verificacao_s: int
 
 
 @dataclass(frozen=True)
@@ -88,7 +90,7 @@ class SearchSite:
 class Google:
     base_url: str
     page_size: int
-    consultas: list[str]
+    modalidade_termos: dict[str, list[str]]
 
 
 @dataclass(frozen=True)
@@ -190,9 +192,14 @@ def validate(settings: Settings) -> None:
     for name, value in non_negatives.items():
         if value < 0:
             raise ConfigError(f"Config inválida: {name}={value} (esperado >= 0)")
-    consultas = settings.google.consultas
-    if not isinstance(consultas, list) or any(not isinstance(item, str) or not item.strip() for item in consultas):
-        raise ConfigError(f"Config inválida: google.consultas={consultas!r} (esperado lista de textos não vazios)")
+    termos = settings.google.modalidade_termos
+    if not isinstance(termos, dict) or set(termos) != set(MODALIDADES) or any(
+        not isinstance(lista, list) or not lista or any(not isinstance(t, str) or not t.strip() for t in lista)
+        for lista in termos.values()
+    ):
+        raise ConfigError(
+            f"Config inválida: google.modalidade_termos={termos!r} (esperado {MODALIDADES}, cada uma com lista não vazia de textos)"
+        )
     versionamento = settings.versionamento
     for name in ("falhas_consecutivas", "max_idade_dias"):
         if getattr(versionamento, name) <= 0:

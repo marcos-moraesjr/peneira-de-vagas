@@ -46,6 +46,19 @@ def test_put_grava_no_arquivo_e_vale_na_hora(settings, arquivo):
     assert "# pausa ao rolar a lista" in texto
 
 
+def test_abas_paralelas_e_editavel_e_grava_so_o_valor(settings, arquivo):
+    with _client(settings, arquivo) as client:
+        novo = client.get("/api/config").json()
+        atual = novo["navegador"]["abas_paralelas"]
+        assert novo["navegador"] == {"abas_paralelas": atual}
+        novo["navegador"]["abas_paralelas"] = not atual
+        resposta = client.put("/api/config", json=novo)
+        assert resposta.status_code == 200
+        assert client.get("/api/config").json()["navegador"] == {"abas_paralelas": not atual}
+    texto = arquivo.read_text(encoding="utf-8")
+    assert f"abas_paralelas = {str(not atual).lower()}" in texto and "# true: uma aba por fonte" in texto
+
+
 def test_put_invalido_devolve_422_e_nao_altera_nada(settings, arquivo):
     original = arquivo.read_text(encoding="utf-8")
     with _client(settings, arquivo) as client:

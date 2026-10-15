@@ -5,7 +5,7 @@ as palavras-chave no front end (padrão de desenvolvimento: **Engenheiro Mecâni
 agora**, e a API consulta as quatro fontes, filtra, remove duplicadas e mostra as vagas novas na tela.
 
 - LinkedIn, Indeed e Google: navegador Chrome real e dedicado, controlado via CDP (sem disfarce de automação).
-- Google: roda as consultas booleanas de `[google] consultas` (`backend/config.toml`), por exemplo `site:lever.co OR site:greenhouse.io intitle:(...)`.
+- Google: busca as suas palavras-chave, localidades e modalidade, sem restringir o site (ex.: `"engenheiro mecânico" "Campinas, SP"`).
 - Gupy: API JSON do próprio portal.
 - Front end: React + TypeScript. API: FastAPI. Banco: SQLite.
 
@@ -52,7 +52,7 @@ npm install
 
 ## Chrome dedicado (LinkedIn e Indeed)
 
-Usa um perfil próprio (`chrome-profile/`), nunca o seu pessoal; a porta de depuração fica só em `localhost`.
+Usa um perfil próprio (`data/chrome-profile/`), nunca o seu pessoal; a porta de depuração fica só em `localhost`.
 
 **Pelo app (recomendado):** na aba Vagas, clique em **Abrir Chrome dedicado**. O indicador muda para "Chrome
 dedicado aberto" quando ele estiver pronto. Se o Chrome não for achado, ajuste `chrome_paths` em
@@ -121,7 +121,7 @@ manualmente, nunca em rotina.
 
 ## Dados e privacidade
 
-Tudo fica na sua máquina: banco em `data/jobscanner.db`, perfil do Chrome em `chrome-profile/`, logs em
+Tudo fica na sua máquina: banco em `data/jobscanner.db`, perfil do Chrome em `data/chrome-profile/`, logs em
 `logs/` (nenhum é versionado). A única comunicação externa são as requisições às três fontes de vagas.
 
 ## Quando um scanner quebra

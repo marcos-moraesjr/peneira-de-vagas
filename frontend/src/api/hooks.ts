@@ -89,7 +89,7 @@ export function useClearRuns() {
   });
 }
 
-export type JobFilters = { visto?: boolean; fonte?: string; q?: string; ordenar?: string; direcao?: "asc" | "desc" };
+export type JobFilters = { visto?: boolean; fonte?: string; q?: string; ordenar?: string; direcao?: "asc" | "desc"; maxDias?: number };
 
 export function useJobs(filters: JobFilters, pages: number) {
   const pageSize = useConfig().data?.api.jobs_page_size;
@@ -97,6 +97,7 @@ export function useJobs(filters: JobFilters, pages: number) {
   if (filters.visto !== undefined) params.set("visto", String(filters.visto));
   if (filters.fonte) params.set("fonte", filters.fonte);
   if (filters.q) params.set("q", filters.q);
+  if (filters.maxDias !== undefined) params.set("max_dias", String(filters.maxDias));
   if (filters.ordenar) params.set("ordenar", filters.ordenar);
   if (filters.ordenar && filters.direcao) params.set("direcao", filters.direcao);
   if (pageSize) params.set("limit", String(pageSize * pages));
@@ -119,7 +120,7 @@ export function useSetSeen() {
 export function useMarkAllSeen() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (filters: { fonte?: string; q?: string }) =>
+    mutationFn: (filters: { fonte?: string; q?: string; max_dias?: number }) =>
       apiSend<{ atualizadas: number }>("POST", "/api/jobs/mark-seen", filters),
     onSuccess: () => client.invalidateQueries({ queryKey: ["jobs"] }),
   });
@@ -170,5 +171,24 @@ export function useSaveConfig() {
   return useMutation({
     mutationFn: (config: Config) => apiSend<Config>("PUT", "/api/config", config),
     onSuccess: (config) => client.setQueryData(["config"], config),
+  });
+}
+
+/** Fontes esperando o usuário concluir uma verificação à mão; só consulta (em polling) durante uma execução. */
+export function useVerification(enabled: boolean) {
+  const pollMs = useConfig().data?.api.poll_interval_ms;
+  return useQuery({
+    queryKey: ["verificacao"],
+    queryFn: () => apiGet<{ fontes: string[] }>("/api/verificacao"),
+    enabled: enabled && pollMs !== undefined,
+    refetchInterval: pollMs ?? false,
+  });
+}
+
+export function useConfirmVerification() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (fonte: string) => apiSend<void>("POST", `/api/verificacao/${fonte}/confirmar`),
+    onSuccess: () => client.invalidateQueries({ queryKey: ["verificacao"] }),
   });
 }

@@ -320,6 +320,22 @@
               ],
               "title": "Direcao"
             }
+          },
+          {
+            "name": "max_dias",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Max Dias"
+            }
           }
         ],
         "responses": {
@@ -852,6 +868,56 @@
           }
         }
       }
+    },
+    "/api/verificacao": {
+      "get": {
+        "summary": "Waiting",
+        "operationId": "waiting_api_verificacao_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerificationOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/verificacao/{fonte}/confirmar": {
+      "post": {
+        "summary": "Confirm",
+        "operationId": "confirm_api_verificacao__fonte__confirmar_post",
+        "parameters": [
+          {
+            "name": "fonte",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Fonte"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -980,6 +1046,19 @@
         ],
         "title": "ConfigLimites"
       },
+      "ConfigNavegador": {
+        "properties": {
+          "abas_paralelas": {
+            "type": "boolean",
+            "title": "Abas Paralelas"
+          }
+        },
+        "type": "object",
+        "required": [
+          "abas_paralelas"
+        ],
+        "title": "ConfigNavegador"
+      },
       "ConfigOut": {
         "properties": {
           "busca": {
@@ -994,6 +1073,9 @@
           "ritmo": {
             "$ref": "#/components/schemas/ConfigRitmo"
           },
+          "navegador": {
+            "$ref": "#/components/schemas/ConfigNavegador"
+          },
           "api": {
             "$ref": "#/components/schemas/ConfigApi"
           }
@@ -1004,6 +1086,7 @@
           "filtro",
           "limites",
           "ritmo",
+          "navegador",
           "api"
         ],
         "title": "ConfigOut"
@@ -1306,6 +1389,17 @@
               }
             ],
             "title": "Q"
+          },
+          "max_dias": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Dias"
           }
         },
         "type": "object",
@@ -1599,6 +1693,22 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "VerificationOut": {
+        "properties": {
+          "fontes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Fontes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "fontes"
+        ],
+        "title": "VerificationOut"
       }
     }
   }

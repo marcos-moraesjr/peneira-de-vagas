@@ -165,7 +165,7 @@ então o perfil dedicado é obrigatório. Crie `iniciar_chrome.bat`:
 ```bat
 "C:\Program Files\Google\Chrome\Application\chrome.exe" ^
   --remote-debugging-port=9222 ^
-  --user-data-dir=C:\jobscanner\chrome-profile
+  --user-data-dir=C:\jobscanner\data\chrome-profile
 ```
 
 Passos únicos, **manuais**, nesse Chrome:
@@ -743,7 +743,7 @@ Valores de referência de **14/10/2026**; mudam com o tempo.
 - **Janela de tempo é a deduplicação.** A execução das 8h captura a noite sem lógica especial, e uma execução perdida é compensada na seguinte. "Anunciada novamente" no LinkedIn não é vaga nova; o SQLite decide.
 - **Baseline na primeira execução** evita uma enxurrada de notificações com vagas antigas (a Gupy devolveria 20, de 2022 a 2026).
 - **Filtro restritivo:** só 2 de 15 títulos do Indeed continham "mecânic". Comece com título **ou** corpo e meça os falsos positivos e negativos antes de apertar.
-- **Conta e dados:** nunca versione `.env`, `jobscanner.db`, `jobscanner.log` nem `chrome-profile/`.
+- **Conta e dados:** nunca versione `.env`, `jobscanner.db`, `jobscanner.log` nem `data/chrome-profile/`.
 
 ## 9. Pendências de decisão
 

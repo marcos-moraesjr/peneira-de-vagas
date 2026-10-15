@@ -30,7 +30,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-5xl items-center gap-6 px-4 py-3">
+        <div className="mx-auto flex max-w-7xl items-center gap-6 px-4 py-3">
           <h1 className="text-lg font-bold">JobScanner</h1>
           <nav role="tablist" className="flex gap-1">
             {TABS.map((item) => (
@@ -51,7 +51,7 @@ export default function App() {
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-5xl px-4 py-6">
+      <main className="mx-auto max-w-7xl px-4 py-6">
         {tab === "vagas" && <VagasPage />}
         {tab === "execucoes" && <ExecucoesPage />}
         {tab === "config" && <ConfigPage />}

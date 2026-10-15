@@ -1,4 +1,5 @@
 """Partes puras das fontes de navegador: URLs, detecção de bloqueio e mapeamento de vagas."""
+from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
@@ -6,6 +7,7 @@ import pytest
 from backend.app.sources.google import GoogleSite
 from backend.app.sources.indeed import IndeedSite
 from backend.app.sources.linkedin import LinkedInSite
+from backend.app.sources.relative_date import parse_relative_date
 
 
 def with_busca(settings, **changes):
@@ -133,12 +135,31 @@ def test_somente_o_linkedin_le_cards_de_forma_incremental(settings):
 
 # ---------- Google (busca booleana) ----------
 
-def test_google_url_traz_consulta_booleana_inteira_janela_em_dias_e_pagina(settings):
-    consulta = 'site:lever.co OR site:greenhouse.io intitle:(".net" OR "developer") -"US only" -india'
-    url = GoogleSite(settings).search_url(consulta, start=10)
-    assert url.startswith("https://www.google.com/search?")
-    assert parse_qs(urlsplit(url).query) == {"q": [consulta], "tbs": ["qdr:d"], "start": ["10"]}
+def google_q(settings, termo, localidade=""):
+    return parse_qs(urlsplit(GoogleSite(settings).search_url(termo, 0, localidade)).query)["q"][0]
 
+
+def test_google_url_traz_a_consulta_montada_janela_em_dias_e_pagina(settings):
+    url = GoogleSite(settings).search_url("Engenheiro Mecânico", start=10)
+    assert url.startswith("https://www.google.com/search?")
+    assert parse_qs(urlsplit(url).query) == {
+        "q": ['"Engenheiro Mecânico"'],
+        "tbs": ["qdr:d"],
+        "start": ["10"],
+    }
+
+
+def test_google_consulta_inclui_a_localidade_entre_aspas(settings):
+    assert google_q(settings, "x", "Campinas, SP").endswith('"x" "Campinas, SP"')
+
+
+def test_google_consulta_inclui_os_termos_das_modalidades_escolhidas(settings):
+    consulta = google_q(with_busca(settings, modalidade=["remoto", "hibrido"]), "x")
+    assert consulta.endswith('"x" ("remote" OR "remoto" OR "hybrid" OR "híbrido")')
+
+
+def test_google_consulta_remove_aspas_do_termo(settings):
+    assert google_q(settings, 'dev "senior"').endswith('"dev senior"')
 
 def test_google_janela_em_horas_vira_dias_arredondando_para_cima(settings):
     query = parse_qs(urlsplit(GoogleSite(with_busca(settings, janela_horas=30)).search_url("x", 0)).query)
@@ -192,5 +213,48 @@ def test_google_resultado_sem_link_valido_ou_titulo_e_ignorado(settings, raw):
     assert GoogleSite(settings).to_job(raw) is None
 
 
-def test_google_ignora_a_localidade_e_a_consulta_vai_inteira(settings):
-    assert GoogleSite(settings).search_url("q", 0, "Brasil") == GoogleSite(settings).search_url("q", 0)
+# ---------- LinkedIn: data de publicação relativa do detalhe ----------
+
+AGORA = datetime(2026, 10, 14, 12, 0, tzinfo=timezone.utc)
+
+
+@pytest.mark.parametrize(
+    "texto,esperado",
+    [
+        ("Santana, São Paulo, Brasil · Anunciada novamente há 8 horas · 95 candidaturas", "2026-10-14T04:00:00Z"),
+        ("Brasil · Há 3 dias · Mais de 100 candidaturas", "2026-10-11T12:00:00Z"),
+        ("Brasil · Publicada há 1 semana", "2026-10-07T12:00:00Z"),
+        ("Brasil · há 2 meses", "2026-08-15T12:00:00Z"),
+        ("Brasil · há 45 minutos", "2026-10-14T11:15:00Z"),
+        ("Brazil · Reposted 5 days ago · 20 applicants", "2026-10-09T12:00:00Z"),
+    ],
+)
+def test_linkedin_converte_data_relativa_em_iso(texto, esperado):
+    assert parse_relative_date(texto, AGORA) == esperado
+
+
+def test_linkedin_sem_data_relativa_devolve_none():
+    assert parse_relative_date("Brasil · 95 candidaturas", AGORA) is None
+    assert parse_relative_date("", AGORA) is None
+
+
+# ---------- Indeed: data de publicação no texto do detalhe ----------
+
+@pytest.mark.parametrize(
+    "texto,esperado",
+    [
+        ("Engenheiro Mecânico\nACME\nPublicada há 3 dias\nDescrição…", "2026-10-11T12:00:00Z"),
+        ("Posted 5 days ago · Active 2 days ago", "2026-10-09T12:00:00Z"),
+        ("Publicada hoje", "2026-10-14T12:00:00Z"),
+        ("Just posted", "2026-10-14T12:00:00Z"),
+        ("Publicada há mais de 30 dias", None),
+        ("Vaga sem data. Ativa há 2 dias", None),
+        ("", None),
+    ],
+)
+def test_indeed_converte_a_data_publicada_do_detalhe(settings, texto, esperado):
+    assert IndeedSite(settings).parse_published(texto, AGORA) == esperado
+
+
+def test_indeed_le_a_data_do_corpo_da_pagina_de_detalhe(settings):
+    assert IndeedSite(settings).published_selectors == ["body"]

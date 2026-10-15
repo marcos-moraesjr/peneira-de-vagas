@@ -1,5 +1,5 @@
-"""Adaptador do Google: executa consultas booleanas completas (`[google] consultas`) que apontam para páginas de
-vagas de ATS (lever, greenhouse…). O seletor do JS de extração NÃO foi observado no DOM real (ver SCANNERS.md);
+"""Adaptador do Google: monta a consulta a partir das palavras-chave, localidades e modalidade da tela, sem restringir o site.
+O seletor do JS de extração NÃO foi observado no DOM real (ver SCANNERS.md);
 frágil. CAPTCHA ("tráfego incomum"), consentimento e login são detectados e tratados como falha da fonte; nunca
 contornados.
 
@@ -36,6 +36,10 @@ EXTRACT_JS = """() => {
 }"""
 
 
+def _quoted(text: str) -> str:
+    return '"' + " ".join(text.replace('"', " ").split()) + '"'
+
+
 def _canonical(href: str) -> str | None:
     """Link da vaga sem rastreio: desembrulha `/url?q=`, aceita só http(s) e recusa páginas do próprio Google."""
     parts = urlsplit(href)
@@ -62,8 +66,19 @@ class GoogleSite:
 
     def search_url(self, termo: str, start: int, localidade: str = "") -> str:
         days = math.ceil(self._settings.busca.janela_horas / HOURS_PER_DAY)
-        params = {"q": termo, "tbs": "qdr:d" if days == 1 else f"qdr:d{days}", "start": start}
+        params = {"q": self._query(termo, localidade), "tbs": "qdr:d" if days == 1 else f"qdr:d{days}", "start": start}
         return f"{self._settings.google.base_url}?{urlencode(params)}"
+
+    def _query(self, termo: str, localidade: str) -> str:
+        """`"termo" ["localidade"] [("mod1" OR "mod2")]`: tudo vem da config e da tela, sem restrição de site."""
+        google = self._settings.google
+        parts = [_quoted(termo)]
+        if localidade:
+            parts.append(_quoted(localidade))
+        words = [w for name in self._settings.busca.modalidade for w in google.modalidade_termos[name]]
+        if words:
+            parts.append("(" + " OR ".join(_quoted(w) for w in words) + ")")
+        return " ".join(parts)
 
     def classify(self, url: str, title: str, text: str) -> str | None:
         parts = urlsplit(url)
@@ -85,16 +100,8 @@ class GoogleSite:
 
 
 class GoogleSource(BrowserSource):
-    """A consulta booleana já é o filtro: lê `[google] consultas` (não as palavras-chave do painel), não abre a
-    página de cada vaga e pede ao serviço de execução que não reaplique o filtro local."""
-
-    local_filter = False
-
-    def search(self, termos: list[str]) -> list[Job]:
-        return super().search(self._settings.google.consultas)
-
-    def _localidades(self) -> list[str]:
-        return [""]  # a localidade, se houver, já está escrita na consulta booleana
+    """Uma consulta por palavra-chave e localidade do painel; não abre a página de cada vaga (o trecho do
+    resultado é o que o filtro local avalia)."""
 
     def enrich(self, jobs: list[Job]) -> list[Job]:
         return jobs

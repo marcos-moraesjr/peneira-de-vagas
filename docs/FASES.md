@@ -20,6 +20,8 @@ Extra pedido pelo usuário: **conjuntos de palavras-chave** (esquema v4: tabela 
 
 Extra pedido pelo usuário depois da Fase 4: **versionamento dos scanners** (`backend/scanners.toml`, esquema v2 do banco, `GET /api/scanners`, aviso "refazer" na tela e no log; ver `SCANNERS.md`).
 
+Extra pedido pelo usuário: **abas em paralelo** (`[navegador] abas_paralelas`, padrão `false`; uma aba por plataforma, todas ao mesmo tempo; ver `LESSONS.md`).
+
 Desvios registrados: o `README` e a API usam a porta **8100** (a 8000 estava em uso pelo FinApp); `Python 3.14`
 no ambiente de desenvolvimento; Tailwind 4.1.11 no lugar da 4.0.0 (falha de build); `BackgroundTasks` não foi
 usado (apenas `threading`); a Gupy não recebe filtro de localidade/recência nesta versão; extra pedido pelo usuário depois da Fase 4: fonte **Google** (consultas booleanas em `[google] consultas`, scanner 0.1.0 com seletores não observados, sem filtro local).

@@ -36,7 +36,7 @@ def test_cdp_fora_da_maquina_e_recusado_na_config():
 
 
 def test_config_traz_perfil_dedicado_e_caminhos_do_chrome(settings):
-    assert settings.geral.chrome_profile_dir.name == "chrome-profile"
+    assert settings.geral.chrome_profile_dir.parts[-2:] == ("data", "chrome-profile")
     assert settings.navegador.chrome_paths
 
 

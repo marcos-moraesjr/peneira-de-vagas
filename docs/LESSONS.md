@@ -76,3 +76,18 @@ Crie conforme a necessidade; sugestão inicial:
 - **Impacto**: histórico impossível de limpar enquanto as vagas existissem (6 execuções no caso real).
 - **Correção**: esquema v5 (`jobs.run_id` anulável, `ON DELETE SET NULL`, cópia do `.db` antes da migração); a limpeza apaga todas as execuções e as vagas ficam sem execução de origem. Regra anterior registrada no ARCHITECTURE.
 - **Risco futuro**: vaga com `run_id` nulo perde o critério de ordenação por execução (`run_id DESC`); a ordem padrão cai para pontos e id.
+
+### Regra alterada: bloqueio espera o usuário (2026-10-14)
+
+- **Antes:** CAPTCHA/Cloudflare/login encerravam a fonte na hora (`SourceBlocked`) e a verificação só podia ser feita para a execução seguinte, recomeçando a busca.
+- **Depois:** a fonte pausa com a aba aberta; o botão **Já concluí a verificação** (`POST /api/verificacao/{fonte}/confirmar`) a retoma na página que bloqueou. Prazo `[navegador] espera_verificacao_s`; esgotado, falha como antes. Decisão do usuário; a verificação continua sendo feita só à mão, sem resolver CAPTCHA nem disfarçar a automação.
+
+### Regra alterada: abas em paralelo (2026-10-14)
+
+- **Antes:** "sem abas em paralelo" — as fontes rodavam sempre em sequência.
+- **Depois:** com `[navegador] abas_paralelas = true` (padrão `false`) as fontes rodam ao mesmo tempo, uma aba por plataforma, cada uma com as próprias pausas. Decisão do usuário; continua proibido abrir várias abas na mesma plataforma e rodar mais de uma execução por vez. Ligar/desligar pela aba Configurações (grupo Navegador, `PUT /api/config`); vale a partir da próxima busca.
+
+### Remoção: consultas booleanas prontas do Google (2026-10-14)
+- **Como funcionava**: `[google] consultas` guardava consultas completas (`site:… intitle:(…) -"US only" …`), enviadas inteiras em `q`; `GoogleSource` ignorava as palavras-chave, localidades e modalidade da tela e tinha `local_filter = False` (vagas com `pontos = 0`, sem exclusões).
+- **Parâmetros removidos**: `[google] consultas`; `GoogleSource.local_filter`/`search`/`_localidades`. Entra `[google] modalidade_termos`. Uma versão intermediária restringia a `[google] sites` (lever, greenhouse…); removida a pedido do usuário, a consulta não restringe o site.
+- **Motivo**: o exemplo de desenvolvimento da config era buscado de verdade, ignorando o que o usuário cadastrou; além disso passava de 32 palavras (limite do Google) e usava `intitle:(…)`, que o Google não agrupa, e voltava "não encontrou nenhum documento". Hoje a consulta nasce da tela.

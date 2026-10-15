@@ -9,7 +9,7 @@ from ..schemas import ConfigOut
 from ..services import config_edit, runs
 
 router = APIRouter()
-EDITABLE = ("busca", "filtro", "limites", "ritmo", "api")
+EDITABLE = ("busca", "filtro", "limites", "ritmo", "navegador", "api")
 
 
 @router.get("/config", response_model=ConfigOut)

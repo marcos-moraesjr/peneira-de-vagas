@@ -53,6 +53,7 @@ export const CONFIG = {
   filtro: { peso_titulo: 3, peso_descricao: 1, min_score: 3, trecho_max_chars: 4000 },
   limites: { max_paginas_detalhe: 15, max_vagas_lista: 100 },
   ritmo: { pausa_min_s: 2, pausa_max_s: 6, rolagem_min_s: 0.25, rolagem_max_s: 0.7 },
+  navegador: { abas_paralelas: false },
   api: { jobs_page_size: 50, poll_interval_ms: 50 },
 };
 

@@ -1,13 +1,8 @@
-"""GoogleSource: usa as consultas da config (não as palavras-chave), não abre detalhe e confia na consulta."""
+"""GoogleSource: busca pelas palavras-chave e localidades do painel e não abre a página de detalhe."""
 from contextlib import contextmanager
 
 from backend.app.sources.google import GoogleSite, GoogleSource
 from backend.tests.test_browser_source import FakeNavigator
-
-
-def with_consultas(settings, consultas):
-    google = settings.google.__class__(**{**settings.google.__dict__, "consultas": consultas})
-    return settings.__class__(**{**settings.__dict__, "google": google})
 
 
 def resultado(n):
@@ -22,21 +17,18 @@ def make_source(settings, navigator):
     return GoogleSource(GoogleSite(settings), settings, session, pause=lambda: None, scroll_pause=lambda: None)
 
 
-def test_busca_as_consultas_da_config_ignorando_as_palavras_chave(settings):
-    settings = with_consultas(settings, ["site:lever.co c#", "site:ashbyhq.com .net"])
+def test_busca_uma_consulta_por_palavra_chave_do_painel(settings):
     site = GoogleSite(settings)
     nav = FakeNavigator(
         {
-            site.search_url("site:lever.co c#", 0): {"raw": [resultado(1)]},
-            site.search_url("site:lever.co c#", 10): {"raw": []},
-            site.search_url("site:ashbyhq.com .net", 0): {"raw": [resultado(2)]},
-            site.search_url("site:ashbyhq.com .net", 10): {"raw": []},
+            site.search_url("engenheiro mecânico", 0): {"raw": [resultado(1)]},
+            site.search_url("engenheiro mecânico", 10): {"raw": []},
+            site.search_url("projetista", 0): {"raw": [resultado(2)]},
+            site.search_url("projetista", 10): {"raw": []},
         }
     )
-    jobs = make_source(settings, nav).search(["engenheiro mecânico"])
+    jobs = make_source(settings, nav).search(["engenheiro mecânico", "projetista"])
     assert [job.id for job in jobs] == ["https://jobs.lever.co/acme/1", "https://jobs.lever.co/acme/2"]
-    assert not any("engenheiro" in url for url in nav.opened)
-
 
 def test_nao_abre_pagina_de_detalhe(settings):
     nav = FakeNavigator({})
@@ -45,14 +37,22 @@ def test_nao_abre_pagina_de_detalhe(settings):
     assert nav.opened == []
 
 
-def test_confia_na_consulta_e_nao_aplica_o_filtro_local(settings):
-    assert make_source(settings, FakeNavigator({})).local_filter is False
+def test_aplica_o_filtro_local_como_as_demais_fontes(settings):
+    assert getattr(make_source(settings, FakeNavigator({})), "local_filter", True) is True
 
 
-def test_localidades_nao_multiplicam_as_consultas_do_google(settings):
+def test_uma_consulta_por_localidade_da_tela(settings):
     busca = settings.busca.__class__(**{**settings.busca.__dict__, "localidades": ["SP", "MG"]})
-    settings = with_consultas(settings.__class__(**{**settings.__dict__, "busca": busca}), ["site:lever.co"])
+    settings = settings.__class__(**{**settings.__dict__, "busca": busca})
     site = GoogleSite(settings)
-    nav = FakeNavigator({site.search_url("site:lever.co", 0): {"raw": [resultado(1)]}})
-    make_source(settings, nav).search(["x"])
-    assert [url for url in nav.opened if "start=0" in url] == [site.search_url("site:lever.co", 0)]
+    nav = FakeNavigator(
+        {
+            site.search_url("x", 0, "SP"): {"raw": [resultado(1)]},
+            site.search_url("x", 10, "SP"): {"raw": []},
+            site.search_url("x", 0, "MG"): {"raw": [resultado(2)]},
+            site.search_url("x", 10, "MG"): {"raw": []},
+        }
+    )
+    jobs = make_source(settings, nav).search(["x"])
+    assert len(jobs) == 2
+    assert [url for url in nav.opened if "start=0" in url] == [site.search_url("x", 0, "SP"), site.search_url("x", 0, "MG")]

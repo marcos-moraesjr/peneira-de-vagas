@@ -1,4 +1,6 @@
+from dataclasses import replace
 import threading
+import time
 
 import pytest
 
@@ -83,7 +85,7 @@ def test_cancelar_durante_a_busca_descarta_a_fonte_atual_e_interrompe_as_seguint
 
     a, b = CancelaAoBuscar("a", jobs=[job("1", fonte="a")]), FakeSource("b", jobs=[job("2", fonte="b")])
     run_id = db.create_run(conn, ["a", "b"], NOW)
-    run_service.execute_run(settings, run_id, [a, b], now, cancel=cancel)
+    run_service.execute_run(com_abas_paralelas(settings, False), run_id, [a, b], now, cancel=cancel)
     fontes = sources_of(conn, run_id)
     assert [(f["status"], f["motivo"]) for f in fontes.values()] == [("falha", "interrompida")] * 2
     assert a.enrich_calls == [] and b.search_calls == []
@@ -190,3 +192,57 @@ def test_fonte_sem_filtro_local_grava_tudo_sem_exclusoes_nem_pontuacao(conn, set
     linha = sources_of(conn, run_id)["fake"]
     assert (linha["status"], linha["lidas"], linha["aprovadas"], linha["novas"]) == ("ok", 2, 2, 2)
     assert [r["pontos"] for r in conn.execute("SELECT pontos FROM jobs")] == [0, 0]
+
+
+def com_abas_paralelas(settings, valor):
+    return replace(settings, navegador=replace(settings.navegador, abas_paralelas=valor))
+
+
+class EncontroNaBusca(FakeSource):
+    """Só termina a busca se as outras fontes também estiverem buscando ao mesmo tempo."""
+
+    def __init__(self, name, barreira, **kwargs):
+        super().__init__(name, **kwargs)
+        self._barreira = barreira
+
+    def search(self, termos):
+        self._barreira.wait(timeout=5)
+        return super().search(termos)
+
+
+def test_abas_paralelas_buscam_todas_as_fontes_ao_mesmo_tempo(conn, settings):
+    barreira = threading.Barrier(2)
+    a = EncontroNaBusca("a", barreira, jobs=[job("1", fonte="a")])
+    b = EncontroNaBusca("b", barreira, jobs=[job("2", fonte="b")])
+    run_id = run_all(conn, com_abas_paralelas(settings, True), [a, b])
+    fontes = sources_of(conn, run_id)
+    assert [f["status"] for f in fontes.values()] == ["ok", "ok"]
+    assert conn.execute("SELECT status FROM runs").fetchone()[0] == "concluida"
+
+
+def test_abas_paralelas_isolam_a_falha_de_uma_fonte(conn, settings):
+    ruim = FakeSource("ruim", error=SourceBlocked("verificação", motivo="captcha"))
+    boa = FakeSource("boa", jobs=[job("1", fonte="boa")])
+    run_id = run_all(conn, com_abas_paralelas(settings, True), [ruim, boa])
+    fontes = sources_of(conn, run_id)
+    assert (fontes["ruim"]["status"], fontes["ruim"]["motivo"]) == ("falha", "captcha")
+    assert (fontes["boa"]["status"], fontes["boa"]["novas"]) == ("ok", 1)
+
+
+def test_sem_abas_paralelas_as_fontes_rodam_uma_por_vez(conn, settings):
+    ativas, pico, trava = [], [0], threading.Lock()
+
+    class Mede(FakeSource):
+        def search(self, termos):
+            with trava:
+                ativas.append(self.name)
+                pico[0] = max(pico[0], len(ativas))
+            time.sleep(0.05)
+            with trava:
+                ativas.remove(self.name)
+            return super().search(termos)
+
+    a, b = Mede("a", jobs=[job("1", fonte="a")]), Mede("b", jobs=[job("2", fonte="b")])
+    run_id = run_all(conn, com_abas_paralelas(settings, False), [a, b])
+    assert pico[0] == 1
+    assert [f["status"] for f in sources_of(conn, run_id).values()] == ["ok", "ok"]

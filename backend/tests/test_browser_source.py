@@ -1,11 +1,13 @@
 """Fluxo de BrowserSource com um navegador simulado (sem Chrome e sem rede)."""
 from contextlib import contextmanager
+from datetime import datetime, timezone
 
 import pytest
 
 from backend.app.sources.browser import BrowserSource
-from backend.app.sources.errors import SourceBlocked, SourceLayoutChanged, SourceUnavailable
+from backend.app.sources.errors import SourceBlocked, SourceInterrupted, SourceLayoutChanged, SourceUnavailable
 from backend.app.sources.types import Job
+from backend.app.sources.verification import VerificationGate
 
 
 class FakeSite:
@@ -65,6 +67,8 @@ class FakeNavigator:
         return self._current.get("raw", [])
 
     def first_text(self, selectors):
+        if selectors == ["#when"]:
+            return self._current.get("published", "")
         return self._current.get("detail", "")
 
 
@@ -266,3 +270,139 @@ def test_falha_ao_abrir_o_navegador_propaga_cdp_indisponivel(settings):
     with pytest.raises(SourceUnavailable) as erro:
         source.search(["x"])
     assert erro.value.motivo == "cdp_indisponivel"
+
+
+class FakeGate:
+    """Simula o usuário: ao esperar, 'conclui a verificação' trocando a página bloqueada pela real."""
+
+    def __init__(self, nav, url, liberada, confirma=True):
+        self.nav, self.url, self.liberada, self.confirma = nav, url, liberada, confirma
+        self.calls = []
+
+    def wait(self, fonte, timeout_s):
+        self.calls.append((fonte, timeout_s))
+        if self.confirma:
+            self.nav.pages[self.url] = self.liberada
+        return self.confirma
+
+    def check(self):
+        pass
+
+
+def make_source_with_gate(settings, nav, gate):
+    @contextmanager
+    def session():
+        yield nav
+
+    return BrowserSource(FakeSite(), settings, session, pause=lambda: None, scroll_pause=lambda: None, gate=gate)
+
+
+def test_bloqueio_com_confirmacao_retoma_a_busca_de_onde_parou(settings):
+    bloqueada = {"url": "https://site/login", "raw": []}
+    nav = FakeNavigator(
+        {
+            "https://site/?q=x&start=0": {"raw": [card(1), card(2)]},
+            "https://site/?q=x&start=2": bloqueada,
+            "https://site/?q=x&start=4": {"raw": []},
+        }
+    )
+    gate = FakeGate(nav, "https://site/?q=x&start=2", {"raw": [card(3)]})
+    source = make_source_with_gate(settings, nav, gate)
+    assert [j.id for j in source.search(["x"])] == ["1", "2", "3"]
+    assert nav.opened.count("https://site/?q=x&start=0") == 1  # não recomeçou da primeira página
+    assert nav.opened.count("https://site/?q=x&start=2") == 2  # reabriu só a página que bloqueou
+    assert gate.calls == [("fake", settings.navegador.espera_verificacao_s)]
+
+
+def test_bloqueio_sem_confirmacao_dentro_do_prazo_interrompe_a_fonte(settings):
+    nav = FakeNavigator({"https://site/?q=x&start=0": {"url": "https://site/login", "raw": []}})
+    gate = FakeGate(nav, "https://site/?q=x&start=0", {"raw": []}, confirma=False)
+    source = make_source_with_gate(settings, nav, gate)
+    with pytest.raises(SourceBlocked):
+        source.search(["x"])
+
+
+def test_bloqueio_que_continua_apos_a_confirmacao_volta_a_esperar(settings):
+    nav = FakeNavigator({"https://site/?q=x&start=0": {"url": "https://site/login", "raw": []}})
+    gate = FakeGate(nav, "https://site/?q=x&start=0", {"url": "https://site/login", "raw": []}, confirma=False)
+    respostas = iter([True, False])
+    gate.wait = lambda fonte, timeout_s: next(respostas)
+    source = make_source_with_gate(settings, nav, gate)
+    with pytest.raises(SourceBlocked):
+        source.search(["x"])
+    assert nav.opened.count("https://site/?q=x&start=0") == 2
+
+
+def test_bloqueio_no_detalhe_com_confirmacao_retoma_a_vaga(settings):
+    detalhe = "https://site/job/1"
+    nav = FakeNavigator({}, details={detalhe: {"url": "https://site/login", "detail": ""}})
+    gate = FakeGate(nav, detalhe, {"detail": "descrição completa"})
+    nav.details = nav.pages  # a página liberada vale também para o detalhe
+    nav.pages[detalhe] = {"url": "https://site/login"}
+    source = make_source_with_gate(settings, nav, gate)
+    job = Job("1", "Vaga 1", "ACME", detalhe, "resumo", "fake")
+    assert source.enrich([job])[0].trecho == "descrição completa"
+
+
+class FakeDatedSite(FakeSite):
+    published_selectors = ["#when"]
+
+    def parse_published(self, text, now):
+        return f"{now.date().isoformat()}|{text}" if text else None
+
+
+def test_enrich_le_a_data_de_publicacao_do_detalhe_quando_o_site_a_informa(settings):
+    link = "https://site/job/1"
+    nav = FakeNavigator({}, details={link: {"detail": "descrição", "published": "há 3 dias"}})
+
+    @contextmanager
+    def session():
+        yield nav
+
+    agora = datetime(2026, 10, 14, 12, 0, tzinfo=timezone.utc)
+    source = BrowserSource(
+        FakeDatedSite(), settings, session, pause=lambda: None, scroll_pause=lambda: None, clock=lambda: agora
+    )
+    job = Job("1", "Vaga 1", "ACME", link, "curto", "fake")
+    assert source.enrich([job])[0].publicada_em == "2026-10-14|há 3 dias"
+
+
+def test_enrich_sem_data_no_detalhe_mantem_publicada_em_vazia(settings):
+    link = "https://site/job/1"
+    nav = FakeNavigator({}, details={link: {"detail": "descrição"}})
+
+    @contextmanager
+    def session():
+        yield nav
+
+    source = BrowserSource(FakeDatedSite(), settings, session, pause=lambda: None, scroll_pause=lambda: None)
+    assert source.enrich([Job("1", "Vaga 1", "ACME", link, "curto", "fake")])[0].publicada_em is None
+
+
+def test_cancelar_durante_a_busca_para_antes_da_proxima_pagina(settings):
+    nav = FakeNavigator({"https://site/?q=x&start=0": {"raw": [card(1), card(2)]}})
+    gate = VerificationGate()
+
+    @contextmanager
+    def session():
+        yield nav
+
+    source = BrowserSource(FakeSite(), settings, session, pause=gate.cancel, scroll_pause=lambda: None, gate=gate)
+    with pytest.raises(SourceInterrupted):
+        source.search(["x"])
+    assert nav.opened == ["https://site/?q=x&start=0"]
+
+
+def test_cancelar_durante_o_detalhe_para_antes_da_proxima_vaga(settings):
+    nav = FakeNavigator({}, details={"https://site/job/1": {"detail": "d1"}, "https://site/job/2": {"detail": "d2"}})
+    gate = VerificationGate()
+
+    @contextmanager
+    def session():
+        yield nav
+
+    source = BrowserSource(FakeSite(), settings, session, pause=gate.cancel, scroll_pause=lambda: None, gate=gate)
+    jobs = [Job(str(n), f"Vaga {n}", "ACME", f"https://site/job/{n}", "r", "fake") for n in (1, 2)]
+    with pytest.raises(SourceInterrupted):
+        source.enrich(jobs)
+    assert nav.opened == ["https://site/job/1"]

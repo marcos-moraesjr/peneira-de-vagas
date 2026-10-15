@@ -30,6 +30,10 @@ class RunSourceOut(BaseModel):
     scanner_versao: str
 
 
+class VerificationOut(BaseModel):
+    fontes: list[str]
+
+
 class ScannerOut(BaseModel):
     fonte: str
     versao: str
@@ -79,6 +83,7 @@ class SeenIn(BaseModel):
 class MarkSeenIn(BaseModel):
     fonte: str | None = None
     q: str | None = None
+    max_dias: int | None = None
 
 
 class MarkSeenOut(BaseModel):
@@ -137,6 +142,10 @@ class ConfigRitmo(BaseModel):
     rolagem_max_s: float
 
 
+class ConfigNavegador(BaseModel):
+    abas_paralelas: bool
+
+
 class ConfigApi(BaseModel):
     jobs_page_size: int
     poll_interval_ms: int
@@ -147,6 +156,7 @@ class ConfigOut(BaseModel):
     filtro: ConfigFiltro
     limites: ConfigLimites
     ritmo: ConfigRitmo
+    navegador: ConfigNavegador
     api: ConfigApi
 
 

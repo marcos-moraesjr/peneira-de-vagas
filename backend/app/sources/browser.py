@@ -6,6 +6,7 @@ import time
 from collections.abc import Callable
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import replace
+from datetime import datetime, timezone
 from typing import Protocol
 
 from playwright.sync_api import Error as PlaywrightError
@@ -15,6 +16,7 @@ from playwright.sync_api import sync_playwright
 from ..config import Settings
 from .errors import SourceBlocked, SourceLayoutChanged, SourceUnavailable
 from .types import Job
+from .verification import VerificationGate
 
 SNAPSHOT_TEXT_CHARS = 3000
 
@@ -143,12 +145,16 @@ class BrowserSource:
         session: Callable[[], AbstractContextManager],
         pause: Callable[[], None],
         scroll_pause: Callable[[], None],
+        gate: VerificationGate | None = None,
+        clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
     ):
         self._site = site
         self._settings = settings
         self._session = session
         self._pause = pause
         self._scroll_pause = scroll_pause
+        self._gate = gate
+        self._clock = clock
         self.name = site.name
 
     def search(self, termos: list[str]) -> list[Job]:
@@ -170,12 +176,20 @@ class BrowserSource:
         enriched = []
         with self._session() as navigator:
             for job in jobs:
-                navigator.open(job.link)
-                self._pause()
-                self._check_block(navigator)
+                self._open_checked(navigator, job.link)
                 text = " ".join(navigator.first_text(self._site.detail_selectors).split())[:max_chars]
-                enriched.append(replace(job, trecho=text) if text else job)
+                enriched.append(self._with_detail(navigator, job, text))
         return enriched
+
+    def _with_detail(self, navigator: Navigator, job: Job, text: str) -> Job:
+        """Troca o trecho pela descrição e, se o site mostra a data no detalhe (LinkedIn), preenche `publicada_em`."""
+        changes = {"trecho": text} if text else {}
+        selectors = getattr(self._site, "published_selectors", [])
+        if selectors:
+            published = self._site.parse_published(navigator.first_text(selectors), self._clock())
+            if published:
+                changes["publicada_em"] = published
+        return replace(job, **changes) if changes else job
 
     def _localidades(self) -> list[str]:
         """Uma busca por localidade da config; sem nenhuma, uma única busca sem filtro de local ("")."""
@@ -185,9 +199,7 @@ class BrowserSource:
         limit = self._settings.limites.max_vagas_lista
         start = 0
         while len(found) < limit:
-            navigator.open(self._site.search_url(termo, start, localidade))
-            self._pause()
-            self._check_block(navigator)
+            self._open_checked(navigator, self._site.search_url(termo, start, localidade))
             raws = self._read_cards(navigator)
             if not raws:
                 self._check_layout(navigator, start)
@@ -202,6 +214,27 @@ class BrowserSource:
         if self._site.lazy_cards:
             return navigator.extract_progressive(self._site.extract_js, self._site.card_selector, self._scroll_pause)
         return navigator.extract(self._site.extract_js)
+
+    def _open_checked(self, navigator: Navigator, url: str) -> None:
+        """Abre a página; se bloqueada, espera o usuário concluir a verificação à mão e reabre **a mesma página**
+        (a busca segue de onde parou). Sem portão, sem confirmação ou com o prazo esgotado, a fonte para."""
+        self._check_cancelled()
+        navigator.open(url)
+        self._pause()
+        self._check_cancelled()
+        while True:
+            try:
+                self._check_block(navigator)
+                return
+            except SourceBlocked:
+                if self._gate is None or not self._gate.wait(self.name, self._settings.navegador.espera_verificacao_s):
+                    raise
+            navigator.open(url)
+            self._pause()
+
+    def _check_cancelled(self) -> None:
+        if self._gate is not None:
+            self._gate.check()
 
     def _check_block(self, navigator: Navigator) -> None:
         url, title, text = navigator.snapshot()

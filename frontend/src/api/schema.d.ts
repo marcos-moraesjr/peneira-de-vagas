@@ -317,6 +317,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/verificacao": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Waiting */
+        get: operations["waiting_api_verificacao_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/verificacao/{fonte}/confirmar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm */
+        post: operations["confirm_api_verificacao__fonte__confirmar_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -367,12 +401,18 @@ export interface components {
             /** Max Vagas Lista */
             max_vagas_lista: number;
         };
+        /** ConfigNavegador */
+        ConfigNavegador: {
+            /** Abas Paralelas */
+            abas_paralelas: boolean;
+        };
         /** ConfigOut */
         ConfigOut: {
             busca: components["schemas"]["ConfigBusca"];
             filtro: components["schemas"]["ConfigFiltro"];
             limites: components["schemas"]["ConfigLimites"];
             ritmo: components["schemas"]["ConfigRitmo"];
+            navegador: components["schemas"]["ConfigNavegador"];
             api: components["schemas"]["ConfigApi"];
         };
         /** ConfigRitmo */
@@ -482,6 +522,8 @@ export interface components {
             fonte?: string | null;
             /** Q */
             q?: string | null;
+            /** Max Dias */
+            max_dias?: number | null;
         };
         /** MarkSeenOut */
         MarkSeenOut: {
@@ -575,6 +617,11 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** VerificationOut */
+        VerificationOut: {
+            /** Fontes */
+            fontes: string[];
         };
     };
     responses: never;
@@ -761,6 +808,7 @@ export interface operations {
                 offset?: number;
                 ordenar?: string | null;
                 direcao?: string | null;
+                max_dias?: number | null;
             };
             header?: never;
             path?: never;
@@ -1212,6 +1260,55 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ConfigOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    waiting_api_verificacao_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VerificationOut"];
+                };
+            };
+        };
+    };
+    confirm_api_verificacao__fonte__confirmar_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fonte: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

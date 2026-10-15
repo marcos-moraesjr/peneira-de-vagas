@@ -56,6 +56,17 @@ describe("ConfigPage", () => {
     expect(screen.getByRole("button", { name: "Salvar" })).toBeDisabled();
   });
 
+  it("ativa a busca em paralelo por plataforma e envia navegador.abas_paralelas", async () => {
+    const user = userEvent.setup();
+    const { calls } = setup();
+    const opcao = await screen.findByRole("checkbox", { name: /buscar as plataformas ao mesmo tempo/i });
+    expect(opcao).not.toBeChecked();
+    await user.click(opcao);
+    await user.click(screen.getByRole("button", { name: "Salvar" }));
+    expect(await screen.findByText(/configuração salva/i)).toBeInTheDocument();
+    expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ ...CONFIG, navegador: { abas_paralelas: true } });
+  });
+
   it("mostra o erro do backend e mantém o que foi digitado", async () => {
     const user = userEvent.setup();
     setup({ status: 422, json: { detail: "Config inválida: pausa_min_s=9.0 (esperado <= pausa_max_s=6.0)" } });

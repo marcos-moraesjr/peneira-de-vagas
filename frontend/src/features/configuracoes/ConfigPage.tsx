@@ -9,7 +9,7 @@ type Field = {
   section: Section;
   key: string;
   label: string;
-  kind: "number" | "text" | "slider" | "modalidade" | "localidades";
+  kind: "number" | "text" | "slider" | "modalidade" | "localidades" | "checkbox";
   step?: string;
   dica?: string;
 };
@@ -125,6 +125,18 @@ const GROUPS: { titulo: string; fields: Field[] }[] = [
     ],
   },
   {
+    titulo: "Navegador",
+    fields: [
+      {
+        section: "navegador",
+        key: "abas_paralelas",
+        label: "Buscar as plataformas ao mesmo tempo",
+        kind: "checkbox",
+        dica: "Uma aba por plataforma, cada uma com as próprias pausas. Desligado: uma plataforma por vez.",
+      },
+    ],
+  },
+  {
     titulo: "Interface",
     fields: [
       {
@@ -178,7 +190,9 @@ function toConfig(draft: Draft): Config {
           ? raw
             ? raw.split(LOCALIDADE_SEP)
             : []
-          : field.kind === "text"
+          : field.kind === "checkbox"
+            ? raw === "true"
+            : field.kind === "text"
           ? raw
           : raw === ""
             ? null
@@ -307,6 +321,15 @@ function ConfigForm({ config }: { config: Config }) {
                     </div>
                     <span className="text-xs text-slate-500">Nenhuma marcada = todas as modalidades.</span>
                   </fieldset>
+                ) : field.kind === "checkbox" ? (
+                  <label className="flex items-center gap-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={draft[id(field)] === "true"}
+                      onChange={(e) => change(field, String(e.target.checked))}
+                    />
+                    {field.label}
+                  </label>
                 ) : field.kind === "slider" ? (
                   <>
                     <label htmlFor={id(field)} className="text-sm text-slate-700">

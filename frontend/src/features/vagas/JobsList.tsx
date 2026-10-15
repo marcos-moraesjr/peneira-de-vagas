@@ -13,31 +13,33 @@ type Props = {
   onSort: (column: SortColumn) => void;
 };
 
-const COLUMNS: { label: string; column: SortColumn }[] = [
-  { label: "Vaga", column: "titulo" },
-  { label: "Empresa", column: "empresa" },
-  { label: "Localidade", column: "localidade" },
-  { label: "Publicada", column: "publicada_em" },
-  { label: "Encontrada", column: "encontrada_em" },
-  { label: "Plataforma", column: "fonte" },
-  { label: "Pontos", column: "pontos" },
+// `width`: largura da coluna na tabela de layout fixo (soma 100%), para a tabela caber sem rolagem lateral.
+const COLUMNS: { label: string; column: SortColumn; width: string }[] = [
+  { label: "Vaga", column: "titulo", width: "w-[28%]" },
+  { label: "Empresa", column: "empresa", width: "w-[16%]" },
+  { label: "Localidade", column: "localidade", width: "w-[12%]" },
+  { label: "Publicada", column: "publicada_em", width: "w-[9%]" },
+  { label: "Encontrada", column: "encontrada_em", width: "w-[10%]" },
+  { label: "Plataforma", column: "fonte", width: "w-[9%]" },
+  { label: "Pontos", column: "pontos", width: "w-[6%]" },
 ];
-const cell = "px-3 py-2 align-middle";
+const ACTIONS_WIDTH = "w-[10%]";
+const cell = "px-3 py-2 align-middle break-words";
 
 export function JobsList({ jobs, onSeen, sort, onSort }: Props) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-      <table className="w-full text-left text-sm">
+    <div className="rounded-lg border border-slate-200 bg-white">
+      <table className="w-full table-fixed text-left text-sm">
         <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
           <tr>
-            {COLUMNS.map(({ label, column }) => {
+            {COLUMNS.map(({ label, column, width }) => {
               const active = sort?.column === column;
               return (
                 <th
                   key={column}
                   scope="col"
                   aria-sort={active ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}
-                  className="px-3 py-2 font-medium"
+                  className={`px-3 py-2 font-medium ${width}`}
                 >
                   <button type="button" onClick={() => onSort(column)} className="flex items-center gap-1 uppercase hover:text-slate-900">
                     {label}
@@ -48,7 +50,7 @@ export function JobsList({ jobs, onSeen, sort, onSort }: Props) {
                 </th>
               );
             })}
-            <th scope="col" className="px-3 py-2 font-medium">
+            <th scope="col" className={`px-3 py-2 font-medium ${ACTIONS_WIDTH}`}>
               Ações
             </th>
           </tr>
@@ -56,7 +58,7 @@ export function JobsList({ jobs, onSeen, sort, onSort }: Props) {
         <tbody className="divide-y divide-slate-200">
           {jobs.map((job) => (
             <tr key={job.id} className={job.visto ? "text-slate-500" : ""}>
-              <td className={`${cell} max-w-sm`}>
+              <td className={cell}>
                 <div className="flex items-center gap-2">
                   {job.visto ? (
                     <span className="w-2 shrink-0" />
@@ -68,7 +70,7 @@ export function JobsList({ jobs, onSeen, sort, onSort }: Props) {
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={() => !job.visto && onSeen(job, true)}
-                    className={`truncate hover:underline ${job.visto ? "" : "font-semibold text-slate-900"}`}
+                    className={`line-clamp-2 hover:underline ${job.visto ? "" : "font-semibold text-slate-900"}`}
                   >
                     {job.titulo}
                   </a>
@@ -83,7 +85,7 @@ export function JobsList({ jobs, onSeen, sort, onSort }: Props) {
               </td>
               <td className={cell}>{job.pontos}</td>
               <td className={cell}>
-                <button type="button" className={`${buttonSecondary} whitespace-nowrap`} onClick={() => onSeen(job, !job.visto)}>
+                <button type="button" className={`${buttonSecondary} w-full`} onClick={() => onSeen(job, !job.visto)}>
                   {job.visto ? "Marcar como nova" : "Marcar como vista"}
                 </button>
               </td>

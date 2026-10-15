@@ -8,6 +8,7 @@ import { KeywordsPanel } from "../../components/KeywordsPanel";
 import { buttonSecondary, inputClass } from "../../components/ui";
 import { sourceLabel } from "../../lib/failures";
 import { ChromeStatus } from "./ChromeStatus";
+import { VerificationPrompt } from "./VerificationPrompt";
 import { FailureBanner } from "./FailureBanner";
 import { ScannerBanner } from "./ScannerBanner";
 import { JobsList, type Sort, type SortColumn } from "./JobsList";
@@ -54,13 +55,15 @@ export function VagasPage() {
   const [seen, setSeen] = useState<SeenFilter>("novas");
   const [fonte, setFonte] = useState("");
   const [q, setQ] = useState("");
+  const [maxDias, setMaxDias] = useState("");
   const [pages, setPages] = useState(1);
   const [sort, setSort] = useState<Sort>(null);
 
+  const maxDiasValue = maxDias === "" ? undefined : Number(maxDias);
   const runs = useRuns();
   const latest = runs.data?.[0];
   const keywords = useKeywords("busca");
-  const jobs = useJobs({ visto: seen === "novas" ? false : undefined, fonte, q, ordenar: sort?.column, direcao: sort?.direction }, pages);
+  const jobs = useJobs({ visto: seen === "novas" ? false : undefined, fonte, q, ordenar: sort?.column, direcao: sort?.direction, maxDias: maxDiasValue }, pages);
   const startRun = useStartRun();
   const cancelRun = useCancelRun();
   const setSeenMutation = useSetSeen();
@@ -73,7 +76,7 @@ export function VagasPage() {
 
   function markAllSeen() {
     if (window.confirm("Marcar todas as vagas filtradas como vistas?")) {
-      markAll.mutate({ fonte: fonte || undefined, q: q || undefined });
+      markAll.mutate({ fonte: fonte || undefined, q: q || undefined, max_dias: maxDiasValue });
     }
   }
 
@@ -98,8 +101,9 @@ export function VagasPage() {
       {startRun.error && <ErrorBox message={startRun.error.message} />}
       {cancelRun.error && <ErrorBox message={cancelRun.error.message} />}
       {clearJobs.error && <ErrorBox message={clearJobs.error.message} />}
+      <VerificationPrompt running={latest?.status === "executando"} />
       <ChromeStatus />
-      <FailureBanner run={latest} />
+      <FailureBanner run={latest} onRestart={(fontes) => startRun.mutate(fontes)} restarting={startRun.isPending} />
       <ScannerBanner />
 
       <ConjuntosPanel />
@@ -136,6 +140,19 @@ export function VagasPage() {
               </option>
             ))}
           </select>
+        </label>
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          Publicadas há no máximo (dias)
+          <input
+            type="number"
+            min={1}
+            value={maxDias}
+            onChange={(event) => {
+              setMaxDias(event.target.value);
+              setPages(1);
+            }}
+            className={`${inputClass} w-20`}
+          />
         </label>
         <input
           aria-label="Buscar vagas"

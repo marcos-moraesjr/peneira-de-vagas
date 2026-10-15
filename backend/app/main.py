@@ -14,11 +14,12 @@ from . import db
 from .config import Settings, load_settings
 from .errors import Conflict, DomainError, NotFound
 from .routes import config as config_routes
-from .routes import browser, conjuntos, health, jobs, keywords, runs, scanners
+from .routes import browser, conjuntos, health, jobs, keywords, runs, scanners, verificacao
 from .services import chrome
 from .services.run_service import spawn_thread
 from .services.scanners import Manifest, load_manifest
 from .sources.registry import build_sources
+from .sources.verification import VerificationGate
 
 DEFAULT_CONFIG = Path(__file__).resolve().parents[1] / "config.toml"
 DEFAULT_MANIFEST = DEFAULT_CONFIG.parent / "scanners.toml"
@@ -73,9 +74,10 @@ def create_app(
 
     app = FastAPI(title="JobScanner", lifespan=lifespan)
     app.state.settings = settings
-    app.state.sources_factory = sources_factory or (lambda: build_sources(app.state.settings))
+    app.state.sources_factory = sources_factory or (lambda: build_sources(app.state.settings, app.state.gate))
     app.state.spawn = spawn or spawn_thread
     app.state.cancel = threading.Event()
+    app.state.gate = VerificationGate()
     app.state.now = now or utc_now
     app.state.config_path = config_path or DEFAULT_CONFIG
     app.state.manifest = manifest or load_manifest(DEFAULT_MANIFEST)
@@ -84,7 +86,7 @@ def create_app(
 
     for status_code, error in ((422, DomainError), (404, NotFound), (409, Conflict)):
         app.add_exception_handler(error, _handler(status_code))
-    for module in (health, runs, jobs, keywords, conjuntos, scanners, browser, config_routes):
+    for module in (health, runs, jobs, keywords, conjuntos, scanners, browser, config_routes, verificacao):
         app.include_router(module.router, prefix="/api")
 
     if (settings.geral.frontend_dist / "index.html").exists():

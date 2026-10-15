@@ -5,10 +5,13 @@ O card não traz data de publicação; o filtro de recência é só o `fromage` 
 mais a deduplicação. O trecho é o conjunto de itens <li> do card (tipo de vaga, salário, resumo).
 """
 import math
+import re
+from datetime import datetime
 from urllib.parse import urlencode, urlsplit
 
 from ..config import Settings
 from ..services.filters import normalize
+from .relative_date import parse_relative_date
 from .types import Job
 
 HOURS_PER_DAY = 24
@@ -41,6 +44,8 @@ class IndeedSite:
     card_selector = CARD_SELECTOR
     lazy_cards = False
     detail_selectors = ["#jobDescriptionText", ".jobsearch-JobComponent-description"]
+    # Seletor da data NÃO observado: lê o texto da página de detalhe e procura "Publicada há N dias" / "Posted N days ago".
+    published_selectors = ["body"]
 
     def __init__(self, settings: Settings):
         self._settings = settings
@@ -66,6 +71,14 @@ class IndeedSite:
         if any(marker in text_n for marker in CAPTCHA_TEXTS):
             return "captcha"
         return None
+
+    def parse_published(self, text: str, now: datetime) -> str | None:
+        """Só vale o texto de "Publicada…"/"Posted…" (o "Ativa há 2 dias" de vaga reativada não é publicação)."""
+        normalized = normalize(text)
+        if re.search(r"publicada hoje|just posted|posted today", normalized):
+            return now.strftime("%Y-%m-%dT%H:%M:%SZ")
+        found = re.search(r"(publicada|posted).{0,40}", normalized)
+        return parse_relative_date(found.group(0), now) if found else None
 
     def is_empty_page(self, text: str) -> bool:
         normalized = normalize(text)

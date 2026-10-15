@@ -1,8 +1,11 @@
+import threading
+
 import pytest
 from fastapi.testclient import TestClient
 
 from backend.app import db
 from backend.app.main import create_app
+from backend.app.sources.errors import SourceInterrupted
 from backend.app.sources.types import Job
 
 NOW = "2026-10-14T12:00:00+00:00"
@@ -379,3 +382,74 @@ def test_conjuntos_criar_ativar_e_remover(client):
     assert client.post("/api/conjuntos/999/ativar").status_code == 404
     assert client.post("/api/conjuntos", json={"nome": " "}).status_code == 422
     assert client.post("/api/conjuntos", json={"nome": "padrão"}).status_code == 422
+
+
+def test_verificacao_lista_as_fontes_esperando_o_usuario(client):
+    assert client.get("/api/verificacao").json() == {"fontes": []}
+    gate = client.app.state.gate
+    esperando = threading.Thread(target=lambda: gate.wait("indeed", 5))
+    esperando.start()
+    for _ in range(200):
+        if gate.waiting():
+            break
+        threading.Event().wait(0.01)
+    assert client.get("/api/verificacao").json() == {"fontes": ["indeed"]}
+    assert client.post("/api/verificacao/indeed/confirmar").status_code == 204
+    esperando.join(2)
+    assert client.get("/api/verificacao").json() == {"fontes": []}
+
+
+def test_confirmar_fonte_que_nao_espera_devolve_409(client):
+    resposta = client.post("/api/verificacao/indeed/confirmar")
+    assert resposta.status_code == 409
+    assert "indeed" in resposta.json()["detail"]
+
+
+def test_interromper_execucao_acorda_a_fonte_que_espera_verificacao(settings):
+    pendentes = []
+    with make_client(settings, [StubSource()], spawn=pendentes.append) as test_client:
+        gate = test_client.app.state.gate
+        run_id = test_client.post("/api/runs").json()["id"]
+        resultado = {}
+
+        def espera():
+            try:
+                gate.wait("indeed", 5)
+            except SourceInterrupted:
+                resultado["interrompida"] = True
+
+        esperando = threading.Thread(target=espera)
+        esperando.start()
+        for _ in range(200):
+            if gate.waiting():
+                break
+            threading.Event().wait(0.01)
+        test_client.post(f"/api/runs/{run_id}/cancel")
+        esperando.join(2)
+    assert resultado == {"interrompida": True}
+
+
+def test_nova_execucao_nao_herda_o_cancelamento_do_portao(settings):
+    with make_client(settings, [StubSource()], spawn=lambda fn: None) as test_client:
+        gate = test_client.app.state.gate
+        gate.cancel()
+        test_client.post("/api/runs")
+        assert gate.wait("indeed", 0.05) is False
+
+
+def test_max_dias_descarta_vagas_publicadas_ha_mais_de_x_dias_e_mantem_as_sem_data(client_ordenacao):
+    # "agora" = 2026-10-14: 7 dias → corte em 2026-10-07 (a vaga de 10-01 sai; a sem data fica)
+    assert sorted(titulos(client_ordenacao, "max_dias=7")) == ["Engenheiro Mecânico 2", "Engenheiro Mecânico 3"]
+    assert client_ordenacao.get("/api/jobs?max_dias=7").json()["total"] == 2
+    assert len(titulos(client_ordenacao, "max_dias=30")) == 3
+
+
+def test_max_dias_invalido_devolve_422(client_ordenacao):
+    assert client_ordenacao.get("/api/jobs?max_dias=0").status_code == 422
+
+
+def test_marcar_como_vistas_respeita_max_dias(client_ordenacao):
+    resposta = client_ordenacao.post("/api/jobs/mark-seen", json={"max_dias": 7})
+    assert resposta.json() == {"atualizadas": 2}
+    restantes = client_ordenacao.get("/api/jobs?visto=false").json()["items"]
+    assert [j["titulo"] for j in restantes] == ["Engenheiro Mecânico 1"]

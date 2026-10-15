@@ -30,3 +30,18 @@ def conn(settings):
     init_db(connection, settings)
     yield connection
     connection.close()
+
+
+@pytest.fixture
+def abrir_conexao():
+    """`connect` para testes que abrem o próprio banco; fecha todas as conexões ao final."""
+    abertas = []
+
+    def _abrir(path):
+        connection = connect(path)
+        abertas.append(connection)
+        return connection
+
+    yield _abrir
+    for connection in abertas:
+        connection.close()

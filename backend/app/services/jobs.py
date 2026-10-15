@@ -1,12 +1,22 @@
 """Consulta e marcação de vagas."""
 import sqlite3
+from datetime import date, timedelta
 
 from ..errors import DomainError, NotFound
 from . import runs
 from .filters import normalize
 
 
-def _where(visto: bool | None, fonte: str | None, q: str | None) -> tuple[str, list]:
+def cutoff_date(now: str, max_dias: int | None) -> str | None:
+    """Data (AAAA-MM-DD) a partir da qual uma vaga ainda vale; `None` = sem filtro de idade."""
+    if max_dias is None:
+        return None
+    if max_dias < 1:
+        raise DomainError(f"max_dias={max_dias}: esperado um inteiro maior ou igual a 1")
+    return (date.fromisoformat(now[:10]) - timedelta(days=max_dias)).isoformat()
+
+
+def _where(visto: bool | None, fonte: str | None, q: str | None, corte: str | None = None) -> tuple[str, list]:
     clauses, params = [], []
     if visto is not None:
         clauses.append("visto=?")
@@ -17,6 +27,9 @@ def _where(visto: bool | None, fonte: str | None, q: str | None) -> tuple[str, l
     if q and normalize(q):
         clauses.append("(norm(titulo) LIKE ? OR norm(empresa) LIKE ?)")
         params += [f"%{normalize(q)}%"] * 2
+    if corte:  # vaga sem data de publicação (LinkedIn/Indeed/Google) nunca é descartada por idade
+        clauses.append("(publicada_em IS NULL OR substr(publicada_em, 1, 10) >= ?)")
+        params.append(corte)
     return (" WHERE " + " AND ".join(clauses)) if clauses else "", params
 
 
@@ -52,10 +65,10 @@ def _order_by(ordenar: str | None, direcao: str | None) -> str:
 
 def list_jobs(
     conn, visto: bool | None, fonte: str | None, q: str | None, limit: int, offset: int,
-    ordenar: str | None = None, direcao: str | None = None,
+    ordenar: str | None = None, direcao: str | None = None, corte: str | None = None,
 ) -> dict:
     order = _order_by(ordenar, direcao)
-    where, params = _where(visto, fonte, q)
+    where, params = _where(visto, fonte, q, corte)
     total = conn.execute(f"SELECT COUNT(*) FROM jobs{where}", params).fetchone()[0]
     rows = conn.execute(
         f"SELECT * FROM jobs{where} ORDER BY {order} LIMIT ? OFFSET ?",
@@ -80,9 +93,9 @@ def clear_all(conn) -> int:
     return removidas
 
 
-def mark_seen(conn, fonte: str | None, q: str | None) -> int:
+def mark_seen(conn, fonte: str | None, q: str | None, corte: str | None = None) -> int:
     """Marca como vistas as ainda não vistas que casam com os filtros."""
-    where, params = _where(False, fonte, q)
+    where, params = _where(False, fonte, q, corte)
     cursor = conn.execute(f"UPDATE jobs SET visto=1{where}", params)
     conn.commit()
     return cursor.rowcount

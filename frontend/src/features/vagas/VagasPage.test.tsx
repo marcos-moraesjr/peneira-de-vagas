@@ -103,6 +103,26 @@ describe("VagasPage", () => {
     await waitFor(() => expect(calls.find((c) => c.path === "/api/jobs/mark-seen")?.body).toEqual({}));
   });
 
+  it("filtra por idade: \"Publicadas há no máximo\" envia max_dias na listagem e em marcar como vistas; vazio remove", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const { calls } = setup({ jobs: [makeJob(1)] });
+    await screen.findByRole("link", { name: "Engenheiro Mecânico 1" });
+    const campo = screen.getByLabelText("Publicadas há no máximo (dias)");
+    await user.type(campo, "7");
+    await waitFor(() => {
+      const last = [...calls].reverse().find((c) => c.path.startsWith("/api/jobs"));
+      expect(last?.path).toContain("max_dias=7");
+    });
+    await user.click(screen.getByRole("button", { name: "Marcar todas como vistas" }));
+    await waitFor(() => expect(calls.find((c) => c.path === "/api/jobs/mark-seen")?.body).toEqual({ max_dias: 7 }));
+    await user.clear(campo);
+    await waitFor(() => {
+      const last = [...calls].reverse().find((c) => c.path.startsWith("/api/jobs?"));
+      expect(last?.path).not.toContain("max_dias");
+    });
+  });
+
   it("excluir todas as vagas pede confirmação e chama DELETE /api/jobs", async () => {
     const user = userEvent.setup();
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
@@ -236,6 +256,27 @@ describe("VagasPage", () => {
     expect(alert).toHaveTextContent(/verificação de segurança/i);
     expect(alert).toHaveTextContent(/Chrome dedicado/);
     expect(alert).not.toHaveTextContent("Gupy");
+  });
+
+  it("falha de fonte oferece Reiniciar, que busca de novo só nas fontes que falharam", async () => {
+    const user = userEvent.setup();
+    const { calls } = setup({
+      runs: [
+        makeRun(5, "concluida", [
+          makeSource("linkedin", { status: "falha", motivo: "interrompida", novas: 0 }),
+          makeSource("indeed", { status: "falha", motivo: "interrompida", novas: 0 }),
+          makeSource("gupy"),
+        ]),
+      ],
+    });
+    await user.click(await screen.findByRole("button", { name: "Reiniciar" }));
+    await waitFor(() => expect(calls.find((c) => c.method === "POST" && c.path === "/api/runs")?.body).toEqual({ fontes: ["linkedin", "indeed"] }));
+  });
+
+  it("sem falha ou com busca em andamento não há botão Reiniciar", async () => {
+    setup({ runs: [makeRun(5, "concluida", [makeSource("gupy")])] });
+    await screen.findByRole("button", { name: "Buscar agora" });
+    expect(screen.queryByRole("button", { name: "Reiniciar" })).not.toBeInTheDocument();
   });
 
   it("mostra o erro de API em linguagem simples", async () => {

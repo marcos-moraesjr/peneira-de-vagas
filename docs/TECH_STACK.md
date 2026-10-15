@@ -22,7 +22,7 @@ busca pela API e exibe os resultados; **não há Telegram nem agendador externo*
 | --- | --- | --- |
 | **LinkedIn** | Navegador real (Chrome dedicado, controlado via CDP) | Navegador logado em automação viola os termos de uso; risco de restrição da conta aceito conscientemente. |
 | **Indeed** | Navegador real (mesmo Chrome dedicado) | Protegido por Cloudflare. Verificação anti-bot é esperada e tratada como falha, nunca contornada. |
-| **Google** | Navegador real (mesmo Chrome dedicado), consultas booleanas em `google.com/search` | Quarta fonte de dados enviada a terceiros, **por decisão do usuário** (14/10/2026): as consultas de `[google] consultas` vão ao Google. Páginas de ATS (lever, greenhouse…) só aparecem como resultado; não são abertas. CAPTCHA é esperado e tratado como falha, nunca contornado; sem API paga nem chave. |
+| **Google** | Navegador real (mesmo Chrome dedicado), consultas booleanas em `google.com/search` | Quarta fonte de dados enviada a terceiros, **por decisão do usuário** (14/10/2026): as consultas montadas das suas palavras-chave, localidades e modalidade vão ao Google. Páginas de ATS (lever, greenhouse…) só aparecem como resultado; não são abertas. CAPTCHA é esperado e tratado como falha, nunca contornado; sem API paga nem chave. |
 | **Gupy** | API JSON do portal (`portal.gupy.io`) via HTTP | Endpoint não documentado: capturado pelo DevTools (aba Network) e tratado como instável. |
 
 ## Backend
@@ -89,14 +89,14 @@ Todas as fontes devolvem o mesmo formato: `id`, `título`, `empresa`, `link`, `t
 
 ## Regras de projeto
 
-- **Chrome dedicado:** perfil próprio (`--user-data-dir`) e `--remote-debugging-port=9222` ligado só em `localhost`. Nunca conectar ao perfil pessoal em uso (versões recentes do Chrome ignoram a porta de depuração nele). O login nos sites é feito à mão pelo usuário nesse perfil (fica em `chrome-profile/`, fora do Git).
+- **Chrome dedicado:** perfil próprio (`--user-data-dir`) e `--remote-debugging-port=9222` ligado só em `localhost`. Nunca conectar ao perfil pessoal em uso (versões recentes do Chrome ignoram a porta de depuração nele). O login nos sites é feito à mão pelo usuário nesse perfil (fica em `data/chrome-profile/`, fora do Git).
 - **API só em `127.0.0.1`:** sem autenticação, portanto sem exposição à rede. Abrir além disso é decisão do usuário.
 - **Deduplicação, não janela de tempo:** vaga nova é a que não está no SQLite.
 - **Filtro da própria busca primeiro:** URL com palavra-chave e filtro de últimas 24h; o filtro local é a segunda passada.
 - **Limite de páginas por execução:** lista lida inteira; página de detalhe aberta só para vagas que passam no filtro, com teto por execução (valor inicial: 15).
 - **Falha explícita:** CAPTCHA, tela de login inesperada, mudança de seletor ou zero resultados em uma fonte **encerram aquela fonte na execução** e aparecem no front como falha daquela fonte. As demais continuam.
 - **Sem contorno de bloqueio:** o projeto não resolve CAPTCHA nem disfarça automação.
-- **Ritmo humano:** pausas variáveis entre ações, sem abas em paralelo e **uma execução por vez** (nova solicitação durante uma execução responde 409).
+- **Ritmo humano:** pausas variáveis entre ações, uma aba por plataforma (opção `navegador.abas_paralelas` roda as plataformas ao mesmo tempo; nunca várias abas na mesma) e **uma execução por vez** (nova solicitação durante uma execução responde 409).
 
 ## Testes
 
@@ -109,7 +109,7 @@ Todas as fontes devolvem o mesmo formato: `id`, `título`, `empresa`, `link`, `t
 ## Ferramentas
 
 - **venv** local (`.venv`) + `pip install -r requirements.txt`; `npm` para o frontend.
-- **Git** — `.gitignore` cobre `__pycache__`, `.venv`, `*.db`, `chrome-profile/`, `node_modules`, `frontend/dist`, `logs/`.
+- **Git** — `.gitignore` cobre `__pycache__`, `.venv`, `*.db`, `data/` (inclui `data/chrome-profile/`), `node_modules`, `frontend/dist`, `logs/`.
 
 Sem formatador/linter/CI configurados hoje. Adotar um (ex.: ruff, ESLint) é uma decisão a registrar aqui antes de entrar.
 

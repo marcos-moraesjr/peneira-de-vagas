@@ -3,7 +3,7 @@ import sqlite3
 import pytest
 
 from backend.app import db
-from backend.app.db import connect, init_db
+from backend.app.db import init_db
 from backend.app.errors import DomainError, NotFound
 from backend.app.services import conjuntos, keywords
 
@@ -16,7 +16,7 @@ def test_banco_novo_tem_um_conjunto_padrao_ativo_com_as_palavras_semeadas(conn):
     assert [k["termo"] for k in keywords.list_all(conn, "busca")] == ["Engenheiro Mecânico"]
 
 
-def test_migracao_4_move_palavras_existentes_para_o_conjunto_padrao(settings):
+def test_migracao_4_move_palavras_existentes_para_o_conjunto_padrao(settings, abrir_conexao):
     arquivo = settings.geral.db_path
     arquivo.parent.mkdir(parents=True, exist_ok=True)
     antigo = sqlite3.connect(arquivo)
@@ -28,7 +28,7 @@ def test_migracao_4_move_palavras_existentes_para_o_conjunto_padrao(settings):
     antigo.execute("INSERT INTO keywords (termo, termo_normalizado, tipo, criada_em) VALUES ('estágio','estagio','exclusao','x')")
     antigo.commit()
     antigo.close()
-    connection = connect(arquivo)
+    connection = abrir_conexao(arquivo)
     init_db(connection, settings)
     assert [c["nome"] for c in conjuntos.list_all(connection)] == ["Padrão"]
     assert [k["termo"] for k in keywords.list_all(connection, "busca")] == ["Projetista"]

@@ -5,9 +5,10 @@ from .google import GoogleSite, GoogleSource
 from .gupy import GupySource
 from .indeed import IndeedSite
 from .linkedin import LinkedInSite
+from .verification import VerificationGate
 
 
-def build_sources(settings: Settings) -> list:
+def build_sources(settings: Settings, gate: VerificationGate | None = None) -> list:
     ritmo = settings.ritmo
     pause = make_pause(ritmo.pausa_min_s, ritmo.pausa_max_s)
     scroll_pause = make_pause(ritmo.rolagem_min_s, ritmo.rolagem_max_s)
@@ -16,8 +17,8 @@ def build_sources(settings: Settings) -> list:
         return playwright_session(settings)
 
     return [
-        BrowserSource(LinkedInSite(settings), settings, session, pause, scroll_pause),
-        BrowserSource(IndeedSite(settings), settings, session, pause, scroll_pause),
-        GoogleSource(GoogleSite(settings), settings, session, pause, scroll_pause),
+        BrowserSource(LinkedInSite(settings), settings, session, pause, scroll_pause, gate),
+        BrowserSource(IndeedSite(settings), settings, session, pause, scroll_pause, gate),
+        GoogleSource(GoogleSite(settings), settings, session, pause, scroll_pause, gate),
         GupySource(settings),
     ]

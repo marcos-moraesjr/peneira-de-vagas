@@ -4,16 +4,22 @@ mudam sem aviso. Ao quebrar, a fonte falha com 'seletor_nao_encontrado' em vez d
 A renderização é incremental: o <li> já traz o ID, mas título/empresa só aparecem depois de rolar até ele
 (por isso lazy_cards=True). As classes dos contêineres têm hash aleatório e não são usadas.
 """
+from datetime import datetime
 from urllib.parse import urlencode
 
 from ..config import Settings
 from ..services.filters import normalize
+from .relative_date import parse_relative_date
 from .types import Job
 
 WORK_TYPE = {"presencial": "1", "remoto": "2", "hibrido": "3"}
 SECONDS_PER_HOUR = 3600
 CARD_SELECTOR = "li[data-occludable-job-id]"
 EMPTY_MARKERS = ("nenhuma vaga correspondente", "no matching jobs", "nenhum resultado")
+
+# Na página de detalhe: "Cidade · Anunciada novamente há 8 horas · 95 candidaturas" (observado em 14/10/2026).
+PUBLISHED_SELECTORS = [".job-details-jobs-unified-top-card__tertiary-description-container"]
+
 
 EXTRACT_JS = """() => {
   const clean = (t) => (t || '').replace(/\\s+/g, ' ').trim();
@@ -32,6 +38,7 @@ class LinkedInSite:
     extract_js = EXTRACT_JS
     card_selector = CARD_SELECTOR
     lazy_cards = True
+    published_selectors = PUBLISHED_SELECTORS
     detail_selectors = [
         "article",
         ".jobs-description__content",
@@ -63,6 +70,9 @@ class LinkedInSite:
         if any(part in url for part in ("/authwall", "/login", "/uas/")):
             return "login"
         return None
+
+    def parse_published(self, text: str, now: datetime) -> str | None:
+        return parse_relative_date(text, now)
 
     def is_empty_page(self, text: str) -> bool:
         normalized = normalize(text)

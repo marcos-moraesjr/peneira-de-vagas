@@ -3,6 +3,7 @@ import logging
 import sqlite3
 import threading
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from typing import Protocol
 
@@ -92,26 +93,48 @@ def execute_run(
 ) -> None:
     """Roda cada fonte isolada: a falha de uma é registrada e a execução segue para a próxima.
 
+    Em sequência por padrão; com `navegador.abas_paralelas` todas rodam ao mesmo tempo, uma aba por fonte.
     `cancel` aceso interrompe: a fonte em andamento é descartada ao fim da etapa atual e as seguintes nem começam."""
     conn = db.connect(settings.geral.db_path)
     try:
         termos, flt = _build_filter(conn, settings)
-        for source in sources:
-            _update_source(conn, run_id, source.name, status="buscando")
-            try:
-                _run_source(conn, settings, source, termos, flt, run_id, now(), cancel)
-            except SourceError as error:
-                log.warning("Fonte %s falhou: %s (%s)", source.name, error.motivo, error.detalhe)
-                _update_source(conn, run_id, source.name, status="falha", motivo=error.motivo, detalhe=error.detalhe)
-            except Exception as error:  # noqa: BLE001 - uma fonte nunca derruba as demais
-                log.exception("Erro inesperado na fonte %s", source.name)
-                _update_source(conn, run_id, source.name, status="falha", motivo="erro_interno", detalhe=str(error))
+        if settings.navegador.abas_paralelas and len(sources) > 1:
+            _run_sources_in_parallel(settings, run_id, sources, termos, flt, now, cancel)
+        else:
+            for source in sources:
+                _run_isolated(conn, settings, source, termos, flt, run_id, now, cancel)
         conn.execute("UPDATE runs SET status='concluida', fim=? WHERE id=?", (now(), run_id))
         conn.commit()
         if manifest:
             _warn_scanners_to_redo(conn, settings, manifest, now())
     finally:
         conn.close()
+
+
+def _run_isolated(conn, settings, source: Source, termos, flt, run_id: int, now, cancel) -> None:
+    _update_source(conn, run_id, source.name, status="buscando")
+    try:
+        _run_source(conn, settings, source, termos, flt, run_id, now(), cancel)
+    except SourceError as error:
+        log.warning("Fonte %s falhou: %s (%s)", source.name, error.motivo, error.detalhe)
+        _update_source(conn, run_id, source.name, status="falha", motivo=error.motivo, detalhe=error.detalhe)
+    except Exception as error:  # noqa: BLE001 - uma fonte nunca derruba as demais
+        log.exception("Erro inesperado na fonte %s", source.name)
+        _update_source(conn, run_id, source.name, status="falha", motivo="erro_interno", detalhe=str(error))
+
+
+def _run_sources_in_parallel(settings, run_id: int, sources, termos, flt, now, cancel) -> None:
+    """Uma thread, uma conexão de banco e uma aba por fonte; cada uma segue com as próprias pausas."""
+
+    def work(source: Source) -> None:
+        conn = db.connect(settings.geral.db_path)
+        try:
+            _run_isolated(conn, settings, source, termos, flt, run_id, now, cancel)
+        finally:
+            conn.close()
+
+    with ThreadPoolExecutor(max_workers=len(sources)) as pool:
+        list(pool.map(work, sources))
 
 
 def spawn_thread(target: Callable[[], None]) -> None:
