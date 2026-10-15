@@ -2,7 +2,7 @@ import type { Job } from "../../api/types";
 import { SourceBadge } from "../../components/SourceBadge";
 import { formatDay, modalidadeLabel, timeAgo } from "../../lib/format";
 
-export type SortColumn = "titulo" | "empresa" | "cidade" | "estado" | "modalidade" | "publicada_em" | "encontrada_em" | "fonte" | "pontos";
+export type SortColumn = "titulo" | "empresa" | "palavra_chave" | "cidade" | "estado" | "modalidade" | "publicada_em" | "encontrada_em" | "fonte" | "pontos";
 export type Sort = { column: SortColumn; direction: "asc" | "desc" } | null;
 
 type Props = {
@@ -14,14 +14,15 @@ type Props = {
 
 // `width`: largura da coluna na tabela de layout fixo (soma 100%), para a tabela caber sem rolagem lateral.
 const COLUMNS: { label: string; column: SortColumn; width: string }[] = [
-  { label: "Vaga", column: "titulo", width: "w-[25%]" },
-  { label: "Empresa", column: "empresa", width: "w-[15%]" },
-  { label: "Cidade", column: "cidade", width: "w-[10%]" },
-  { label: "Estado", column: "estado", width: "w-[6%]" },
+  { label: "Vaga", column: "titulo", width: "w-[22%]" },
+  { label: "Empresa", column: "empresa", width: "w-[13%]" },
+  { label: "Palavra-chave", column: "palavra_chave", width: "w-[11%]" },
+  { label: "Cidade", column: "cidade", width: "w-[9%]" },
+  { label: "Estado", column: "estado", width: "w-[5%]" },
   { label: "Modalidade", column: "modalidade", width: "w-[9%]" },
-  { label: "Publicada", column: "publicada_em", width: "w-[9%]" },
+  { label: "Publicada", column: "publicada_em", width: "w-[8%]" },
   { label: "Encontrada", column: "encontrada_em", width: "w-[9%]" },
-  { label: "Plataforma", column: "fonte", width: "w-[9%]" },
+  { label: "Plataforma", column: "fonte", width: "w-[8%]" },
   { label: "Pontos", column: "pontos", width: "w-[6%]" },
 ];
 const MAX_POINTS = 10;
@@ -73,6 +74,7 @@ export function JobsList({ jobs, onSeen, sort, onSort }: Props) {
                 </div>
               </td>
               <td className={cell}>{job.empresa || "—"}</td>
+              <td className={cell}>{job.palavra_chave || "—"}</td>
               <td className={cell}>{job.cidade || "—"}</td>
               <td className={cell}>{job.estado || "—"}</td>
               <td className={cell}>{modalidadeLabel(job.modalidade) || "—"}</td>

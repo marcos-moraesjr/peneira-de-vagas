@@ -12,13 +12,13 @@ function setup(put: unknown = (body: unknown) => body) {
 describe("ConfigPage", () => {
   it("mostra a configuração em vigor nos campos", async () => {
     setup();
-    expect(await screen.findByLabelText("Pontuação mínima")).toHaveValue("3");
+    expect(await screen.findByLabelText("Pontuação mínima para aparecer")).toHaveValue("3");
     expect(screen.getByLabelText("Pausa máxima (s)")).toHaveValue(6);
   });
 
   it("não oferece localidade nem modalidade (o filtro fica só no config.toml)", async () => {
     setup();
-    await screen.findByLabelText("Pontuação mínima");
+    await screen.findByLabelText("Pontuação mínima para aparecer");
     expect(screen.queryByLabelText("Localidades")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Adicionar localidade" })).not.toBeInTheDocument();
     for (const nome of ["Remoto", "Híbrido", "Presencial"]) expect(screen.queryByRole("checkbox", { name: nome })).not.toBeInTheDocument();
@@ -26,25 +26,48 @@ describe("ConfigPage", () => {
 
   it("pesos e pontuação mínima são controles deslizantes com o valor à vista", async () => {
     setup();
-    for (const nome of ["Peso no título", "Peso na descrição", "Pontuação mínima"]) {
+    for (const nome of ["Pontos por palavra-chave no título", "Pontos por palavra-chave na descrição", "Pontuação mínima para aparecer"]) {
       expect(await screen.findByRole("slider", { name: nome })).toBeInTheDocument();
     }
-    expect(screen.getByRole("slider", { name: "Peso no título" })).toHaveValue("3");
+    expect(screen.getByRole("slider", { name: "Pontos por palavra-chave no título" })).toHaveValue("3");
     expect(screen.getByTestId("valor-filtro.peso_titulo")).toHaveTextContent("3");
+  });
+
+  it("limite de palavras-chave e de páginas por palavra-chave são controles deslizantes", async () => {
+    const user = userEvent.setup();
+    const { calls } = setup();
+    const termos = await screen.findByRole("slider", { name: "Palavras-chave por busca (máximo)" });
+    const paginas = screen.getByRole("slider", { name: "Páginas abertas por palavra-chave (em cada fonte)" });
+    expect(termos).toHaveValue("6");
+    expect(paginas).toHaveValue("3");
+    expect(termos).toHaveAttribute("min", "1");
+    expect(paginas).toHaveAttribute("min", "1");
+    fireEvent.change(termos, { target: { value: "4" } });
+    fireEvent.change(paginas, { target: { value: "5" } });
+    expect(screen.getByTestId("valor-busca.max_termos_busca")).toHaveTextContent("4");
+    expect(screen.getByTestId("valor-limites.max_paginas_por_termo")).toHaveTextContent("5");
+    await user.click(screen.getByRole("button", { name: "Salvar" }));
+    await screen.findByText(/configuração salva/i);
+    const put = calls.find((c) => c.method === "PUT");
+    expect(put?.body).toEqual({
+      ...CONFIG,
+      busca: { ...CONFIG.busca, max_termos_busca: 4 },
+      limites: { max_paginas_por_termo: 5 },
+    });
   });
 
   it("só habilita Salvar depois de alterar algo", async () => {
     setup();
     const salvar = await screen.findByRole("button", { name: "Salvar" });
     expect(salvar).toBeDisabled();
-    fireEvent.change(screen.getByRole("slider", { name: "Pontuação mínima" }), { target: { value: "4" } });
+    fireEvent.change(screen.getByRole("slider", { name: "Pontuação mínima para aparecer" }), { target: { value: "4" } });
     expect(salvar).toBeEnabled();
   });
 
   it("envia a configuração completa, com números, e confirma", async () => {
     const user = userEvent.setup();
     const { calls } = setup();
-    fireEvent.change(await screen.findByRole("slider", { name: "Pontuação mínima" }), { target: { value: "5" } });
+    fireEvent.change(await screen.findByRole("slider", { name: "Pontuação mínima para aparecer" }), { target: { value: "5" } });
     expect(screen.getByTestId("valor-filtro.min_score")).toHaveTextContent("5");
     await user.click(screen.getByRole("button", { name: "Salvar" }));
     expect(await screen.findByText(/configuração salva/i)).toBeInTheDocument();
@@ -79,7 +102,7 @@ describe("ConfigPage", () => {
   it("Descartar volta aos valores em vigor", async () => {
     const user = userEvent.setup();
     setup();
-    const slider = await screen.findByRole("slider", { name: "Pontuação mínima" });
+    const slider = await screen.findByRole("slider", { name: "Pontuação mínima para aparecer" });
     fireEvent.change(slider, { target: { value: "7" } });
     expect(slider).toHaveValue("7");
     await user.click(screen.getByRole("button", { name: "Descartar" }));

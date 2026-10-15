@@ -53,3 +53,21 @@ def test_limite_de_termos_de_busca_por_conjunto(conn, settings):
     with pytest.raises(DomainError, match=rf"esperado <= {limite}"):
         keywords.add(conn, settings, "um a mais", "busca", NOW)
     keywords.add(conn, settings, "exclusão livre", "exclusao", NOW)
+
+
+def test_ranking_e_um_grupo_separado_da_busca(conn, settings):
+    keywords.add(conn, settings, "Cálculo estrutural", "ranking", NOW)
+    assert [k["termo"] for k in keywords.list_all(conn, "ranking")] == ["Cálculo estrutural"]
+    assert "Cálculo estrutural" not in [k["termo"] for k in keywords.list_all(conn, "busca")]
+
+
+def test_mesmo_termo_em_busca_e_ranking_e_permitido_mas_nao_repete_no_ranking(conn, settings):
+    keywords.add(conn, settings, "Engenheiro Mecânico", "ranking", NOW)
+    with pytest.raises(DomainError, match="já existe"):
+        keywords.add(conn, settings, "ENGENHEIRO MECANICO", "ranking", NOW)
+
+
+def test_limite_de_termos_vale_so_para_a_busca_e_nao_para_o_ranking(conn, settings):
+    for n in range(settings.busca.max_termos_busca + 3):
+        keywords.add(conn, settings, f"ranking {n}", "ranking", NOW)
+    assert len(keywords.list_all(conn, "ranking")) == settings.busca.max_termos_busca + 3

@@ -12,8 +12,8 @@ from ..config import Settings
 from ..errors import DomainError
 from ..sources.errors import SourceEmpty, SourceError
 from ..sources.types import Job
-from . import keywords, scanners
-from .filters import Filter
+from . import conjuntos, keywords, scanners
+from .filters import Filter, normalize
 from .localizacao import passes_localidade, passes_modalidade
 from .scanners import Manifest
 
@@ -29,10 +29,14 @@ class Source(Protocol):
 
 
 def _build_filter(conn: sqlite3.Connection, settings: Settings) -> tuple[list[str], Filter]:
+    """Termos enviados às fontes (só os `busca`, os primeiros `max_termos_busca`) e o filtro, que pontua com
+    `busca` + `ranking` (um termo nos dois grupos conta uma vez)."""
     termos = [k["termo"] for k in keywords.list_all(conn, "busca")]
+    ranking = [k["termo"] for k in keywords.list_all(conn, "ranking")]
+    pontuam = list({normalize(termo): termo for termo in termos + ranking}.values())
     exclusoes = [k["termo"] for k in keywords.list_all(conn, "exclusao")]
     f = settings.filtro
-    return termos, Filter(termos, exclusoes, f.peso_titulo, f.peso_descricao, f.min_score)
+    return termos[: settings.busca.max_termos_busca], Filter(pontuam, exclusoes, f.peso_titulo, f.peso_descricao, f.min_score)
 
 
 def _update_source(conn: sqlite3.Connection, run_id: int, fonte: str, **fields) -> None:
@@ -57,23 +61,38 @@ def _approve(jobs: list[Job], flt: Filter, settings: Settings) -> tuple[list[Job
     return approved, scores
 
 
-def _run_source(conn, settings, source: Source, termos, flt, run_id: int, now: str) -> None:
+def _pre_approve(jobs: list[Job], flt: Filter, settings: Settings) -> list[Job]:
+    """Triagem pela lista (título e trecho do card): só exclusões, localidade e modalidade. A pontuação fica para
+    depois do detalhe, porque o card quase não traz texto e cortaria vagas cujas palavras só estão na descrição."""
+    busca, aceitar = settings.busca, settings.filtro.aceitar_desconhecido
+    return [
+        job
+        for job in jobs
+        if not flt.excluded(job.titulo, job.trecho)
+        and passes_localidade(job.localidade, job.modalidade, busca.localidades, aceitar)
+        and passes_modalidade(job.modalidade, busca.modalidade, aceitar)
+    ]
+
+
+def _run_source(conn, settings, source: Source, termos, flt, conjunto_id: int, run_id: int, now: str) -> None:
     jobs = source.search(termos)
     if not jobs:
         raise SourceEmpty("A fonte não devolveu nenhuma vaga")
     local_filter = getattr(source, "local_filter", True)
-    approved, scores = _approve(jobs, flt, settings) if local_filter else (jobs, {})
-    unknown = db.filter_unknown(conn, approved)
+    candidates = _pre_approve(jobs, flt, settings) if local_filter else jobs
+    unknown = db.filter_unknown(conn, candidates, conjunto_id)
+    aprovadas = len(candidates) - len(unknown)  # já gravadas em execuções anteriores: passaram na avaliação completa
     novas = 0
 
     def save(job: Job) -> None:
-        """Grava a vaga assim que o detalhe dela é lido, para aparecer na lista antes de a fonte terminar."""
-        nonlocal novas
+        """Avalia a vaga com o detalhe (pontuação completa) e grava assim que ele é lido, para aparecer na lista antes de a fonte terminar."""
+        nonlocal aprovadas, novas
         ok, pontos = _approve([job], flt, settings) if local_filter else ([job], {})
-        novas += db.insert_new_jobs(conn, ok, pontos, run_id, now)
+        aprovadas += len(ok)
+        novas += db.insert_new_jobs(conn, ok, pontos, run_id, now, conjunto_id)
 
     source.enrich(unknown, on_job=save)
-    _update_source(conn, run_id, source.name, status="ok", lidas=len(jobs), aprovadas=len(approved), novas=novas)
+    _update_source(conn, run_id, source.name, status="ok", lidas=len(jobs), aprovadas=aprovadas, novas=novas)
 
 
 def _warn_scanners_to_redo(conn: sqlite3.Connection, settings: Settings, manifest: Manifest, now: str) -> None:
@@ -98,11 +117,12 @@ def execute_run(
     conn = db.connect(settings.geral.db_path)
     try:
         termos, flt = _build_filter(conn, settings)
+        conjunto_id = conjuntos.active_id(conn)  # as vagas vão para o conjunto cujas palavras foram lidas agora
         if settings.navegador.abas_paralelas and len(sources) > 1:
-            _run_sources_in_parallel(settings, run_id, sources, termos, flt, now)
+            _run_sources_in_parallel(settings, run_id, sources, termos, flt, conjunto_id, now)
         else:
             for source in sources:
-                _run_isolated(conn, settings, source, termos, flt, run_id, now)
+                _run_isolated(conn, settings, source, termos, flt, conjunto_id, run_id, now)
         conn.execute("UPDATE runs SET status='concluida', fim=? WHERE id=?", (now(), run_id))
         conn.commit()
         if manifest:
@@ -111,10 +131,10 @@ def execute_run(
         conn.close()
 
 
-def _run_isolated(conn, settings, source: Source, termos, flt, run_id: int, now) -> None:
+def _run_isolated(conn, settings, source: Source, termos, flt, conjunto_id: int, run_id: int, now) -> None:
     _update_source(conn, run_id, source.name, status="buscando")
     try:
-        _run_source(conn, settings, source, termos, flt, run_id, now())
+        _run_source(conn, settings, source, termos, flt, conjunto_id, run_id, now())
     except SourceError as error:
         log.warning("Fonte %s falhou: %s (%s)", source.name, error.motivo, error.detalhe)
         _update_source(conn, run_id, source.name, status="falha", motivo=error.motivo, detalhe=error.detalhe)
@@ -123,13 +143,13 @@ def _run_isolated(conn, settings, source: Source, termos, flt, run_id: int, now)
         _update_source(conn, run_id, source.name, status="falha", motivo="erro_interno", detalhe=str(error))
 
 
-def _run_sources_in_parallel(settings, run_id: int, sources, termos, flt, now) -> None:
+def _run_sources_in_parallel(settings, run_id: int, sources, termos, flt, conjunto_id: int, now) -> None:
     """Uma thread, uma conexão de banco e uma aba por fonte; cada uma segue com as próprias pausas."""
 
     def work(source: Source) -> None:
         conn = db.connect(settings.geral.db_path)
         try:
-            _run_isolated(conn, settings, source, termos, flt, run_id, now)
+            _run_isolated(conn, settings, source, termos, flt, conjunto_id, run_id, now)
         finally:
             conn.close()
 

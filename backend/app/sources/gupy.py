@@ -5,6 +5,7 @@ careerPageName, jobUrl. Se um deles sumir, é mudança de layout.
 """
 import re
 from collections.abc import Callable
+from dataclasses import replace
 
 import httpx
 
@@ -47,18 +48,17 @@ class GupySource:
         return jobs
 
     def _collect(self, client: httpx.Client, termos: list[str]) -> list[Job]:
-        limit = self._settings.limites.max_vagas_lista
         found: dict[str, Job] = {}
         for termo in termos:
             for job in self._pages(client, termo):
-                found.setdefault(job.id, job)
-                if len(found) >= limit:
-                    return list(found.values())
+                if job.id not in found:
+                    found[job.id] = replace(job, palavra_chave=termo)
         return list(found.values())
 
     def _pages(self, client: httpx.Client, termo: str):
+        """Pede até `max_paginas_por_termo` páginas da API; para antes se acabarem as vagas do termo."""
         offset = 0
-        while True:
+        for _ in range(self._settings.limites.max_paginas_por_termo):
             payload = self._request(client, termo, offset)
             items = payload["data"]
             for item in items:

@@ -85,10 +85,25 @@ def test_busca_seguinte_usa_a_config_nova_nas_fontes_reais(settings, arquivo):
     app = create_app(settings, now=lambda: NOW, config_path=arquivo)
     with TestClient(app) as client:
         novo = client.get("/api/config").json()
-        novo["limites"]["max_vagas_lista"] = 7
+        novo["limites"]["max_paginas_por_termo"] = 7
         client.put("/api/config", json=novo)
         gupy = next(source for source in app.state.sources_factory() if source.name == "gupy")
-    assert gupy._settings.limites.max_vagas_lista == 7
+    assert gupy._settings.limites.max_paginas_por_termo == 7
+
+
+def test_limites_de_termos_e_de_paginas_por_termo_sao_editaveis(settings, arquivo):
+    with _client(settings, arquivo) as client:
+        novo = client.get("/api/config").json()
+        assert (novo["busca"]["max_termos_busca"], novo["limites"]["max_paginas_por_termo"]) == (6, 3)
+        novo["busca"]["max_termos_busca"] = 3
+        novo["limites"]["max_paginas_por_termo"] = 5
+        assert client.put("/api/config", json=novo).status_code == 200
+        novo["busca"]["max_termos_busca"] = 0
+        assert client.put("/api/config", json=novo).status_code == 422
+        atual = client.get("/api/config").json()
+    assert (atual["busca"]["max_termos_busca"], atual["limites"]["max_paginas_por_termo"]) == (3, 5)
+    texto = arquivo.read_text(encoding="utf-8")
+    assert "max_termos_busca = 3 " in texto and "max_paginas_por_termo = 5 " in texto
 
 
 def test_put_grava_varias_modalidades_como_lista(settings, arquivo):

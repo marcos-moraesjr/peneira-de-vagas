@@ -162,14 +162,11 @@ class BrowserSource:
         self.name = site.name
 
     def search(self, termos: list[str]) -> list[Job]:
-        limit = self._settings.limites.max_vagas_lista
         found: dict[str, Job] = {}
         with self._session() as navigator:
             for termo in termos:
-                if len(found) >= limit:
-                    break
                 self._search_term(navigator, termo, found)
-        return list(found.values())[:limit]
+        return list(found.values())
 
     def enrich(self, jobs: list[Job], on_job: Callable[[Job], None] | None = None) -> list[Job]:
         """Abre a página de cada vaga e troca o trecho pela descrição completa (quando encontrada).
@@ -216,19 +213,22 @@ class BrowserSource:
         return find_published_line(navigator.first_text(["body"]), now)
 
     def _search_term(self, navigator: Navigator, termo: str, found: dict[str, Job]) -> None:
-        limit = self._settings.limites.max_vagas_lista
-        start = 0
-        while len(found) < limit:
+        """Abre até `max_paginas_por_termo` páginas de resultados do termo; para antes se a página vier vazia
+        ou só repetir vagas que este termo já viu. Vaga já achada por outro termo fica com o primeiro."""
+        seen: set[str] = set()
+        for page_number in range(self._settings.limites.max_paginas_por_termo):
+            start = page_number * self._site.page_size
             self._open_checked(navigator, self._site.search_url(termo, start))
             raws = self._read_cards(navigator)
             if not raws:
                 self._check_layout(navigator, start)
                 return
-            fresh = [job for job in map(self._site.to_job, raws) if job and job.id not in found]
-            if not fresh:
+            page = [replace(job, palavra_chave=termo) for job in map(self._site.to_job, raws) if job and job.id not in seen]
+            if not page:
                 return
-            found.update({job.id: job for job in fresh})
-            start += self._site.page_size
+            for job in page:
+                seen.add(job.id)
+                found.setdefault(job.id, job)
 
     def _read_cards(self, navigator: Navigator) -> list[dict]:
         if self._site.lazy_cards:
@@ -247,8 +247,16 @@ class BrowserSource:
             except SourceBlocked:
                 if self._gate is None or not self._gate.wait(self.name, self._settings.navegador.espera_verificacao_s):
                     raise
-            navigator.open(url)
+            self._reopen_after_verification(navigator, url)
             self._pause()
+
+    def _reopen_after_verification(self, navigator: Navigator, url: str) -> None:
+        """Ao concluir a verificação o site ainda redireciona e o `goto` pode ser abortado: uma nova tentativa, após a pausa."""
+        try:
+            navigator.open(url)
+        except SourceUnavailable:
+            self._pause()
+            navigator.open(url)
 
     def _check_block(self, navigator: Navigator) -> None:
         url, title, text = navigator.snapshot()

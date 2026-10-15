@@ -70,6 +70,7 @@ class JobOut(BaseModel):
     cidade: str
     estado: str
     modalidade: str
+    palavra_chave: str
     publicada_em: str | None
     visto: bool
 
@@ -90,6 +91,7 @@ class MarkSeenIn(BaseModel):
     cidade: str | None = None
     estado: str | None = None
     modalidade: str | None = None
+    conjunto_id: int | None = None
 
 
 class MarkSeenOut(BaseModel):
@@ -127,6 +129,7 @@ class ConfigBusca(BaseModel):
     modalidade: list[str]
     janela_horas: int
     keyword_max_length: int
+    max_termos_busca: int
 
 
 class ConfigFiltro(BaseModel):
@@ -137,7 +140,7 @@ class ConfigFiltro(BaseModel):
 
 
 class ConfigLimites(BaseModel):
-    max_vagas_lista: int
+    max_paginas_por_termo: int
 
 
 class ConfigRitmo(BaseModel):

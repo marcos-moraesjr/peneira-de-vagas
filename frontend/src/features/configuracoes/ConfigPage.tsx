@@ -12,9 +12,12 @@ type Field = {
   kind: "number" | "text" | "slider" | "checkbox";
   step?: string;
   dica?: string;
+  /** Faixa do controle deslizante; a faixa cresce para caber um valor já gravado fora dela. */
+  min?: number;
+  max?: number;
 };
 
-const GROUPS: { titulo: string; fields: Field[] }[] = [
+const GROUPS: { titulo: string; intro?: string; fields: Field[] }[] = [
   {
     titulo: "Busca",
     fields: [
@@ -30,34 +33,49 @@ const GROUPS: { titulo: string; fields: Field[] }[] = [
         label: "Tamanho máximo da palavra-chave",
         kind: "number",
       },
+      {
+        section: "busca",
+        key: "max_termos_busca",
+        label: "Palavras-chave por busca (máximo)",
+        kind: "slider",
+        min: 1,
+        max: 10,
+        dica: "Cada palavra-chave vira uma busca em cada plataforma; mais buscas aumentam o tempo e o risco de bloqueio.",
+      },
     ],
   },
   {
     titulo: "Filtro",
+    intro:
+      "Cada vaga soma pontos pelas palavras-chave do conjunto ativo (da busca e de ranking) que aparecem no texto dela (cada palavra conta uma vez). Só entra na lista a vaga que atinge a pontuação mínima.",
     fields: [
       {
         section: "filtro",
         key: "peso_titulo",
-        label: "Peso no título",
+        label: "Pontos por palavra-chave no título",
         kind: "slider",
+        dica: "Quanto cada palavra-chave encontrada no título da vaga soma à pontuação.",
       },
       {
         section: "filtro",
         key: "peso_descricao",
-        label: "Peso na descrição",
+        label: "Pontos por palavra-chave na descrição",
         kind: "slider",
+        dica: "Quanto cada palavra-chave encontrada na descrição da vaga soma à pontuação.",
       },
       {
         section: "filtro",
         key: "min_score",
-        label: "Pontuação mínima",
+        label: "Pontuação mínima para aparecer",
         kind: "slider",
+        dica: "Vagas com menos pontos que isso são descartadas. 0 aceita qualquer vaga sem palavra excluída.",
       },
       {
         section: "filtro",
         key: "trecho_max_chars",
-        label: "Tamanho máximo do trecho",
+        label: "Tamanho máximo da descrição lida (caracteres)",
         kind: "number",
+        dica: "Só esse começo da descrição é guardado e usado para pontuar.",
       },
     ],
   },
@@ -66,9 +84,12 @@ const GROUPS: { titulo: string; fields: Field[] }[] = [
     fields: [
       {
         section: "limites",
-        key: "max_vagas_lista",
-        label: "Vagas lidas por fonte",
-        kind: "number",
+        key: "max_paginas_por_termo",
+        label: "Páginas abertas por palavra-chave (em cada fonte)",
+        kind: "slider",
+        min: 1,
+        max: 10,
+        dica: "Quantas páginas de resultados são abertas para cada palavra-chave em cada plataforma. Mais páginas trazem mais vagas, mas aumentam o tempo e o risco de bloqueio.",
       },
     ],
   },
@@ -192,7 +213,8 @@ function ConfigForm({ config }: { config: Config }) {
     <form onSubmit={submit} className="space-y-4">
       {GROUPS.map((group) => (
         <section key={group.titulo} className={card} aria-label={group.titulo}>
-          <h2 className="mb-3 text-sm font-semibold text-grafite-900">{group.titulo}</h2>
+          <h2 className={`${group.intro ? "mb-1" : "mb-3"} text-sm font-semibold text-grafite-900`}>{group.titulo}</h2>
+          {group.intro && <p className="mb-3 text-xs text-grafite-500">{group.intro}</p>}
           <div className="grid gap-3 sm:grid-cols-2">
             {group.fields.map((field) => (
               <div key={id(field)} className="flex flex-col gap-1">
@@ -214,16 +236,16 @@ function ConfigForm({ config }: { config: Config }) {
                       <input
                         id={id(field)}
                         type="range"
-                        min={0}
-                        max={Math.max(SLIDER_MAX, Number(valueOf(config, field)), Number(draft[id(field)]))}
-                        step={1}
+                        min={Math.min(field.min ?? 0, Number(valueOf(config, field)), Number(draft[id(field)]))}
+                        max={Math.max(field.max ?? SLIDER_MAX, Number(valueOf(config, field)), Number(draft[id(field)]))}
+                        step={field.step ?? 1}
                         className="w-full accent-[var(--pn-grafite-900)]"
                         value={draft[id(field)]}
                         onChange={(e) => change(field, e.target.value)}
                       />
                       <output
                         data-testid={`valor-${id(field)}`}
-                        className="w-8 text-right text-sm font-medium tabular-nums"
+                        className="w-10 text-right text-sm font-medium tabular-nums"
                       >
                         {draft[id(field)]}
                       </output>

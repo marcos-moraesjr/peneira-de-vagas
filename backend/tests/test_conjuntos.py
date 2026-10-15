@@ -16,7 +16,7 @@ def test_banco_novo_tem_um_conjunto_padrao_ativo_com_as_palavras_semeadas(conn):
     assert [k["termo"] for k in keywords.list_all(conn, "busca")] == ["Engenheiro Mecânico"]
 
 
-def test_migracao_4_move_palavras_existentes_para_o_conjunto_padrao(settings, abrir_conexao):
+def test_migracao_4_move_exclusoes_existentes_para_o_conjunto_padrao_e_a_8_apaga_a_busca_antiga(settings, abrir_conexao):
     arquivo = settings.geral.db_path
     arquivo.parent.mkdir(parents=True, exist_ok=True)
     antigo = sqlite3.connect(arquivo)
@@ -31,7 +31,7 @@ def test_migracao_4_move_palavras_existentes_para_o_conjunto_padrao(settings, ab
     connection = abrir_conexao(arquivo)
     init_db(connection, settings)
     assert [c["nome"] for c in conjuntos.list_all(connection)] == ["Padrão"]
-    assert [k["termo"] for k in keywords.list_all(connection, "busca")] == ["Projetista"]
+    assert keywords.list_all(connection, "busca") == []  # a migração 8 apaga as palavras de busca antigas
     assert [k["termo"] for k in keywords.list_all(connection, "exclusao")] == ["estágio"]
 
 
@@ -78,3 +78,56 @@ def test_nao_remove_o_unico_conjunto_nem_um_inexistente(conn):
         conjuntos.remove(conn, unico["id"])
     with pytest.raises(NotFound):
         conjuntos.remove(conn, 999)
+
+
+def test_renomear_conjunto_mantem_palavras_e_ativo(conn, settings):
+    padrao = conjuntos.list_all(conn)[0]
+    renomeado = conjuntos.rename(conn, settings, padrao["id"], "  Engenharia   mecânica ")
+    assert renomeado == {"id": padrao["id"], "nome": "Engenharia mecânica", "ativo": True}
+    assert [(c["nome"], c["ativo"]) for c in conjuntos.list_all(conn)] == [("Engenharia mecânica", True)]
+    assert [k["termo"] for k in keywords.list_all(conn, "busca")] == ["Engenheiro Mecânico"]
+
+
+def test_renomear_so_a_caixa_ou_o_acento_do_proprio_nome_e_permitido(conn, settings):
+    padrao = conjuntos.list_all(conn)[0]
+    assert conjuntos.rename(conn, settings, padrao["id"], "PADRAO")["nome"] == "PADRAO"
+
+
+@pytest.mark.parametrize("nome", ["   ", "x" * 81, "tecnologia"])
+def test_renomear_para_nome_invalido_ou_de_outro_conjunto_levanta_domain_error(conn, settings, nome):
+    padrao = conjuntos.list_all(conn)[0]
+    conjuntos.add(conn, settings, "Tecnologia", NOW)
+    with pytest.raises(DomainError):
+        conjuntos.rename(conn, settings, padrao["id"], nome)
+    assert conjuntos.list_all(conn)[0]["nome"] == "Padrão"
+
+
+def test_renomear_inexistente_levanta_not_found(conn, settings):
+    with pytest.raises(NotFound):
+        conjuntos.rename(conn, settings, 999, "Qualquer")
+
+
+def test_copiar_conjunto_leva_todas_as_palavras_ativa_a_copia_e_nao_altera_o_original(conn, settings):
+    padrao = conjuntos.list_all(conn)[0]
+    keywords.add(conn, settings, "Projetista", "busca", NOW)
+    keywords.add(conn, settings, "AutoCAD", "ranking", NOW)
+    keywords.add(conn, settings, "estágio", "exclusao", NOW)
+    copia = conjuntos.duplicate(conn, settings, padrao["id"], "  Cópia   do padrão ", NOW)
+    assert (copia["nome"], copia["ativo"]) == ("Cópia do padrão", True)
+    assert copia["id"] != padrao["id"]
+    assert [(c["nome"], c["ativo"]) for c in conjuntos.list_all(conn)] == [("Padrão", False), ("Cópia do padrão", True)]
+    por_tipo = lambda tipo: [k["termo"] for k in keywords.list_all(conn, tipo)]  # noqa: E731 - conjunto ativo = a cópia
+    assert (por_tipo("busca"), por_tipo("ranking"), por_tipo("exclusao")) == (["Engenheiro Mecânico", "Projetista"], ["AutoCAD"], ["estágio"])
+    keywords.add(conn, settings, "Só na cópia", "busca", NOW)
+    conjuntos.activate(conn, padrao["id"])
+    assert [k["termo"] for k in keywords.list_all(conn, "busca")] == ["Engenheiro Mecânico", "Projetista"]
+
+
+def test_copiar_com_nome_invalido_ou_repetido_ou_de_conjunto_inexistente_nao_cria_nada(conn, settings):
+    padrao = conjuntos.list_all(conn)[0]
+    for nome in ("   ", "x" * 81, "padrão"):
+        with pytest.raises(DomainError):
+            conjuntos.duplicate(conn, settings, padrao["id"], nome, NOW)
+    with pytest.raises(NotFound):
+        conjuntos.duplicate(conn, settings, 999, "Qualquer", NOW)
+    assert [(c["nome"], c["ativo"]) for c in conjuntos.list_all(conn)] == [("Padrão", True)]

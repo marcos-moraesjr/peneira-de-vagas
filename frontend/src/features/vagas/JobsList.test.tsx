@@ -4,15 +4,15 @@ import { makeJob } from "../../test/mockApi";
 import { JobsList } from "./JobsList";
 
 const JOBS = [
-  makeJob(1, { localidade: "Campinas, São Paulo", cidade: "Campinas", estado: "SP", modalidade: "hibrido", publicada_em: "2026-10-08T11:04:27.057Z", pontos: 4 }),
+  makeJob(1, { localidade: "Campinas, São Paulo", cidade: "Campinas", estado: "SP", modalidade: "hibrido", palavra_chave: "Projetista", publicada_em: "2026-10-08T11:04:27.057Z", pontos: 4 }),
   makeJob(2, { fonte: "linkedin", empresa: "", localidade: "", publicada_em: null, visto: true }),
 ];
 
 describe("JobsList (tabela)", () => {
-  it("mostra as colunas Vaga, Empresa, Cidade, Estado, Modalidade, Publicada, Encontrada, Plataforma e Pontos", () => {
+  it("mostra as colunas Vaga, Empresa, Palavra-chave, Cidade, Estado, Modalidade, Publicada, Encontrada, Plataforma e Pontos", () => {
     render(<JobsList jobs={JOBS} onSeen={() => {}} sort={null} onSort={() => {}} />);
     const names = screen.getAllByRole("columnheader").map((header) => header.textContent?.replace(/[▲▼↕]/g, ""));
-    expect(names).toEqual(["Vaga", "Empresa", "Cidade", "Estado", "Modalidade", "Publicada", "Encontrada", "Plataforma", "Pontos"]);
+    expect(names).toEqual(["Vaga", "Empresa", "Palavra-chave", "Cidade", "Estado", "Modalidade", "Publicada", "Encontrada", "Plataforma", "Pontos"]);
   });
 
   it("preenche uma linha por vaga com cidade, estado e data de publicação", () => {
@@ -20,6 +20,7 @@ describe("JobsList (tabela)", () => {
     const row = screen.getByRole("row", { name: /Engenheiro Mecânico 1/ });
     expect(within(row).getByRole("link", { name: "Engenheiro Mecânico 1" })).toHaveAttribute("href", "https://vagas.example/1");
     expect(within(row).getByText("ACME")).toBeInTheDocument();
+    expect(within(row).getByText("Projetista")).toBeInTheDocument();
     expect(within(row).getByText("Campinas")).toBeInTheDocument();
     expect(within(row).getByText("SP")).toBeInTheDocument();
     expect(within(row).getByText("Híbrido")).toBeInTheDocument();
@@ -30,7 +31,7 @@ describe("JobsList (tabela)", () => {
   it("campos que a fonte não informa aparecem como traço, nunca vazios", () => {
     render(<JobsList jobs={JOBS} onSeen={() => {}} sort={null} onSort={() => {}} />);
     const row = screen.getByRole("row", { name: /Engenheiro Mecânico 2/ });
-    expect(within(row).getAllByText("—")).toHaveLength(5); // empresa, cidade, estado, modalidade e publicada
+    expect(within(row).getAllByText("—")).toHaveLength(6); // empresa, palavra-chave, cidade, estado, modalidade e publicada
   });
 
   it("vaga não lida é destacada (ponto e cor de fundo) e lida não; não há botão de marcar", () => {
@@ -43,9 +44,17 @@ describe("JobsList (tabela)", () => {
 
   it("cabeçalhos de dados são botões de ordenação", () => {
     render(<JobsList jobs={JOBS} onSeen={() => {}} sort={null} onSort={() => {}} />);
-    for (const nome of ["Vaga", "Empresa", "Cidade", "Estado", "Modalidade", "Publicada", "Encontrada", "Plataforma", "Pontos"]) {
+    for (const nome of ["Vaga", "Empresa", "Palavra-chave", "Cidade", "Estado", "Modalidade", "Publicada", "Encontrada", "Plataforma", "Pontos"]) {
       expect(screen.getByRole("button", { name: new RegExp(`^${nome}`) })).toBeInTheDocument();
     }
+  });
+
+  it("clicar em Palavra-chave pede a ordenação por palavra_chave", async () => {
+    const user = userEvent.setup();
+    const onSort = vi.fn();
+    render(<JobsList jobs={JOBS} onSeen={() => {}} sort={null} onSort={onSort} />);
+    await user.click(screen.getByRole("button", { name: /^Palavra-chave/ }));
+    expect(onSort).toHaveBeenCalledWith("palavra_chave");
   });
 
   it("clicar no cabeçalho pede a ordenação por aquela coluna", async () => {

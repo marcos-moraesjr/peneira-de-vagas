@@ -6,7 +6,7 @@ from ..errors import DomainError, NotFound
 from . import conjuntos
 from .filters import normalize
 
-TIPOS = ("busca", "exclusao")
+TIPOS = ("busca", "ranking", "exclusao")
 
 
 def _check_type(tipo: str) -> None:

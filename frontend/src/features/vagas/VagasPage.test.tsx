@@ -288,3 +288,44 @@ describe("VagasPage", () => {
     });
   });
 });
+
+describe("VagasPage — seletor de conjunto", () => {
+  const conjuntos = [
+    { id: 1, nome: "Mecânica", ativo: true },
+    { id: 2, nome: "Tecnologia", ativo: false },
+  ];
+  const ultimaListagem = (calls: { path: string }[]) => [...calls].reverse().find((c) => c.path.startsWith("/api/jobs?"))?.path ?? "";
+
+  it("começa no conjunto ativo (sem enviar conjunto_id) e lista os conjuntos para escolher", async () => {
+    const { calls } = setup({ jobs: [makeJob(1)], extra: { "GET /api/conjuntos": conjuntos } });
+    const seletor = await screen.findByLabelText("Conjunto");
+    expect(seletor).toHaveValue("1");
+    expect(screen.getByRole("option", { name: "Mecânica (ativo)" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Tecnologia" })).toBeInTheDocument();
+    expect(ultimaListagem(calls)).not.toContain("conjunto_id");
+  });
+
+  it("escolher outro conjunto lista as vagas dele, volta à página 1 e vale em marcar como vistas e excluir", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const { calls } = setup({
+      jobs: [makeJob(1)],
+      extra: { "GET /api/conjuntos": conjuntos, "DELETE /api/jobs": { removidas: 1 } },
+    });
+    await user.selectOptions(await screen.findByLabelText("Conjunto"), "2");
+    await waitFor(() => expect(ultimaListagem(calls)).toContain("conjunto_id=2"));
+    await user.click(screen.getByRole("button", { name: "Marcar todas como vistas" }));
+    await waitFor(() => expect(calls.find((c) => c.path === "/api/jobs/mark-seen")?.body).toEqual({ conjunto_id: 2 }));
+    await user.click(screen.getByRole("button", { name: "Excluir todas as vagas" }));
+    await waitFor(() => expect(calls.some((c) => c.method === "DELETE" && c.path === "/api/jobs?conjunto_id=2")).toBe(true));
+  });
+
+  it("a confirmação de excluir nomeia o conjunto", async () => {
+    const user = userEvent.setup();
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    setup({ jobs: [makeJob(1)], extra: { "GET /api/conjuntos": conjuntos } });
+    await user.selectOptions(await screen.findByLabelText("Conjunto"), "2");
+    await user.click(screen.getByRole("button", { name: "Excluir todas as vagas" }));
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("Tecnologia"));
+  });
+});

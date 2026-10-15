@@ -1,4 +1,5 @@
 import sqlite3
+from dataclasses import replace
 
 import pytest
 
@@ -42,29 +43,29 @@ def test_init_db_nao_semeia_se_usuario_apagou_tudo_depois_do_primeiro_uso(settin
 
 def test_mesma_vaga_nao_e_gravada_duas_vezes(conn):
     run_id = db.create_run(conn, ["gupy"], NOW)
-    assert db.insert_new_jobs(conn, [make_job()], {"1": 3}, run_id, NOW) == 1
-    assert db.insert_new_jobs(conn, [make_job()], {"1": 3}, run_id, NOW) == 0
+    assert db.insert_new_jobs(conn, [make_job()], {"1": 3}, run_id, NOW, 1) == 1
+    assert db.insert_new_jobs(conn, [make_job()], {"1": 3}, run_id, NOW, 1) == 0
     assert conn.execute("SELECT COUNT(*) FROM jobs").fetchone()[0] == 1
 
 
 def test_mesmo_id_em_fontes_diferentes_nao_colide(conn):
     run_id = db.create_run(conn, ["gupy"], NOW)
     jobs = [make_job("7", "gupy"), make_job("7", "linkedin")]
-    assert db.insert_new_jobs(conn, jobs, {"7": 3}, run_id, NOW) == 2
+    assert db.insert_new_jobs(conn, jobs, {"7": 3}, run_id, NOW, 1) == 2
 
 
 def test_vaga_ja_gravada_nao_volta_a_nao_vista(conn):
     run_id = db.create_run(conn, ["gupy"], NOW)
-    db.insert_new_jobs(conn, [make_job()], {"1": 3}, run_id, NOW)
+    db.insert_new_jobs(conn, [make_job()], {"1": 3}, run_id, NOW, 1)
     conn.execute("UPDATE jobs SET visto=1")
-    db.insert_new_jobs(conn, [make_job()], {"1": 3}, run_id, NOW)
+    db.insert_new_jobs(conn, [make_job()], {"1": 3}, run_id, NOW, 1)
     assert conn.execute("SELECT visto FROM jobs").fetchone()[0] == 1
 
 
 def test_vaga_grava_localidade_e_data_de_publicacao(conn):
     run_id = db.create_run(conn, ["gupy"], NOW)
     job = Job("1", "Eng", "ACME", "https://x/1", "t", "gupy", localidade="Campinas, São Paulo", publicada_em="2026-10-08T11:04:27.057Z")
-    db.insert_new_jobs(conn, [job, make_job("2")], {}, run_id, NOW)
+    db.insert_new_jobs(conn, [job, make_job("2")], {}, run_id, NOW, 1)
     linhas = {r["id_da_vaga"]: (r["localidade"], r["publicada_em"]) for r in conn.execute("SELECT * FROM jobs")}
     assert linhas == {"1": ("Campinas, São Paulo", "2026-10-08T11:04:27.057Z"), "2": ("", None)}
 
@@ -182,5 +183,108 @@ def test_migracao_6_adiciona_a_modalidade_e_preserva_as_vagas(settings, abrir_co
 
 def test_vaga_nova_grava_a_modalidade(conn):
     job = make_job(modalidade="remoto")
-    db.insert_new_jobs(conn, [job], {job.id: 3}, db.create_run(conn, ["gupy"], NOW), NOW)
+    db.insert_new_jobs(conn, [job], {job.id: 3}, db.create_run(conn, ["gupy"], NOW), NOW, 1)
     assert conn.execute("SELECT modalidade FROM jobs").fetchone()["modalidade"] == "remoto"
+
+
+def test_migracao_7_adiciona_a_palavra_chave_e_preserva_as_vagas(settings, abrir_conexao):
+    arquivo = settings.geral.db_path
+    arquivo.parent.mkdir(parents=True, exist_ok=True)
+    antigo = sqlite3.connect(arquivo)
+    antigo.executescript("".join(db.MIGRATIONS[versao] for versao in (1, 2, 3, 4, 5, 6)))
+    antigo.execute("CREATE TABLE schema_version (version INTEGER NOT NULL)")
+    antigo.execute("INSERT INTO schema_version VALUES (6)")
+    antigo.execute("INSERT INTO runs (inicio, status) VALUES ('x', 'concluida')")
+    antigo.execute(
+        "INSERT INTO jobs (fonte, id_da_vaga, titulo, empresa, link, trecho, pontos, run_id, encontrada_em, visto) "
+        "VALUES ('gupy','9','Antiga','ACME','https://x/9','t',1,1,'x',1)"
+    )
+    antigo.commit()
+    antigo.close()
+    connection = abrir_conexao(arquivo)
+    init_db(connection, settings)
+    linha = connection.execute("SELECT titulo, visto, palavra_chave FROM jobs").fetchone()
+    assert (linha["titulo"], linha["visto"], linha["palavra_chave"]) == ("Antiga", 1, "")
+    assert list(settings.geral.backup_dir.glob("*.db"))
+
+
+def test_vaga_nova_grava_a_palavra_chave(conn):
+    job = replace(make_job(), palavra_chave="Engenheiro Mecânico")
+    db.insert_new_jobs(conn, [job], {job.id: 3}, db.create_run(conn, ["gupy"], NOW), NOW, 1)
+    assert conn.execute("SELECT palavra_chave FROM jobs").fetchone()["palavra_chave"] == "Engenheiro Mecânico"
+
+
+def test_migracao_8_apaga_as_palavras_de_busca_antigas_aceita_ranking_e_preserva_exclusoes_e_vagas(settings, abrir_conexao):
+    arquivo = settings.geral.db_path
+    arquivo.parent.mkdir(parents=True, exist_ok=True)
+    antigo = sqlite3.connect(arquivo)
+    antigo.executescript("".join(db.MIGRATIONS[versao] for versao in (1, 2, 3, 4, 5, 6, 7)))
+    antigo.execute("CREATE TABLE schema_version (version INTEGER NOT NULL)")
+    antigo.execute("INSERT INTO schema_version VALUES (7)")
+    antigo.execute("INSERT INTO meta (key, value) VALUES ('seeded', '1')")
+    for termo, tipo in (("Projetos", "busca"), ("Mecânica", "busca"), ("Estágio", "exclusao")):
+        antigo.execute(
+            "INSERT INTO keywords (termo, termo_normalizado, tipo, criada_em, conjunto_id) VALUES (?,?,?,'x',1)",
+            (termo, termo.lower(), tipo),
+        )
+    antigo.execute("INSERT INTO runs (inicio, status) VALUES ('x', 'concluida')")
+    antigo.execute(
+        "INSERT INTO jobs (fonte, id_da_vaga, titulo, empresa, link, trecho, pontos, run_id, encontrada_em, visto) "
+        "VALUES ('gupy','9','Antiga','ACME','https://x/9','t',1,1,'x',1)"
+    )
+    antigo.commit()
+    antigo.close()
+    connection = abrir_conexao(arquivo)
+    init_db(connection, settings)
+    restantes = [(linha["termo"], linha["tipo"]) for linha in connection.execute("SELECT termo, tipo FROM keywords")]
+    assert restantes == [("Estágio", "exclusao")]
+    connection.execute(
+        "INSERT INTO keywords (termo, termo_normalizado, tipo, criada_em, conjunto_id) VALUES ('Cálculo','calculo','ranking','x',1)"
+    )
+    assert connection.execute("SELECT titulo FROM jobs").fetchone()["titulo"] == "Antiga"
+    assert list(settings.geral.backup_dir.glob("*.db"))
+
+
+def test_mesma_vaga_em_dois_conjuntos_vira_uma_linha_em_cada_e_o_conhecimento_e_por_conjunto(conn, settings):
+    outro = conn.execute("INSERT INTO conjuntos (nome, nome_normalizado, ativo, criada_em) VALUES ('B','b',0,'x')").lastrowid
+    conn.commit()
+    run_id = db.create_run(conn, ["gupy"], NOW)
+    assert db.insert_new_jobs(conn, [make_job()], {"1": 3}, run_id, NOW, 1) == 1
+    assert db.filter_unknown(conn, [make_job()], 1) == []
+    assert [j.id for j in db.filter_unknown(conn, [make_job()], outro)] == ["1"]
+    assert db.insert_new_jobs(conn, [make_job()], {"1": 5}, run_id, NOW, outro) == 1
+    assert db.insert_new_jobs(conn, [make_job()], {"1": 5}, run_id, NOW, outro) == 0
+    linhas = conn.execute("SELECT conjunto_id, pontos FROM jobs ORDER BY conjunto_id").fetchall()
+    assert [(linha["conjunto_id"], linha["pontos"]) for linha in linhas] == [(1, 3), (outro, 5)]
+
+
+def test_migracao_9_atrela_as_vagas_existentes_ao_primeiro_conjunto_e_preserva_os_dados(settings, abrir_conexao):
+    arquivo = settings.geral.db_path
+    arquivo.parent.mkdir(parents=True, exist_ok=True)
+    antigo = sqlite3.connect(arquivo)
+    antigo.executescript("".join(db.MIGRATIONS[versao] for versao in (1, 2, 3, 4, 5, 6, 7, 8)))
+    antigo.execute("CREATE TABLE schema_version (version INTEGER NOT NULL)")
+    antigo.execute("INSERT INTO schema_version VALUES (8)")
+    antigo.execute("INSERT INTO meta (key, value) VALUES ('seeded', '1')")
+    antigo.execute("INSERT INTO runs (inicio, status) VALUES ('x', 'concluida')")
+    antigo.execute(
+        "INSERT INTO jobs (fonte, id_da_vaga, titulo, empresa, link, trecho, pontos, run_id, encontrada_em, visto, palavra_chave) "
+        "VALUES ('gupy','9','Antiga','ACME','https://x/9','t',1,1,'x',1,'kw')"
+    )
+    antigo.commit()
+    antigo.close()
+    connection = abrir_conexao(arquivo)
+    init_db(connection, settings)
+    linha = connection.execute("SELECT titulo, visto, palavra_chave, conjunto_id FROM jobs").fetchone()
+    assert (linha["titulo"], linha["visto"], linha["palavra_chave"], linha["conjunto_id"]) == ("Antiga", 1, "kw", 1)
+    assert list(settings.geral.backup_dir.glob("*.db"))
+
+
+def test_apagar_o_conjunto_apaga_as_vagas_dele(conn):
+    outro = conn.execute("INSERT INTO conjuntos (nome, nome_normalizado, ativo, criada_em) VALUES ('B','b',0,'x')").lastrowid
+    conn.commit()
+    run_id = db.create_run(conn, ["gupy"], NOW)
+    db.insert_new_jobs(conn, [make_job()], {}, run_id, NOW, 1)
+    db.insert_new_jobs(conn, [make_job()], {}, run_id, NOW, outro)
+    conn.execute("DELETE FROM conjuntos WHERE id=?", (outro,))
+    assert [row["conjunto_id"] for row in conn.execute("SELECT conjunto_id FROM jobs")] == [1]

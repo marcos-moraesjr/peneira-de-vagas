@@ -45,9 +45,14 @@ class Filter:
         self._peso_descricao = peso_descricao
         self._min_score = min_score
 
+    def excluded(self, titulo: str, trecho: str) -> bool:
+        """Algum termo de exclusão aparece no título ou no trecho."""
+        text = f"{normalize(titulo)} {normalize(trecho)}"
+        return any(_contains_all_words(text, term) for term in self._exclusions)
+
     def evaluate(self, titulo: str, trecho: str) -> Evaluation:
         title, body = normalize(titulo), normalize(trecho)
-        if any(_contains_all_words(f"{title} {body}", term) for term in self._exclusions):
+        if self.excluded(titulo, trecho):
             return Evaluation(0, False)
         score = 0
         for term in self._keywords:

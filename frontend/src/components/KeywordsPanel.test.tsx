@@ -5,7 +5,7 @@ import { KeywordsPanel } from "./KeywordsPanel";
 
 type Kw = { id: number; termo: string; tipo: string; criada_em: string };
 
-function setup(initial: Kw[] = [], overrides: Record<string, unknown> = {}) {
+function setup(initial: Kw[] = [], overrides: Record<string, unknown> = {}, tipo: "busca" | "ranking" = "busca") {
   let items = [...initial];
   const api = mockApi({
     "GET /api/config": CONFIG,
@@ -22,7 +22,7 @@ function setup(initial: Kw[] = [], overrides: Record<string, unknown> = {}) {
     },
     ...overrides,
   });
-  renderWithClient(<KeywordsPanel tipo="busca" titulo="Palavras-chave" />);
+  renderWithClient(<KeywordsPanel tipo={tipo} titulo={tipo === "busca" ? "Palavras-chave" : undefined} />);
   return api;
 }
 
@@ -72,6 +72,16 @@ describe("KeywordsPanel", () => {
     setup([padrao], { "POST /api/keywords": { status: 422, json: { detail: "Informe um termo" } } });
     await user.type(await screen.findByLabelText("Nova palavra-chave"), "   {Enter}");
     expect(await screen.findByRole("alert")).toHaveTextContent("Informe um termo");
+  });
+
+  it("o grupo de ranking envia tipo ranking e explica que só pontua", async () => {
+    const user = userEvent.setup();
+    const { calls } = setup([], {}, "ranking");
+    expect(await screen.findByText(/nenhuma palavra de ranking/i)).toBeInTheDocument();
+    expect(screen.getByText(/só pontuam/i)).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Nova palavra de ranking"), "Cálculo estrutural{Enter}");
+    expect(await screen.findByText("Cálculo estrutural")).toBeInTheDocument();
+    expect(calls.find((c) => c.method === "POST")?.body).toEqual({ termo: "Cálculo estrutural", tipo: "ranking" });
   });
 
   it("remove um termo pelo ✕", async () => {

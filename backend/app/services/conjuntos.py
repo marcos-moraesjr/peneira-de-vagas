@@ -23,8 +23,8 @@ def _set_active(conn: sqlite3.Connection, conjunto_id: int) -> None:
     conn.execute("UPDATE conjuntos SET ativo=1 WHERE id=?", (conjunto_id,))
 
 
-def add(conn: sqlite3.Connection, settings: Settings, nome: str, now: str) -> dict:
-    """Cria um conjunto vazio e o torna o ativo."""
+def _clean_name(settings: Settings, nome: str) -> tuple[str, str]:
+    """Nome com espaços colapsados e sua forma normalizada; levanta `DomainError` se vazio ou longo demais."""
     nome = " ".join(nome.split())
     normalized = normalize(nome)
     if not normalized:
@@ -32,6 +32,12 @@ def add(conn: sqlite3.Connection, settings: Settings, nome: str, now: str) -> di
     limit = settings.busca.keyword_max_length
     if len(nome) > limit:
         raise DomainError(f"Valor inválido: nome={nome[:20]!r}... com {len(nome)} caracteres (esperado <= {limit})")
+    return nome, normalized
+
+
+def add(conn: sqlite3.Connection, settings: Settings, nome: str, now: str) -> dict:
+    """Cria um conjunto vazio e o torna o ativo."""
+    nome, normalized = _clean_name(settings, nome)
     try:
         conn.execute("UPDATE conjuntos SET ativo=0 WHERE ativo=1")
         cursor = conn.execute(
@@ -42,6 +48,35 @@ def add(conn: sqlite3.Connection, settings: Settings, nome: str, now: str) -> di
         raise DomainError(f"Esse conjunto já existe: {nome!r}") from None
     conn.commit()
     return {"id": cursor.lastrowid, "nome": nome, "ativo": True}
+
+
+def duplicate(conn: sqlite3.Connection, settings: Settings, conjunto_id: int, nome: str, now: str) -> dict:
+    """Cria um conjunto com o nome dado e todas as palavras do original (busca, ranking e exclusões); a cópia fica ativa."""
+    if not conn.execute("SELECT 1 FROM conjuntos WHERE id=?", (conjunto_id,)).fetchone():
+        raise NotFound(f"Conjunto inexistente: id={conjunto_id}")
+    copia = add(conn, settings, nome, now)
+    conn.execute(
+        "INSERT INTO keywords (termo, termo_normalizado, tipo, criada_em, conjunto_id) "
+        "SELECT termo, termo_normalizado, tipo, criada_em, ? FROM keywords WHERE conjunto_id=? ORDER BY id",
+        (copia["id"], conjunto_id),
+    )
+    conn.commit()
+    return copia
+
+
+def rename(conn: sqlite3.Connection, settings: Settings, conjunto_id: int, nome: str) -> dict:
+    """Troca o nome do conjunto, mantendo palavras e estado ativo; o nome não pode ser o de outro conjunto."""
+    row = conn.execute("SELECT ativo FROM conjuntos WHERE id=?", (conjunto_id,)).fetchone()
+    if not row:
+        raise NotFound(f"Conjunto inexistente: id={conjunto_id}")
+    nome, normalized = _clean_name(settings, nome)
+    try:
+        conn.execute("UPDATE conjuntos SET nome=?, nome_normalizado=? WHERE id=?", (nome, normalized, conjunto_id))
+    except sqlite3.IntegrityError:
+        conn.rollback()
+        raise DomainError(f"Esse conjunto já existe: {nome!r}") from None
+    conn.commit()
+    return {"id": conjunto_id, "nome": nome, "ativo": bool(row["ativo"])}
 
 
 def activate(conn: sqlite3.Connection, conjunto_id: int) -> None:

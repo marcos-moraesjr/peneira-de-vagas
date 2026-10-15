@@ -46,7 +46,7 @@ class Filtro:
 
 @dataclass(frozen=True)
 class Limites:
-    max_vagas_lista: int
+    max_paginas_por_termo: int
 
 
 @dataclass(frozen=True)
@@ -168,7 +168,7 @@ def validate(settings: Settings) -> None:
         "janela_horas": settings.busca.janela_horas,
         "trecho_max_chars": settings.filtro.trecho_max_chars,
         "poll_interval_ms": settings.api.poll_interval_ms,
-        "max_vagas_lista": settings.limites.max_vagas_lista,
+        "max_paginas_por_termo": settings.limites.max_paginas_por_termo,
         "jobs_page_size": settings.api.jobs_page_size,
         "gupy.page_size": settings.gupy.page_size,
     }

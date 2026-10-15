@@ -15,7 +15,7 @@ exclusoes = []
 
 [busca]
 keyword_max_length = 80
-max_termos_busca = 10   # máximo de palavras-chave de busca por conjunto (cada termo vira uma consulta por fonte; consultas demais levam a bloqueio)
+max_termos_busca = 6  # máximo de palavras-chave de busca por conjunto (cada termo vira uma consulta por fonte; consultas demais levam a bloqueio)
 janela_horas = 72
 localidades = []        # lista de cidades ou estados ("Campinas, SP", "Minas Gerais"); vazia = sem filtro de local. Filtra as vagas listadas (não vai na busca da plataforma)
 modalidade = []         # lista: "remoto", "hibrido", "presencial"; vazia = todas. Filtra as vagas listadas (não vai na busca da plataforma)
@@ -24,11 +24,11 @@ modalidade = []         # lista: "remoto", "hibrido", "presencial"; vazia = toda
 peso_titulo = 3
 peso_descricao = 1
 min_score = 4
-trecho_max_chars = 500
+trecho_max_chars = 2000
 aceitar_desconhecido = true   # vaga sem localidade/modalidade informada (ou só "Brasil", ou remota) passa pelo filtro de local e modalidade; false descarta
 
 [limites]
-max_vagas_lista = 300
+max_paginas_por_termo = 3   # páginas de resultados abertas por palavra-chave em cada fonte (LinkedIn, Indeed e Gupy); mais páginas = mais tempo e mais risco de bloqueio
 
 [ritmo]
 pausa_min_s = 4.0

@@ -5,10 +5,16 @@ import { buttonDark, buttonSecondary, card, inputClass } from "./ui";
 
 const TEXTS: Record<KeywordType, { titulo: string; campo: string; vazio: string; dica: string }> = {
   busca: {
-    titulo: "Palavras-chave",
+    titulo: "Palavras-chave da busca",
     campo: "Nova palavra-chave",
     vazio: "Nenhuma palavra-chave. Adicione ao menos uma palavra-chave para buscar.",
-    dica: "Vale a partir da próxima busca.",
+    dica: "Cada palavra vira uma busca em cada plataforma. Vale a partir da próxima busca.",
+  },
+  ranking: {
+    titulo: "Palavras-chave de ranking",
+    campo: "Nova palavra de ranking",
+    vazio: "Nenhuma palavra de ranking.",
+    dica: "Não fazem busca: só pontuam as vagas encontradas (junto com as palavras da busca).",
   },
   exclusao: {
     titulo: "Exclusões",
@@ -50,7 +56,7 @@ export function KeywordsPanel({ tipo, titulo }: { tipo: KeywordType; titulo?: st
           onChange={(event) => setTermo(event.target.value)}
           className={`${inputClass} min-w-0 flex-1`}
         />
-        <button type="submit" className={tipo === "busca" ? buttonDark : buttonSecondary}>
+        <button type="submit" className={tipo === "exclusao" ? buttonSecondary : buttonDark}>
           Adicionar
         </button>
       </form>
@@ -62,7 +68,7 @@ export function KeywordsPanel({ tipo, titulo }: { tipo: KeywordType; titulo?: st
       {keywords.data?.length === 0 && <p className="mt-2 text-sm text-grafite-500">{texts.vazio}</p>}
       <ul className="mt-2 flex flex-wrap gap-2">
         {keywords.data?.map((keyword) => (
-          <li key={keyword.id} className={`flex items-center gap-2 rounded-selo border py-1 pl-2.5 pr-1.5 text-dado ${tipo === "busca" ? "border-linha bg-papel text-grafite-900" : "border-dashed border-grafite-400 text-grafite-700"}`}>
+          <li key={keyword.id} className={`flex items-center gap-2 rounded-selo border py-1 pl-2.5 pr-1.5 text-dado ${tipo !== "exclusao" ? "border-linha bg-papel text-grafite-900" : "border-dashed border-grafite-400 text-grafite-700"}`}>
             <span>{keyword.termo}</span>
             <button
               type="button"

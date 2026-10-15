@@ -23,23 +23,26 @@ def list_jobs(
     cidade: str | None = None,
     estado: str | None = None,
     modalidade: str | None = None,
+    conjunto_id: int | None = None,
     conn: sqlite3.Connection = Depends(get_conn),
     settings: Settings = Depends(get_settings),
     now=Depends(get_now),
 ) -> dict:
     corte = jobs.cutoff_date(now(), max_dias)
-    return jobs.list_jobs(conn, visto, fonte, q, limit or settings.api.jobs_page_size, offset, ordenar, direcao, corte, cidade, estado, modalidade)
+    return jobs.list_jobs(
+        conn, visto, fonte, q, limit or settings.api.jobs_page_size, offset, ordenar, direcao, corte, cidade, estado, modalidade, conjunto_id
+    )
 
 
 @router.delete("/jobs", response_model=JobsCleared)
-def clear_jobs(conn: sqlite3.Connection = Depends(get_conn)) -> JobsCleared:
-    return JobsCleared(removidas=jobs.clear_all(conn))
+def clear_jobs(conjunto_id: int | None = None, conn: sqlite3.Connection = Depends(get_conn)) -> JobsCleared:
+    return JobsCleared(removidas=jobs.clear_all(conn, conjunto_id))
 
 
 @router.post("/jobs/mark-seen", response_model=MarkSeenOut)
 def mark_seen(body: MarkSeenIn, conn: sqlite3.Connection = Depends(get_conn), now=Depends(get_now)) -> MarkSeenOut:
     return MarkSeenOut(
-        atualizadas=jobs.mark_seen(conn, body.fonte, body.q, jobs.cutoff_date(now(), body.max_dias), body.cidade, body.estado, body.modalidade)
+        atualizadas=jobs.mark_seen(conn, body.fonte, body.q, jobs.cutoff_date(now(), body.max_dias), body.cidade, body.estado, body.modalidade, body.conjunto_id)
     )
 
 

@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { useClearJobs, useConfig, useJobs, useMarkAllSeen, useRuns, useSetSeen } from "../../api/hooks";
+import { useClearJobs, useConfig, useConjuntos, useJobs, useMarkAllSeen, useRuns, useSetSeen } from "../../api/hooks";
 import type { SeenFilter } from "../../api/types";
 import { ErrorBox } from "../../components/ErrorBox";
 import { buttonSecondary, inputClass } from "../../components/ui";
@@ -31,6 +31,7 @@ function useReloadJobsWhenRunFinishes(status: string | undefined) {
 const FIRST_DIRECTION: Record<SortColumn, "asc" | "desc"> = {
   titulo: "asc",
   empresa: "asc",
+  palavra_chave: "asc",
   cidade: "asc",
   estado: "asc",
   modalidade: "asc",
@@ -57,11 +58,16 @@ export function VagasPage() {
   const [maxDias, setMaxDias] = useState("");
   const [page, setPage] = useState(1);
   const [sort, setSort] = useState<Sort>(null);
+  const [conjuntoEscolhido, setConjuntoEscolhido] = useState<number | null>(null);
 
+  const conjuntos = useConjuntos().data ?? [];
+  // Sem escolha (ou com o conjunto escolhido já excluído), a lista acompanha o conjunto ativo (o servidor decide).
+  const conjuntoId = conjuntos.some((item) => item.id === conjuntoEscolhido) ? (conjuntoEscolhido ?? undefined) : undefined;
+  const conjuntoMostrado = conjuntos.find((item) => item.id === (conjuntoId ?? conjuntos.find((c) => c.ativo)?.id));
   const maxDiasValue = maxDias === "" ? undefined : Number(maxDias);
   const runs = useRuns();
   const latest = runs.data?.[0];
-  const jobs = useJobs({ visto: seen === "novas" ? false : undefined, fonte, q, cidade, estado, modalidade, ordenar: sort?.column, direcao: sort?.direction, maxDias: maxDiasValue }, page, latest?.status === "executando");
+  const jobs = useJobs({ visto: seen === "novas" ? false : undefined, fonte, q, cidade, estado, modalidade, conjuntoId, ordenar: sort?.column, direcao: sort?.direction, maxDias: maxDiasValue }, page, latest?.status === "executando");
   const setSeenMutation = useSetSeen();
   const markAll = useMarkAllSeen();
   const clearJobs = useClearJobs();
@@ -77,19 +83,39 @@ export function VagasPage() {
 
   function markAllSeen() {
     if (window.confirm("Marcar todas as vagas filtradas como vistas?")) {
-      markAll.mutate({ fonte: fonte || undefined, q: q || undefined, cidade: cidade || undefined, estado: estado || undefined, modalidade: modalidade || undefined, max_dias: maxDiasValue });
+      markAll.mutate({ fonte: fonte || undefined, q: q || undefined, cidade: cidade || undefined, estado: estado || undefined, modalidade: modalidade || undefined, max_dias: maxDiasValue, conjunto_id: conjuntoId });
     }
   }
 
   function deleteAll() {
-    if (window.confirm("Excluir TODAS as vagas encontradas (vistas e novas)? Não dá para desfazer; se reaparecerem numa busca, voltam como novas.")) {
-      clearJobs.mutate();
+    const nome = conjuntoMostrado ? ` do conjunto "${conjuntoMostrado.nome}"` : "";
+    if (window.confirm(`Excluir TODAS as vagas${nome} (vistas e novas)? Não dá para desfazer; se reaparecerem numa busca, voltam como novas.`)) {
+      clearJobs.mutate(conjuntoId);
     }
   }
 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-3">
+        {conjuntos.length > 0 && (
+          <label className="flex items-center gap-2 text-sm text-grafite-700">
+            Conjunto
+            <select
+              value={conjuntoMostrado?.id ?? ""}
+              onChange={(event) => {
+                setConjuntoEscolhido(Number(event.target.value));
+                setPage(1);
+              }}
+              className={inputClass}
+            >
+              {conjuntos.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.ativo ? `${item.nome} (ativo)` : item.nome}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <div role="tablist" className="flex overflow-hidden rounded-botao border border-linha bg-painel">
           {TABS.map((tab) => (
             <button

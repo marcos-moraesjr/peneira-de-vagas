@@ -142,6 +142,37 @@ def test_palavras_chave_do_banco_sao_enviadas_a_fonte(conn, settings):
     assert fonte.search_calls == [["Engenheiro Mecânico", "Engenheiro de Manutenção"]]
 
 
+def test_busca_envia_so_os_primeiros_termos_ate_o_teto_da_config(conn, settings):
+    for termo in ("Segundo", "Terceiro"):
+        keywords.add(conn, settings, termo, "busca", NOW)
+    menor = replace(settings, busca=replace(settings.busca, max_termos_busca=2))
+    fonte = FakeSource(jobs=[job("1")])
+    run_all(conn, menor, [fonte])
+    assert fonte.search_calls == [["Engenheiro Mecânico", "Segundo"]]
+
+
+def com_pontuacao(settings, min_score):
+    return replace(settings, filtro=replace(settings.filtro, peso_titulo=3, peso_descricao=1, min_score=min_score))
+
+
+def test_palavras_de_ranking_nao_vao_para_a_busca_mas_pontuam(conn, settings):
+    keywords.add(conn, settings, "Cálculo", "ranking", NOW)
+    config = com_pontuacao(settings, 4)
+    com_ranking = job("1", trecho="exige cálculo estrutural")
+    sem_ranking = job("2", trecho="sem o outro termo")
+    fonte = FakeSource(jobs=[com_ranking, sem_ranking])
+    run_id = run_all(conn, config, [fonte])
+    assert fonte.search_calls == [["Engenheiro Mecânico"]]
+    assert sources_of(conn, run_id)["fake"]["aprovadas"] == 1
+    assert conn.execute("SELECT id_da_vaga, pontos FROM jobs").fetchall()[0]["pontos"] == 4
+
+
+def test_termo_nos_dois_grupos_pontua_uma_vez(conn, settings):
+    keywords.add(conn, settings, "Engenheiro Mecânico", "ranking", NOW)
+    run_all(conn, com_pontuacao(settings, 0), [FakeSource(jobs=[job("1")])])
+    assert conn.execute("SELECT pontos FROM jobs").fetchone()["pontos"] == 3
+
+
 def test_busca_usa_so_o_conjunto_ativo(conn, settings):
     padrao = conjuntos.list_all(conn)[0]
     conjuntos.add(conn, settings, "Tecnologia", NOW)
@@ -281,3 +312,55 @@ def test_sem_localidade_nem_modalidade_na_config_nada_e_descartado(conn, setting
     sem = com_busca(settings, localidades=[], modalidade=[])
     run_all(conn, sem, [FakeSource(jobs=[vaga("1", "Recife, PE", "presencial"), vaga("2")])])
     assert ids_gravados(conn) == ["1", "2"]
+
+
+def test_vaga_sem_palavra_no_card_e_avaliada_depois_do_detalhe_e_gravada(conn, settings):
+    keywords.add(conn, settings, "Cálculo", "ranking", NOW)
+    fonte = FakeSource(jobs=[job("1", titulo="Projetista")], enriched_trecho="exige cálculo estrutural")
+    run_id = run_all(conn, com_pontuacao(settings, 1), [fonte])
+    assert fonte.enrich_calls == [["1"]]
+    assert ids_gravados(conn) == ["1"]
+    linha = sources_of(conn, run_id)["fake"]
+    assert (linha["lidas"], linha["aprovadas"], linha["novas"]) == (1, 1, 1)
+
+
+def test_vaga_reprovada_so_depois_do_detalhe_tem_a_pagina_aberta_mas_nao_e_gravada(conn, settings):
+    fonte = FakeSource(jobs=[job("1", titulo="Projetista")], enriched_trecho="nada relevante")
+    run_id = run_all(conn, com_pontuacao(settings, 1), [fonte])
+    assert fonte.enrich_calls == [["1"]]
+    assert ids_gravados(conn) == []
+    linha = sources_of(conn, run_id)["fake"]
+    assert (linha["lidas"], linha["aprovadas"], linha["novas"]) == (1, 0, 0)
+
+
+def test_exclusao_no_card_evita_abrir_o_detalhe(conn, settings):
+    keywords.add(conn, settings, "estágio", "exclusao", NOW)
+    fonte = FakeSource(jobs=[job("1", titulo="Estágio em Engenharia Mecânica")])
+    run_all(conn, com_pontuacao(settings, 1), [fonte])
+    assert fonte.enrich_calls == [[]]
+
+
+def test_localidade_fora_da_config_evita_abrir_o_detalhe(conn, settings):
+    fonte = FakeSource(jobs=[vaga("1", "Campinas, SP"), vaga("2", "Recife, PE")])
+    run_all(conn, com_busca(com_pontuacao(settings, 1), localidades=["Campinas, SP"]), [fonte])
+    assert fonte.enrich_calls == [["1"]]
+
+
+def test_vagas_ficam_atreladas_ao_conjunto_ativo_na_hora_da_busca(conn, settings):
+    run_all(conn, settings, [FakeSource(jobs=[job("1")])])
+    assert [row["conjunto_id"] for row in conn.execute("SELECT conjunto_id FROM jobs")] == [conjuntos.active_id(conn)]
+
+
+def test_mesma_vaga_em_outro_conjunto_e_gravada_de_novo_e_o_detalhe_e_aberto(conn, settings):
+    primeiro = conjuntos.active_id(conn)
+    run_all(conn, settings, [FakeSource(jobs=[job("1")])])
+    segundo = conjuntos.add(conn, settings, "Tecnologia", NOW)["id"]
+    keywords.add(conn, settings, "Engenheiro Mecânico", "busca", NOW)
+    fonte = FakeSource(jobs=[job("1")])
+    run_id = run_all(conn, settings, [fonte])
+    assert fonte.enrich_calls == [["1"]]
+    assert sources_of(conn, run_id)["fake"]["novas"] == 1
+    assert sorted(row["conjunto_id"] for row in conn.execute("SELECT conjunto_id FROM jobs")) == [primeiro, segundo]
+    fonte = FakeSource(jobs=[job("1")])
+    run_all(conn, settings, [fonte])
+    assert fonte.enrich_calls == [[]]

@@ -35,6 +35,16 @@ def test_vaga_da_gupy_sem_cidade_ou_data_fica_sem_localidade_e_sem_publicacao(se
     assert job.localidade == "" and job.publicada_em is None
 
 
+def test_cada_vaga_guarda_a_palavra_chave_que_a_trouxe_e_repetida_fica_com_a_primeira(settings):
+    def handler(request):
+        termo = request.url.params["jobName"]
+        itens = [SAMPLE["data"][0]] if termo == "a" else SAMPLE["data"]
+        return httpx.Response(200, json={"data": itens, "pagination": {"total": len(itens)}})
+
+    jobs = make_source(settings, handler).search(["a", "b"])
+    assert [(j.id, j.palavra_chave) for j in jobs] == [("1001", "a"), ("1002", "b")]
+
+
 def test_envia_termo_limite_e_offset_da_config(settings):
     vistos = []
 
@@ -63,11 +73,42 @@ def test_pagina_ate_o_total_informado(settings):
     assert len(jobs) == 3
 
 
-def test_respeita_o_teto_de_vagas_lidas(settings):
-    teto = settings.limites.__class__(max_vagas_lista=1)
-    limitada = settings.__class__(**{**settings.__dict__, "limites": teto})
-    source = make_source(limitada, lambda request: httpx.Response(200, json=SAMPLE))
-    assert len(source.search(["x"])) == 1
+def com_paginas(settings, paginas, page_size=1):
+    gupy = replace(settings.gupy, page_size=page_size)
+    return replace(settings, gupy=gupy, limites=replace(settings.limites, max_paginas_por_termo=paginas))
+
+
+def paginas_por_termo(vistos, total=10, base=None):
+    """Cada página traz 1 vaga (id = base do termo + offset, base padrão 1000); `vistos` registra (termo, offset)."""
+    base = base or {}
+
+    def handler(request):
+        termo, offset = request.url.params["jobName"], int(request.url.params["offset"])
+        vistos.append((termo, offset))
+        item = {**SAMPLE["data"][0], "id": base.get(termo, 1000) + offset}
+        return httpx.Response(200, json={"data": [item], "pagination": {"total": total}})
+
+    return handler
+
+
+def test_abre_so_o_numero_de_paginas_configurado_na_gupy(settings):
+    vistos = []
+    jobs = make_source(com_paginas(settings, 2), paginas_por_termo(vistos)).search(["a"])
+    assert vistos == [("a", 0), ("a", 1)]
+    assert [job.id for job in jobs] == ["1000", "1001"]
+
+
+def test_cada_termo_pagina_por_conta_propria_na_gupy(settings):
+    vistos = []
+    handler = paginas_por_termo(vistos, base={"a": 1000, "b": 2000})
+    jobs = make_source(com_paginas(settings, 2), handler).search(["a", "b"])
+    assert vistos == [("a", 0), ("a", 1), ("b", 0), ("b", 1)]
+    assert [job.id for job in jobs] == ["1000", "1001", "2000", "2001"]
+
+
+def test_vaga_achada_por_dois_termos_aparece_uma_vez_na_gupy(settings):
+    jobs = make_source(com_paginas(settings, 1), paginas_por_termo([])).search(["a", "b"])
+    assert [job.id for job in jobs] == ["1000"]
 
 
 def test_mesma_vaga_em_duas_palavras_chave_aparece_uma_vez(settings):

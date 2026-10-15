@@ -35,8 +35,9 @@ export function BuscaPage() {
       <ConjuntosPanel />
       <div className="grid gap-4 md:grid-cols-2">
         <KeywordsPanel tipo="busca" />
-        <KeywordsPanel tipo="exclusao" />
+        <KeywordsPanel tipo="ranking" />
       </div>
+      <KeywordsPanel tipo="exclusao" />
     </div>
   );
 }

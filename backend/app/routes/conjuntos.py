@@ -25,6 +25,27 @@ def add_conjunto(
     return conjuntos.add(conn, settings, body.nome, now())
 
 
+@router.post("/conjuntos/{conjunto_id}/copiar", response_model=ConjuntoOut, status_code=201)
+def copy_conjunto(
+    conjunto_id: int,
+    body: ConjuntoIn,
+    conn: sqlite3.Connection = Depends(get_conn),
+    settings: Settings = Depends(get_settings),
+    now=Depends(get_now),
+) -> dict:
+    return conjuntos.duplicate(conn, settings, conjunto_id, body.nome, now())
+
+
+@router.patch("/conjuntos/{conjunto_id}", response_model=ConjuntoOut)
+def rename_conjunto(
+    conjunto_id: int,
+    body: ConjuntoIn,
+    conn: sqlite3.Connection = Depends(get_conn),
+    settings: Settings = Depends(get_settings),
+) -> dict:
+    return conjuntos.rename(conn, settings, conjunto_id, body.nome)
+
+
 @router.post("/conjuntos/{conjunto_id}/ativar", status_code=204)
 def activate_conjunto(conjunto_id: int, conn: sqlite3.Connection = Depends(get_conn)) -> Response:
     conjuntos.activate(conn, conjunto_id)

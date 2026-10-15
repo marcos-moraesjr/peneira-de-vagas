@@ -59,7 +59,7 @@ describe("App — configurações", () => {
     mockApi(routes);
     renderWithClient(<App />);
     await user.click(await screen.findByRole("tab", { name: "Configurações" }));
-    expect(await screen.findByRole("slider", { name: "Pontuação mínima" })).toBeInTheDocument();
+    expect(await screen.findByRole("slider", { name: "Pontuação mínima para aparecer" })).toBeInTheDocument();
   });
 });
 

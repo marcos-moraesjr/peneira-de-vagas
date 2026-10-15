@@ -7,7 +7,12 @@ from backend.tests.conftest import CONFIG_PATH
 def test_config_do_projeto_carrega_com_padrao_de_desenvolvimento():
     settings = load_settings(CONFIG_PATH)
     assert settings.padrao.palavras_chave == ["Engenheiro Mecânico"]
-    assert settings.filtro.min_score == 3
+
+
+def test_config_padrao_limita_a_6_termos_e_3_paginas_por_termo():
+    settings = load_settings(CONFIG_PATH)
+    assert settings.busca.max_termos_busca == 6
+    assert settings.limites.max_paginas_por_termo == 3
 
 
 def test_config_resolve_caminhos_relativos_a_partir_da_raiz():
@@ -82,6 +87,8 @@ def test_pausa_de_rolagem_valida_minimo_e_maximo():
     ("secao", "chave", "valor"),
     [
         ("busca", "janela_horas", 0),
+        ("busca", "max_termos_busca", 0),
+        ("limites", "max_paginas_por_termo", 0),
         ("api", "poll_interval_ms", 0),
         ("filtro", "trecho_max_chars", 0),
         ("filtro", "peso_titulo", -1),

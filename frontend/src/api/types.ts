@@ -11,7 +11,7 @@ export type Conjunto = Schemas["ConjuntoOut"];
 export type Config = Schemas["ConfigOut"];
 export type Health = Schemas["HealthOut"];
 
-export type KeywordType = "busca" | "exclusao";
+export type KeywordType = "busca" | "ranking" | "exclusao";
 export type SeenFilter = "novas" | "todas";
 export type Scanner = Schemas["ScannerOut"];
 export type BrowserStatus = Schemas["BrowserOut"];

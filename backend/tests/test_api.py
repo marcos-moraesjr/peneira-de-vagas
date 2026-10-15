@@ -192,9 +192,9 @@ def test_vagas_excluidas_voltam_como_novas_na_proxima_busca(client):
 @pytest.fixture
 def client_ordenacao(settings):
     vagas = [
-        Job("1", "Engenheiro Mecânico 1", "Zeta", "https://x/1", "", "stub", localidade="Recife, PE", publicada_em="2026-10-01T10:00:00Z", modalidade="presencial"),
-        Job("2", "Engenheiro Mecânico 2", "Álamo", "https://x/2", "", "stub", localidade="Campinas, SP", publicada_em="2026-10-09T10:00:00Z", modalidade="remoto"),
-        Job("3", "Engenheiro Mecânico 3", "Beta", "https://x/3", "", "stub", localidade="", publicada_em=None, modalidade="hibrido"),
+        Job("1", "Engenheiro Mecânico 1", "Zeta", "https://x/1", "", "stub", localidade="Recife, PE", publicada_em="2026-10-01T10:00:00Z", modalidade="presencial", palavra_chave="Projetista"),
+        Job("2", "Engenheiro Mecânico 2", "Álamo", "https://x/2", "", "stub", localidade="Campinas, SP", publicada_em="2026-10-09T10:00:00Z", modalidade="remoto", palavra_chave="Analista de projetos"),
+        Job("3", "Engenheiro Mecânico 3", "Beta", "https://x/3", "", "stub", localidade="", publicada_em=None, modalidade="hibrido", palavra_chave="Engenheiro Mecânico"),
     ]
     with make_client(settings, [StubSource(jobs=vagas)]) as test_client:
         test_client.post("/api/runs")
@@ -379,6 +379,39 @@ def test_conjuntos_criar_ativar_e_remover(client):
     assert client.post("/api/conjuntos", json={"nome": "padrão"}).status_code == 422
 
 
+def test_conjuntos_copiar(client):
+    padrao = client.get("/api/conjuntos").json()[0]
+    client.post("/api/keywords", json={"termo": "AutoCAD", "tipo": "ranking"})
+
+    resposta = client.post(f"/api/conjuntos/{padrao['id']}/copiar", json={"nome": " Cópia  do padrão "})
+    assert resposta.status_code == 201
+    copia = resposta.json()
+    assert (copia["nome"], copia["ativo"]) != ("", False) and copia["nome"] == "Cópia do padrão" and copia["ativo"] is True
+    assert [(c["nome"], c["ativo"]) for c in client.get("/api/conjuntos").json()] == [("Padrão", False), ("Cópia do padrão", True)]
+    assert [k["termo"] for k in client.get("/api/keywords?tipo=ranking").json()] == ["AutoCAD"]  # as palavras vieram junto
+
+    assert client.post(f"/api/conjuntos/{padrao['id']}/copiar", json={"nome": "padrão"}).status_code == 422
+    assert client.post(f"/api/conjuntos/{padrao['id']}/copiar", json={"nome": " "}).status_code == 422
+    assert client.post("/api/conjuntos/999/copiar", json={"nome": "Qualquer"}).status_code == 404
+
+
+def test_conjuntos_renomear(client):
+    padrao_id = client.get("/api/conjuntos").json()[0]["id"]
+    outro = client.post("/api/conjuntos", json={"nome": "Tecnologia"}).json()
+
+    resposta = client.patch(f"/api/conjuntos/{padrao_id}", json={"nome": " Engenharia  mecânica "})
+    assert resposta.status_code == 200
+    assert resposta.json() == {"id": padrao_id, "nome": "Engenharia mecânica", "ativo": False}
+    assert [(c["nome"], c["ativo"]) for c in client.get("/api/conjuntos").json()] == [
+        ("Engenharia mecânica", False),
+        ("Tecnologia", True),
+    ]
+
+    assert client.patch(f"/api/conjuntos/{padrao_id}", json={"nome": "tecnologia"}).status_code == 422  # de outro conjunto
+    assert client.patch(f"/api/conjuntos/{outro['id']}", json={"nome": " "}).status_code == 422
+    assert client.patch("/api/conjuntos/999", json={"nome": "Qualquer"}).status_code == 404
+
+
 def test_verificacao_lista_as_fontes_esperando_o_usuario(client):
     assert client.get("/api/verificacao").json() == {"fontes": []}
     gate = client.app.state.gate
@@ -453,8 +486,70 @@ def test_ordena_por_modalidade(client_ordenacao):
     assert titulos(client_ordenacao, "ordenar=modalidade&direcao=asc") == ["Engenheiro Mecânico 3", "Engenheiro Mecânico 1", "Engenheiro Mecânico 2"]
 
 
+def test_vagas_trazem_a_palavra_chave_que_as_encontrou(client_ordenacao):
+    itens = {j["titulo"]: j["palavra_chave"] for j in client_ordenacao.get("/api/jobs").json()["items"]}
+    assert itens == {
+        "Engenheiro Mecânico 1": "Projetista",
+        "Engenheiro Mecânico 2": "Analista de projetos",
+        "Engenheiro Mecânico 3": "Engenheiro Mecânico",
+    }
+
+
+def test_ordena_por_palavra_chave(client_ordenacao):
+    assert titulos(client_ordenacao, "ordenar=palavra_chave&direcao=asc") == ["Engenheiro Mecânico 2", "Engenheiro Mecânico 3", "Engenheiro Mecânico 1"]
+
+
 def test_marcar_como_vistas_respeita_cidade_estado_e_modalidade(client_ordenacao):
     assert client_ordenacao.post("/api/jobs/mark-seen", json={"cidade": "recife"}).json() == {"atualizadas": 1}
     assert client_ordenacao.post("/api/jobs/mark-seen", json={"estado": "sp"}).json() == {"atualizadas": 1}
     assert client_ordenacao.post("/api/jobs/mark-seen", json={"modalidade": "hibrido"}).json() == {"atualizadas": 1}
     assert client_ordenacao.get("/api/jobs?visto=false").json()["items"] == []
+
+
+@pytest.fixture
+def dois_conjuntos(settings):
+    """Conjunto 1 com as vagas 1 e 2; conjunto "B" (ativo) com a vaga 9."""
+    fonte = StubSource(jobs=[job("1"), job("2")])
+    with make_client(settings, [fonte]) as test_client:
+        test_client.post("/api/runs")
+        outro = test_client.post("/api/conjuntos", json={"nome": "B"}).json()["id"]
+        test_client.post("/api/keywords", json={"termo": "Engenheiro Mecânico", "tipo": "busca"})
+        fonte._jobs = [job("9")]
+        test_client.post("/api/runs")
+        yield test_client, outro
+
+
+def ids_da_lista(client, consulta=""):
+    return sorted(vaga["id_da_vaga"] for vaga in client.get(f"/api/jobs{consulta}").json()["items"])
+
+
+def test_lista_mostra_o_conjunto_ativo_e_aceita_escolher_outro(dois_conjuntos):
+    client, outro = dois_conjuntos
+    assert ids_da_lista(client) == ["9"]
+    assert ids_da_lista(client, "?conjunto_id=1") == ["1", "2"]
+    assert ids_da_lista(client, f"?conjunto_id={outro}") == ["9"]
+    resposta = client.get("/api/jobs?conjunto_id=999")
+    assert resposta.status_code == 404 and "999" in resposta.json()["detail"]
+
+
+def test_marcar_como_vistas_vale_so_para_o_conjunto_escolhido(dois_conjuntos):
+    client, outro = dois_conjuntos
+    assert client.post("/api/jobs/mark-seen", json={"conjunto_id": 1}).json() == {"atualizadas": 2}
+    assert client.get("/api/jobs?visto=false").json()["total"] == 1
+    assert client.post("/api/jobs/mark-seen", json={}).json() == {"atualizadas": 1}
+    assert client.get("/api/jobs?visto=false").json()["total"] == 0
+
+
+def test_excluir_vagas_vale_so_para_o_conjunto_escolhido(dois_conjuntos):
+    client, outro = dois_conjuntos
+    assert client.delete("/api/jobs").json() == {"removidas": 1}
+    assert ids_da_lista(client, "?conjunto_id=1") == ["1", "2"]
+    assert client.delete("/api/jobs?conjunto_id=1").json() == {"removidas": 2}
+    assert ids_da_lista(client, "?conjunto_id=1") == []
+
+
+def test_excluir_o_conjunto_exclui_as_vagas_dele_e_mantem_as_dos_outros(dois_conjuntos):
+    client, outro = dois_conjuntos
+    assert client.delete(f"/api/conjuntos/{outro}").status_code == 204
+    assert client.get(f"/api/jobs?conjunto_id={outro}").status_code == 404
+    assert ids_da_lista(client) == ["1", "2"]  # o conjunto 1 voltou a ser o ativo

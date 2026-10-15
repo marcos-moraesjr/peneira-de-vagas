@@ -1,5 +1,6 @@
 """Fluxo de BrowserSource com um navegador simulado (sem Chrome e sem rede)."""
 from contextlib import contextmanager
+from dataclasses import replace
 from datetime import datetime, timezone
 
 import pytest
@@ -118,12 +119,37 @@ def test_para_quando_a_pagina_so_traz_vagas_repetidas(settings):
     assert len(nav.opened) == 2
 
 
-def test_respeita_o_teto_de_vagas_lidas(settings):
-    teto = settings.limites.__class__(max_vagas_lista=3)
-    limitada = settings.__class__(**{**settings.__dict__, "limites": teto})
-    nav = FakeNavigator({f"https://site/?q=x&start={s}": {"raw": [card(s), card(s + 1)]} for s in (0, 2, 4)})
-    source, *_ = make_source(limitada, nav)
-    assert len(source.search(["x"])) == 3
+def com_paginas(settings, paginas):
+    return replace(settings, limites=replace(settings.limites, max_paginas_por_termo=paginas))
+
+
+def paginas_do_termo(termo, base, quantas=4):
+    return {f"https://site/?q={termo}&start={2 * n}": {"raw": [card(base + 2 * n), card(base + 2 * n + 1)]} for n in range(quantas)}
+
+
+def test_abre_so_o_numero_de_paginas_configurado(settings):
+    nav = FakeNavigator(paginas_do_termo("x", 0))
+    source, *_ = make_source(com_paginas(settings, 2), nav)
+    assert [j.id for j in source.search(["x"])] == ["0", "1", "2", "3"]
+    assert nav.opened == ["https://site/?q=x&start=0", "https://site/?q=x&start=2"]
+
+
+def test_cada_termo_abre_as_proprias_paginas(settings):
+    nav = FakeNavigator(paginas_do_termo("a", 0) | paginas_do_termo("b", 100))
+    source, *_ = make_source(com_paginas(settings, 2), nav)
+    assert [j.id for j in source.search(["a", "b"])] == ["0", "1", "2", "3", "100", "101", "102", "103"]
+    assert len(nav.opened) == 4
+
+
+def test_vaga_achada_por_dois_termos_aparece_uma_vez(settings):
+    nav = FakeNavigator(
+        {
+            "https://site/?q=a&start=0": {"raw": [card(1), card(2)]},
+            "https://site/?q=b&start=0": {"raw": [card(2), card(3)]},
+        }
+    )
+    source, *_ = make_source(com_paginas(settings, 1), nav)
+    assert [j.id for j in source.search(["a", "b"])] == ["1", "2", "3"]
 
 
 def test_site_com_cards_incrementais_le_rolando_e_pausa_a_cada_passo(settings):
@@ -151,6 +177,16 @@ def test_cada_palavra_chave_gera_uma_busca(settings):
         "https://site/?q=b&start=0": {"raw": [card(2)]},
     }
     assert [j.id for j in source.search(["a", "b"])] == ["1", "2"]
+
+
+def test_cada_vaga_guarda_a_palavra_chave_que_a_trouxe_e_repetida_fica_com_a_primeira(settings):
+    nav = FakeNavigator({})
+    source, *_ = make_source(settings, nav)
+    nav.pages = {
+        "https://site/?q=a&start=0": {"raw": [card(1)]},
+        "https://site/?q=b&start=0": {"raw": [card(1), card(2)]},
+    }
+    assert [(j.id, j.palavra_chave) for j in source.search(["a", "b"])] == [("1", "a"), ("2", "b")]
 
 
 def with_localidades(settings, localidades):
@@ -315,6 +351,38 @@ def test_bloqueio_que_continua_apos_a_confirmacao_volta_a_esperar(settings):
     with pytest.raises(SourceBlocked):
         source.search(["x"])
     assert nav.opened.count("https://site/?q=x&start=0") == 2
+
+
+def test_reabertura_interrompida_logo_apos_a_verificacao_tenta_de_novo(settings):
+    """Ao concluir o CAPTCHA o Chrome ainda está redirecionando; o `goto` da reabertura pode ser abortado."""
+    nav = FakeNavigator({"https://site/?q=x&start=0": {"url": "https://site/login", "raw": []}})
+    gate = FakeGate(nav, "https://site/?q=x&start=0", {"raw": [card(1)]})
+    abertas = nav.open
+
+    def open_interrompido_uma_vez(url):
+        abertas(url)
+        if nav.opened.count(url) == 2:
+            raise SourceUnavailable(f"Falha ao abrir {url}: net::ERR_ABORTED", motivo="http_erro")
+
+    nav.open = open_interrompido_uma_vez
+    source = make_source_with_gate(settings, nav, gate)
+    assert [j.id for j in source.search(["x"])] == ["1"]
+
+
+def test_reabertura_que_continua_falhando_apos_a_verificacao_interrompe_a_fonte(settings):
+    nav = FakeNavigator({"https://site/?q=x&start=0": {"url": "https://site/login", "raw": []}})
+    gate = FakeGate(nav, "https://site/?q=x&start=0", {"raw": [card(1)]})
+    abertas = nav.open
+
+    def open_sempre_falha_apos_bloqueio(url):
+        abertas(url)
+        if nav.opened.count(url) >= 2:
+            raise SourceUnavailable(f"Falha ao abrir {url}", motivo="http_erro")
+
+    nav.open = open_sempre_falha_apos_bloqueio
+    source = make_source_with_gate(settings, nav, gate)
+    with pytest.raises(SourceUnavailable):
+        source.search(["x"])
 
 
 def test_bloqueio_no_detalhe_com_confirmacao_retoma_a_vaga(settings):

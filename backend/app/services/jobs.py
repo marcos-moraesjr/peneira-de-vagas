@@ -3,7 +3,7 @@ import sqlite3
 from datetime import date, timedelta
 
 from ..errors import DomainError, NotFound
-from . import runs
+from . import conjuntos, runs
 from .filters import normalize
 from .localizacao import split_localidade
 
@@ -17,13 +17,22 @@ def cutoff_date(now: str, max_dias: int | None) -> str | None:
     return (date.fromisoformat(now[:10]) - timedelta(days=max_dias)).isoformat()
 
 
+def resolve_conjunto(conn: sqlite3.Connection, conjunto_id: int | None) -> int:
+    """Conjunto pedido (precisa existir) ou, sem pedido, o ativo."""
+    if conjunto_id is None:
+        return conjuntos.active_id(conn)
+    if not conn.execute("SELECT 1 FROM conjuntos WHERE id=?", (conjunto_id,)).fetchone():
+        raise NotFound(f"Conjunto inexistente: id={conjunto_id}")
+    return conjunto_id
+
+
 def _where(
-    visto: bool | None, fonte: str | None, q: str | None, corte: str | None = None,
+    conjunto_id: int, visto: bool | None, fonte: str | None, q: str | None, corte: str | None = None,
     cidade: str | None = None, estado: str | None = None, modalidade: str | None = None,
 ) -> tuple[str, list]:
     if modalidade and modalidade not in MODALIDADES:
         raise DomainError(f"modalidade={modalidade!r}: esperado um de {list(MODALIDADES)}")
-    clauses, params = [], []
+    clauses, params = ["conjunto_id=?"], [conjunto_id]
     if visto is not None:
         clauses.append("visto=?")
         params.append(int(visto))
@@ -63,7 +72,7 @@ SORT_COLUMNS = {
     "cidade": "cidade_de(localidade)",
     "estado": "estado_de(localidade)",
     "modalidade": "modalidade",
-    "modalidade": "modalidade",
+    "palavra_chave": "norm(palavra_chave)",
     "publicada_em": "publicada_em",
     "encontrada_em": "encontrada_em",
     "fonte": "fonte",
@@ -88,9 +97,11 @@ def list_jobs(
     conn, visto: bool | None, fonte: str | None, q: str | None, limit: int, offset: int,
     ordenar: str | None = None, direcao: str | None = None, corte: str | None = None,
     cidade: str | None = None, estado: str | None = None, modalidade: str | None = None,
+    conjunto_id: int | None = None,
 ) -> dict:
+    """Vagas do conjunto pedido (padrão: o ativo)."""
     order = _order_by(ordenar, direcao)
-    where, params = _where(visto, fonte, q, corte, cidade, estado, modalidade)
+    where, params = _where(resolve_conjunto(conn, conjunto_id), visto, fonte, q, corte, cidade, estado, modalidade)
     total = conn.execute(f"SELECT COUNT(*) FROM jobs{where}", params).fetchone()[0]
     rows = conn.execute(
         f"SELECT * FROM jobs{where} ORDER BY {order} LIMIT ? OFFSET ?",
@@ -107,10 +118,10 @@ def set_seen(conn, job_id: int, visto: bool) -> dict:
     return _to_dict(conn.execute("SELECT * FROM jobs WHERE id=?", (job_id,)).fetchone())
 
 
-def clear_all(conn) -> int:
-    """Apaga todas as vagas (vistas e novas); recusa durante uma execução. Voltam como novas se reaparecerem."""
+def clear_all(conn, conjunto_id: int | None = None) -> int:
+    """Apaga as vagas (vistas e novas) do conjunto pedido (padrão: o ativo); recusa durante uma execução. Voltam como novas se reaparecerem."""
     runs.ensure_idle(conn)
-    removidas = conn.execute("DELETE FROM jobs").rowcount
+    removidas = conn.execute("DELETE FROM jobs WHERE conjunto_id=?", (resolve_conjunto(conn, conjunto_id),)).rowcount
     conn.commit()
     return removidas
 
@@ -118,9 +129,10 @@ def clear_all(conn) -> int:
 def mark_seen(
     conn, fonte: str | None, q: str | None, corte: str | None = None,
     cidade: str | None = None, estado: str | None = None, modalidade: str | None = None,
+    conjunto_id: int | None = None,
 ) -> int:
-    """Marca como vistas as ainda não vistas que casam com os filtros."""
-    where, params = _where(False, fonte, q, corte, cidade, estado, modalidade)
+    """Marca como vistas as ainda não vistas do conjunto pedido (padrão: o ativo) que casam com os filtros."""
+    where, params = _where(resolve_conjunto(conn, conjunto_id), False, fonte, q, corte, cidade, estado, modalidade)
     cursor = conn.execute(f"UPDATE jobs SET visto=1{where}", params)
     conn.commit()
     return cursor.rowcount

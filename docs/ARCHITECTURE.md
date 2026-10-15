@@ -34,9 +34,9 @@ Front (React/Vite) ──fetch + tipos OpenAPI──▶ API (FastAPI) ──sqli
 1. `POST /api/runs` cria a execução (`status=executando`) e dispara o serviço em segundo plano; devolve `202` com o id. Se já há execução em andamento: `409`.
 2. O serviço percorre as fontes. Cada uma roda em `try/except` próprio: a falha de uma grava `run_sources` com `status=falha` e motivo, e **segue para a próxima**.
 3. A fonte aplica a busca (palavra-chave + últimas 24h), lê a lista e devolve vagas no formato único.
-4. `filters` pontua e descarta (exclusões, limiar). Só as aprovadas seguem.
-5. Navegador: a página de **detalhe** é aberta apenas para vagas aprovadas, até o teto por execução.
-6. `db` insere as aprovadas ainda desconhecidas `(fonte, id_da_vaga)`; essas são as **novas** (`visto=0`).
+4. **Triagem pela lista** (título e trecho do card): só exclusões, localidade e modalidade descartam. A pontuação **não** corta aqui.
+5. Navegador: a página de **detalhe** é aberta para todas as vagas que passaram na triagem e ainda são desconhecidas `(fonte, id_da_vaga)`.
+6. `filters` pontua com o detalhe (exclusões, `busca` + `ranking`, limiar) e `db` insere as aprovadas; essas são as **novas** (`visto=0`). Vaga reprovada só no detalhe não é gravada (e, por isso, tem a página aberta de novo na próxima execução).
 7. Ao fim, `run_sources` recebe lidas/aprovadas/novas e `runs` vira `concluida`.
 8. O front consulta `GET /api/runs/{id}` em polling enquanto `executando`; ao concluir, invalida o cache e recarrega as vagas.
 9. Cada execução grava a versão do scanner de cada fonte (`scanners.toml`); ao fim, se algum scanner atingiu o limite de falhas de quebra, registra aviso `refazer` no log (a tela mostra o alerta; ver `SCANNERS.md`).
@@ -58,15 +58,17 @@ Tudo sob `/api`, JSON, só em `127.0.0.1`. Erros: `422` (entrada inválida), `40
 | `DELETE /api/runs/{id}` | exclui uma execução (botão **Excluir** da linha, com confirmação) e seus `run_sources`; `200 {removidas: 1}`; `404` se não existe; `409` se ela está em andamento. As vagas são mantidas (`run_id` nulo) |
 | `DELETE /api/runs` | limpa o histórico: apaga **todas** as execuções (e seus `run_sources`); `200 {removidas}`; `409` se há execução em andamento. As vagas nunca são apagadas: ficam com `run_id` nulo (antes, execuções que originaram vagas eram preservadas e a limpeza não removia nada se todas tinham originado) |
 | `GET /api/runs/{id}` | andamento: `status` e, por fonte, `status`, `motivo`, `lidas`, `aprovadas`, `novas` |
-| `GET /api/jobs?visto=&fonte=&q=&cidade=&estado=&modalidade=&max_dias=&ordenar=&direcao=&limit=&offset=` | vagas (cada uma com `localidade`, `cidade`, `estado`, `modalidade` e `publicada_em`; `cidade` e `estado` (sigla UF) são derivados do texto livre da `localidade` por `split_localidade` em `services/localizacao.py`, não são colunas do banco; vazio quando a fonte não informa). `cidade` e `estado`: filtram as já encontradas pela cidade (contém, sem acento nem maiúscula) e pela sigla da UF (contém, sem diferenciar caixa); `modalidade` ∈ `remoto`, `hibrido`, `presencial` (outro valor → `422` com valor e esperado); vazio = sem filtro. `POST /api/jobs/mark-seen` aceita os mesmos três. Sem `ordenar`: ordem padrão (execução mais recente, pontos, id). `ordenar` ∈ `titulo`, `empresa`, `localidade`, `cidade`, `estado`, `modalidade`, `publicada_em`, `encontrada_em`, `fonte`, `pontos` e `direcao` ∈ `asc` (padrão) / `desc`; texto compara sem acento nem maiúscula; vagas sem `publicada_em` ficam no fim nas duas direções; desempate por `id` decrescente; valor fora da lista → `422` com valor e esperado. A ordenação é no servidor porque a lista pagina; `visto=false` = novas. `max_dias=N` (inteiro ≥ 1, senão `422`) descarta da listagem as vagas com `publicada_em` anterior a *hoje − N dias* (comparação pela data, com o "agora" da API); **vagas sem `publicada_em` (LinkedIn, Indeed) nunca são descartadas** por esse filtro. É filtro de exibição: nada é apagado |
+| `GET /api/jobs?conjunto_id=&visto=&fonte=&q=&cidade=&estado=&modalidade=&max_dias=&ordenar=&direcao=&limit=&offset=` | vagas **de um conjunto**: `conjunto_id` escolhe o conjunto (inexistente → `404`); omitido, vale o conjunto ativo. Cada vaga (cada uma com `localidade`, `cidade`, `estado`, `modalidade`, `palavra_chave` e `publicada_em`; `cidade` e `estado` (sigla UF) são derivados do texto livre da `localidade` por `split_localidade` em `services/localizacao.py`, não são colunas do banco; vazio quando a fonte não informa). `cidade` e `estado`: filtram as já encontradas pela cidade (contém, sem acento nem maiúscula) e pela sigla da UF (contém, sem diferenciar caixa); `modalidade` ∈ `remoto`, `hibrido`, `presencial` (outro valor → `422` com valor e esperado); vazio = sem filtro. `POST /api/jobs/mark-seen` aceita os mesmos três. Sem `ordenar`: ordem padrão (execução mais recente, pontos, id). `ordenar` ∈ `titulo`, `empresa`, `localidade`, `cidade`, `estado`, `modalidade`, `palavra_chave`, `publicada_em`, `encontrada_em`, `fonte`, `pontos` e `direcao` ∈ `asc` (padrão) / `desc`; texto compara sem acento nem maiúscula; vagas sem `publicada_em` ficam no fim nas duas direções; desempate por `id` decrescente; valor fora da lista → `422` com valor e esperado. A ordenação é no servidor porque a lista pagina; `visto=false` = novas. `max_dias=N` (inteiro ≥ 1, senão `422`) descarta da listagem as vagas com `publicada_em` anterior a *hoje − N dias* (comparação pela data, com o "agora" da API); **vagas sem `publicada_em` (LinkedIn, Indeed) nunca são descartadas** por esse filtro. É filtro de exibição: nada é apagado |
 | `PATCH /api/jobs/{id}` | `{visto: bool}` |
-| `DELETE /api/jobs` | apaga todas as vagas (vistas e novas, sem filtro); `200 {removidas}`; `409` se há execução em andamento. Vaga excluída que reaparecer numa busca volta como nova (a deduplicação consulta a tabela `jobs`); "Limpar execuções" apaga o histórico independentemente das vagas |
-| `POST /api/jobs/mark-seen` | marca como vistas todas as que casam com os filtros do corpo (`fonte`, `q`, `cidade`, `estado`, `modalidade`, `max_dias`) |
-| `GET /api/keywords?tipo=` | lista palavras-chave (`busca`) e/ou exclusões (`exclusao`) **do conjunto ativo** |
-| `POST /api/keywords` | `{termo, tipo}` → `201` (grava no conjunto ativo); `422` se vazio, maior que `keyword_max_length`, acima de `max_termos_busca` (só `busca`) ou duplicado **no conjunto** (sem acento/caixa) |
+| `DELETE /api/jobs?conjunto_id=` | apaga todas as vagas **do conjunto** (padrão: o ativo; vistas e novas, sem filtro); `200 {removidas}`; `409` se há execução em andamento. Vaga excluída que reaparecer numa busca volta como nova (a deduplicação consulta a tabela `jobs`); "Limpar execuções" apaga o histórico independentemente das vagas |
+| `POST /api/jobs/mark-seen` | marca como vistas todas as que casam com os filtros do corpo (`fonte`, `q`, `cidade`, `estado`, `modalidade`, `max_dias`) **no conjunto** de `conjunto_id` (padrão: o ativo) |
+| `GET /api/keywords?tipo=` | lista palavras-chave da busca (`busca`, viram queries), de ranking (`ranking`, só pontuam) e/ou exclusões (`exclusao`) **do conjunto ativo** |
+| `POST /api/keywords` | `{termo, tipo}` → `201` (grava no conjunto ativo); `422` se vazio, maior que `keyword_max_length`, acima de `max_termos_busca` (só `busca`; `ranking` não tem teto) ou duplicado **no mesmo grupo do conjunto** (sem acento/caixa; o mesmo termo pode estar em `busca` e em `ranking`) |
 | `DELETE /api/keywords/{id}` | remove; `404` se não existe |
 | `GET /api/conjuntos` | conjuntos de palavras-chave `[{id, nome, ativo}]`; exatamente um está ativo |
 | `POST /api/conjuntos` | `{nome}` → `201`; cria um conjunto **vazio e já o ativa**; `422` se vazio, maior que `keyword_max_length` ou duplicado (sem acento/caixa) |
+| `PATCH /api/conjuntos/{id}` | `{nome}` → `200` com `{id, nome, ativo}`; troca o nome mantendo palavras e estado ativo; `404` se não existe; `422` se vazio, maior que `keyword_max_length` ou igual (sem acento/caixa) ao nome de **outro** conjunto (mudar só a caixa/acento do próprio nome é permitido) |
+| `POST /api/conjuntos/{id}/copiar` | `{nome}` → `201` com `{id, nome, ativo}`; cria um conjunto com **todas as palavras** do original (`busca`, `ranking` e `exclusao`) e já o ativa; o original não muda; `404` se o original não existe; `422` nas mesmas condições de `POST /api/conjuntos` (nome vazio, longo ou repetido) |
 | `POST /api/conjuntos/{id}/ativar` | torna esse o conjunto ativo → `204`; `404` se não existe |
 | `DELETE /api/conjuntos/{id}` | apaga o conjunto e suas palavras → `204`; se era o ativo, ativa o primeiro que sobrar; `404` se não existe; `422` se for o último |
 | `GET /api/verificacao` | `{fontes}`: fontes de navegador paradas num bloqueio (CAPTCHA/Cloudflare/login), esperando o usuário concluir a verificação à mão |
@@ -74,7 +76,7 @@ Tudo sob `/api`, JSON, só em `127.0.0.1`. Erros: `422` (entrada inválida), `40
 | `GET /api/browser` · `POST /api/browser/open` | se o Chrome dedicado está aberto (sonda CDP) · abre-o com perfil próprio e porta só local (`ja_aberto` se já estava); 422 se o Chrome não for achado em `chrome_paths` |
 | `GET /api/scanners/instrucao?fonte=` | instrução pronta para o Claude Code **refazer só a documentação** das plataformas (todas ou uma), com versões atuais, palavras-chave cadastradas e regras de segurança; 422 se a fonte for desconhecida |
 | `GET /api/scanners` | versão e estado (`ok`/`atencao`/`refazer`) de cada scanner; em `refazer`, traz a `instrucao` pronta para o Claude (`SCANNERS.md`) |
-| `GET /api/config` | config em vigor: seções `busca`, `filtro`, `limites`, `ritmo`, `navegador` (só `abas_paralelas`), `api` (caminhos, `cdp_url`, `chrome_paths` e URLs das fontes ficam de fora) |
+| `GET /api/config` | config em vigor: seções `busca` (inclui `max_termos_busca`), `filtro`, `limites` (`max_paginas_por_termo`), `ritmo`, `navegador` (só `abas_paralelas`), `api` (caminhos, `cdp_url`, `chrome_paths` e URLs das fontes ficam de fora) |
 | `PUT /api/config` | corpo = o mesmo formato do `GET` (completo); valida, regrava só esses valores no `config.toml` (comentários e demais chaves intactos) e passa a valer na hora; `422` se inválido (arquivo intacto), `409` se há execução em andamento |
 
 Motivos de falha de fonte (enum): `captcha`, `login`, `cloudflare`, `seletor_nao_encontrado`,
@@ -91,7 +93,7 @@ Ajustar aqui ao criar cada diretório.
 | --- | --- |
 | `backend/app/main.py` | `create_app()`: rotas sob `/api`, lifespan, tradução de erros, build estático em `/` |
 | `backend/app/routes/` | rotas finas: `health`, `runs`, `jobs`, `keywords`, `conjuntos`, `config` |
-| `backend/app/services/` | `run_service` (orquestra uma execução, trava de execução única), `jobs` (consulta e marcação), `keywords` (CRUD no conjunto ativo, normalização, seed), `conjuntos` (criar, ativar, remover), `filters` (normalização, pontuação, exclusões) |
+| `backend/app/services/` | `run_service` (orquestra uma execução, trava de execução única), `jobs` (consulta e marcação), `keywords` (CRUD no conjunto ativo, normalização, seed), `conjuntos` (criar, copiar, renomear, ativar, remover), `filters` (normalização, pontuação, exclusões) |
 | `backend/app/services/runs.py` | consulta de execuções e resultado por fonte |
 | `backend/app/sources/` | `verification.py` (`VerificationGate`: espera/confirmação da verificação manual), `gupy.py` (httpx), `browser.py` (`BrowserSource`, `PlaywrightNavigator`, `playwright_session`: CDP, ritmo, bloqueio), `linkedin.py` e `indeed.py` (adaptadores de site), `registry.py` (`build_sources`: LinkedIn → Indeed → Gupy), `types.py` (`Job`), `errors.py` (`SourceBlocked`, `SourceLayoutChanged`, `SourceEmpty`, `SourceUnavailable`) |
 | `backend/app/schemas.py` | contratos Pydantic de toda a API |
@@ -128,6 +130,7 @@ Cada `sources/<fonte>.py` expõe `fetch(config, ...) -> list[Job]`. `Job`:
 | `link` | `str` | URL canônica, sem parâmetros de rastreio |
 | `trecho` | `str` | descrição ou resumo disponível (lista; detalhe, se aberto) |
 | `fonte` | `str` | `linkedin`, `indeed` ou `gupy` |
+| `palavra_chave` | `str` | primeira palavra-chave do conjunto ativo cuja busca devolveu a vaga (`BrowserSource`/`GupySource` a gravam ao juntar os termos; vaga achada por vários termos fica com o primeiro); `""` em vagas gravadas antes do esquema v7 |
 | `localidade` | `str` | vazio permitido. Gupy: `city, state`; LinkedIn: legenda do card (local e modalidade); Indeed: `[data-testid="text-location"]` |
 | `publicada_em` | `str \| None` | data de publicação em ISO 8601. Gupy: `publishedDate`. **LinkedIn: lida só na página de detalhe** (`.job-details-jobs-unified-top-card__tertiary-description-container`, texto relativo "há 8 horas" convertido para ISO por `parse_relative_date`; mês = 30 dias, ano = 365), e o detalhe agora é aberto para todas as vagas novas (sem teto; antes só as primeiras `max_paginas_detalhe` = 15 tinham data); só vaga cujo detalhe não trouxe a data fica `None`. **Indeed: também só no detalhe**, primeiro `datePosted` do JSON-LD (`script[type="application/ld+json"]`, ISO exato, observado no HTML real) e, na reserva, procurando "Publicada há N dias"/"Posted N days ago"/"Publicada hoje" no texto da página (`body`; **seletor não observado**; "Ativa há…" e "mais de 30 dias" são ignorados; aceita "Publicada/Publicado/Postado/Posted"). **Fallback comum (LinkedIn e Indeed):** sem data em nenhum seletor, `find_published_line` procura no texto da página uma linha (separada por quebra de linha, "·" ou "|") que seja inteira a data, sem depender de classe CSS. Vagas abertas no detalhe sem data geram aviso no log da fonte. `sources/relative_date.py` faz a conversão. Antes: só o seletor do LinkedIn e o regex "Publicada/Posted" do Indeed, sem fallback |
 
@@ -158,8 +161,8 @@ isolado em `PlaywrightNavigator`, o que permite testar o fluxo com um navegador 
 
 - URL de busca montada da config: `keywords`/`q`, recência (`f_TPR=r86400` / `fromage=1`) e `start` para paginar.
   **Localidade e modalidade não vão na busca** (nem `location`/`l`, nem `f_WT`, nem `workplaceType` da Gupy): as
-  plataformas as tratam de formas diferentes (ou nem filtram). Uma busca por palavra-chave; o teto `max_vagas_lista` vale
-  para o conjunto. Antes: uma busca por palavra-chave **e por localidade**, `f_WT` no LinkedIn e uma busca por modalidade na Gupy.
+  plataformas as tratam de formas diferentes (ou nem filtram). Uma busca por palavra-chave; o limite `max_paginas_por_termo` vale
+  para **cada palavra-chave** em cada fonte: abre no máximo N páginas de resultados (a quantidade de vagas por página é a do site; a paginação também para antes se a página vier vazia ou só repetir vagas que o próprio termo já viu; vaga achada por dois termos fica com o primeiro). Antes: teto de vagas (`max_vagas_lista`, da fonte inteira; depois `max_vagas_por_termo`, por termo), substituído por páginas. Antes ainda: uma busca por palavra-chave **e por localidade**, `f_WT` no LinkedIn e uma busca por modalidade na Gupy.
 - **Filtro local de localidade e modalidade** (`services/localizacao.py`, igual para todas as fontes, aplicado na lista e de
   novo após o detalhe): `Job.localidade` e `Job.modalidade` (`remoto`/`hibrido`/`presencial`, ou `""`) vêm do card: LinkedIn
   da legenda ("(Presencial)"), Indeed da localidade e dos itens do card, Gupy de `workplaceType`. Localidade: a vaga passa se
@@ -178,7 +181,7 @@ isolado em `PlaywrightNavigator`, o que permite testar o fluxo com um navegador 
 - O banner de cookies do Indeed não bloqueia a leitura; escolha uma opção uma vez, à mão, no Chrome dedicado.
 - Pausas variáveis entre ações (e curtas ao rolar); uma aba por vez.
 - Tela de login, CAPTCHA/verificação, página Cloudflare ou seletor ausente → exceção da fonte; **sem retentativa de contorno**.
-- **Bloqueio: a fonte espera o usuário** (`VerificationGate`, `[navegador] espera_verificacao_s`). A aba fica aberta, a tela mostra o aviso com o botão **Já concluí a verificação** e, ao confirmar, a fonte reabre a página que bloqueou e segue de onde parou (o que já foi lido é mantido). Se o bloqueio persistir, volta a esperar; sem confirmação no prazo, ou sem portão, vale o comportamento abaixo. Antes: o bloqueio encerrava a fonte na hora. Nada é resolvido ou contornado pelo programa.
+- **Bloqueio: a fonte espera o usuário** (`VerificationGate`, `[navegador] espera_verificacao_s`). A aba fica aberta, a tela mostra o aviso com o botão **Já concluí a verificação** e, ao confirmar, a fonte reabre a página que bloqueou e segue de onde parou (o que já foi lido é mantido). Se a reabertura falhar (o site ainda redireciona após a verificação e o `goto` é abortado), tenta uma vez mais após a pausa; falhando de novo, `http_erro`. Antes: a primeira falha na reabertura encerrava a fonte. Se o bloqueio persistir, volta a esperar; sem confirmação no prazo, ou sem portão, vale o comportamento abaixo. Antes: o bloqueio encerrava a fonte na hora. Nada é resolvido ou contornado pelo programa.
 - **Bloqueio (`SourceBlocked`) sem confirmação mantém a aba aberta** no Chrome dedicado, para o usuário concluir a verificação à
   mão; a próxima execução abre uma aba nova (antes: a aba era sempre fechada). Outros erros e o sucesso continuam
   fechando a aba. A aba deixada aberta é responsabilidade do usuário fechar.
@@ -186,8 +189,8 @@ isolado em `PlaywrightNavigator`, o que permite testar o fluxo com um navegador 
 ## Filtro
 
 Palavras-chave e exclusões vêm da tabela `keywords`, **só do conjunto ativo** (tabela `conjuntos`; antes eram uma lista única global), lidas **no início de cada execução** (edição vale na
-busca seguinte). Cada palavra-chave `busca` gera uma consulta por fonte (mais termos = mais páginas lidas,
-limitadas por `max_vagas_lista`); a mesma lista pontua o filtro local.
+busca seguinte). Há três grupos: `busca` (query), `ranking` (só pontua; não gera consulta) e `exclusao`. Cada palavra-chave `busca` gera uma consulta por fonte (mais termos = mais páginas lidas,
+limitadas por `max_paginas_por_termo` em cada termo); só os primeiros `max_termos_busca` termos do conjunto vão às fontes (conjunto maior que o teto é cortado na execução); o filtro local pontua com `busca` **+** `ranking` (um termo nos dois grupos conta uma vez). Antes: uma lista só (`busca`) servia à query e à pontuação.
 
 1. **Normalização**: minúsculas, sem acento (`unicodedata`), espaços colapsados.
 2. **Exclusões**: qualquer termo excluído em título ou trecho descarta a vaga.
@@ -197,7 +200,7 @@ limitadas por `max_vagas_lista`); a mesma lista pontua o filtro local.
 Casamento: um termo casa quando **todas as suas palavras** aparecem no texto, **em qualquer ordem e ignorando plural/gênero** (`engenheira`/`engenheiros` ≡ `engenheiro`, sem stemming além disso: `engenharia` não casa `engenheiro`)
 (assim "Engenheiro Mecânico" casa "Engenheira Mecânica" e "Mecânico — Engenheiro de Projetos").
 Qualquer exclusão (mesmo critério) em título **ou** trecho descarta.
-Fluxo no serviço: filtra a lista → descarta as já conhecidas → abre o detalhe de **todas** as novas (sem teto; o limite é `max_vagas_lista` por fonte. Antes: até `max_paginas_detalhe` = 15, e as demais ficavam sem descrição e sem data)
+Fluxo no serviço: tria a lista (exclusões, localidade, modalidade; sem pontuação; antes a pontuação também cortava aqui, e palavras só presentes na descrição eram perdidas) → descarta as já conhecidas → abre o detalhe de **todas** as novas triadas, avalia com a pontuação completa e grava só as aprovadas; `aprovadas` em `run_sources` = já gravadas + aprovadas no detalhe (sem teto; o limite é `max_paginas_por_termo` por palavra-chave e por fonte. Antes: até `max_paginas_detalhe` = 15, e as demais ficavam sem descrição e sem data)
 → **reavalia com a descrição completa** (uma exclusão que só aparece no detalhe descarta a vaga) → grava.
 
 ## Dados
@@ -209,9 +212,9 @@ antes de qualquer mudança de esquema.
 
 | Tabela | Colunas | Restrições |
 | --- | --- | --- |
-| `jobs` | `id` PK, `fonte`, `id_da_vaga`, `titulo`, `empresa`, `link`, `trecho`, `pontos`, `run_id` FK (anulável, `ON DELETE SET NULL`; esquema v5), `encontrada_em`, `localidade` (`''` se a fonte não informa), `publicada_em` (NULL se não informa), `modalidade` (`remoto`/`hibrido`/`presencial` ou `''` se a fonte não informa; esquema v6), `visto` (0/1) | `UNIQUE(fonte, id_da_vaga)` |
+| `jobs` | `id` PK, `fonte`, `id_da_vaga`, `titulo`, `empresa`, `link`, `trecho`, `pontos`, `run_id` FK (anulável, `ON DELETE SET NULL`; esquema v5), `encontrada_em`, `localidade` (`''` se a fonte não informa), `publicada_em` (NULL se não informa), `modalidade` (`remoto`/`hibrido`/`presencial` ou `''` se a fonte não informa; esquema v6), `palavra_chave` (`''` se desconhecida; esquema v7), `visto` (0/1), `conjunto_id` FK (`ON DELETE CASCADE`; esquema v9) | `UNIQUE(conjunto_id, fonte, id_da_vaga)` (antes `UNIQUE(fonte, id_da_vaga)`): **uma linha por conjunto**, com pontuação e `visto` próprios; a migração 9 atrela as vagas existentes ao primeiro conjunto; excluir o conjunto exclui as vagas dele |
 | `conjuntos` (esquema v4) | `id` PK, `nome`, `nome_normalizado` (único), `ativo` (0/1), `criada_em` | índice único parcial: no máximo um `ativo=1`; a migração cria o conjunto `Padrão` (ativo) |
-| `keywords` | `id` PK, `termo`, `termo_normalizado`, `tipo` (`busca`/`exclusao`), `criada_em`, `conjunto_id` FK (`ON DELETE CASCADE`) | `UNIQUE(conjunto_id, termo_normalizado, tipo)` (antes `UNIQUE(termo_normalizado, tipo)`); a migração 4 move as palavras existentes para o `Padrão` |
+| `keywords` | `id` PK, `termo`, `termo_normalizado`, `tipo` (`busca`/`ranking`/`exclusao`), `criada_em`, `conjunto_id` FK (`ON DELETE CASCADE`) | `UNIQUE(conjunto_id, termo_normalizado, tipo)` (antes `UNIQUE(termo_normalizado, tipo)`); a migração 4 move as palavras existentes para o `Padrão`; a migração 8 adiciona `ranking` e **apaga as palavras `busca` existentes** (exclusões e vagas ficam; cópia do `.db` em `backups/` antes) |
 | `runs` | `id` PK, `inicio`, `fim`, `status` (`executando`/`concluida`) | |
 | `run_sources` | `run_id` FK, `fonte`, `status` (`aguardando`/`buscando`/`ok`/`falha`), `motivo`, `detalhe`, `lidas`, `aprovadas`, `novas`, `scanner_versao` (versão do scanner usada; esquema v2) | `PRIMARY KEY(run_id, fonte)` |
 
@@ -233,13 +236,13 @@ argumentos do `uvicorn` (`127.0.0.1` por padrão; abrir para a rede é decisão 
 | `[padrao] palavras_chave` | `["Engenheiro Mecânico"]` | seed da tabela `keywords` (tipo `busca`, conjunto ativo), aplicado **uma única vez** (flag `seeded`); depois disso, a lista vive no SQLite e é editada pelo front |
 | `[padrao] exclusoes` | `[]` | seed das exclusões, mesma regra |
 | `[busca] keyword_max_length` | `80` | tamanho máximo de um termo |
-| `[busca] max_termos_busca` | `10` | máximo de palavras-chave `busca` por conjunto (cada termo gera uma consulta por fonte; consultas demais levam a bloqueio); `422` ao exceder, exclusões não contam |
+| `[busca] max_termos_busca` | `6` | máximo de palavras-chave `busca` por conjunto (cada termo gera uma consulta por fonte; consultas demais levam a bloqueio); `422` ao exceder, exclusões não contam; na execução só os primeiros `max_termos_busca` termos vão às fontes. Editável na tela Configurações (controle deslizante, 1–10; antes: `10`, e só barrava termos novos) |
 | `[busca] localidades` / `modalidade` | `[]` / `[]` | lista de cidades ou estados (`"Campinas, SP"`, `"Minas Gerais"`; textos não vazios, sem repetição ignorando caixa; vazia = sem filtro de local), **só no `config.toml`: a aba Configurações não os edita mais** (o `PUT /api/config` os preserva como vieram; antes eram editáveis na tela); e lista de `remoto`/`hibrido`/`presencial` (vazia = todas). **Filtram as vagas listadas (filtro local), não vão na busca da plataforma.** Antes: iam na busca (`location`/`l`, `f_WT`, `workplaceType`, uma busca por localidade/modalidade) |
 | `[filtro] aceitar_desconhecido` | `true` | vaga sem localidade/modalidade informada (ou só "Brasil", ou remota) passa pelo filtro de local e modalidade; `false` descarta. Só no `config.toml` (não aparece na tela) |
 | `[busca] janela_horas` | `24` | filtro de recência da própria busca (onde a fonte permite) |
 | `[filtro] peso_titulo` / `peso_descricao` | `3` / `1` | pontos por termo no título e no trecho |
 | `[filtro] min_score` | `3` | pontuação mínima para aprovar |
-| `[limites] max_vagas_lista` | `100` | teto de vagas lidas por fonte |
+| `[limites] max_paginas_por_termo` | `3` | páginas de resultados abertas por palavra-chave e por fonte (LinkedIn 25 vagas/página, Indeed 10, Gupy 50; máximo de páginas por fonte = `max_termos_busca` × este valor); editável na tela Configurações (controle deslizante, 1–10). Antes: `max_vagas_lista` (teto de vagas da fonte inteira, 300) |
 | `[filtro] trecho_max_chars` | `4000` | tamanho máximo do trecho/descrição guardado |
 | `[ritmo] rolagem_min_s` / `rolagem_max_s` | `0.25` / `0.7` | pausa ao rolar a lista card a card (LinkedIn) |
 | `[ritmo] pausa_min_s` / `pausa_max_s` | `2` / `6` | pausa aleatória entre ações no navegador |

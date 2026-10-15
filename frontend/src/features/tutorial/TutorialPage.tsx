@@ -78,8 +78,10 @@ export function TutorialPage() {
 
         <Step title="Cadastre as palavras-chave">
           <p>
-            Na aba Busca, digite um termo em <strong>Palavras-chave</strong> e tecle Enter (já vem com "Engenheiro
-            Mecânico"). Use <strong>Exclusões</strong> para descartar vagas com certos termos, como "estágio". O termo
+            Na aba Busca, digite um termo em <strong>Palavras-chave da busca</strong> e tecle Enter: cada uma vira uma
+            busca nas plataformas. Em <strong>Palavras-chave de ranking</strong> ficam os termos que não fazem busca,
+            só pontuam as vagas encontradas. Use <strong>Exclusões</strong> para descartar vagas com certos termos,
+            como "estágio". O termo
             casa em qualquer ordem e ignora acento, maiúsculas, plural e gênero. As mudanças valem a partir da próxima
             busca.
           </p>

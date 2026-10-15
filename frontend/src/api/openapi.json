@@ -382,6 +382,22 @@
               ],
               "title": "Modalidade"
             }
+          },
+          {
+            "name": "conjunto_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Conjunto Id"
+            }
           }
         ],
         "responses": {
@@ -410,6 +426,24 @@
       "delete": {
         "summary": "Clear Jobs",
         "operationId": "clear_jobs_api_jobs_delete",
+        "parameters": [
+          {
+            "name": "conjunto_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Conjunto Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -417,6 +451,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/JobsCleared"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -687,10 +731,106 @@
         }
       }
     },
-    "/api/conjuntos/{conjunto_id}/ativar": {
+    "/api/conjuntos/{conjunto_id}/copiar": {
       "post": {
-        "summary": "Activate Conjunto",
-        "operationId": "activate_conjunto_api_conjuntos__conjunto_id__ativar_post",
+        "summary": "Copy Conjunto",
+        "operationId": "copy_conjunto_api_conjuntos__conjunto_id__copiar_post",
+        "parameters": [
+          {
+            "name": "conjunto_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conjunto Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConjuntoIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConjuntoOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conjuntos/{conjunto_id}": {
+      "patch": {
+        "summary": "Rename Conjunto",
+        "operationId": "rename_conjunto_api_conjuntos__conjunto_id__patch",
+        "parameters": [
+          {
+            "name": "conjunto_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conjunto Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConjuntoIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConjuntoOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete Conjunto",
+        "operationId": "delete_conjunto_api_conjuntos__conjunto_id__delete",
         "parameters": [
           {
             "name": "conjunto_id",
@@ -719,10 +859,10 @@
         }
       }
     },
-    "/api/conjuntos/{conjunto_id}": {
-      "delete": {
-        "summary": "Delete Conjunto",
-        "operationId": "delete_conjunto_api_conjuntos__conjunto_id__delete",
+    "/api/conjuntos/{conjunto_id}/ativar": {
+      "post": {
+        "summary": "Activate Conjunto",
+        "operationId": "activate_conjunto_api_conjuntos__conjunto_id__ativar_post",
         "parameters": [
           {
             "name": "conjunto_id",
@@ -1035,6 +1175,10 @@
           "keyword_max_length": {
             "type": "integer",
             "title": "Keyword Max Length"
+          },
+          "max_termos_busca": {
+            "type": "integer",
+            "title": "Max Termos Busca"
           }
         },
         "type": "object",
@@ -1042,7 +1186,8 @@
           "localidades",
           "modalidade",
           "janela_horas",
-          "keyword_max_length"
+          "keyword_max_length",
+          "max_termos_busca"
         ],
         "title": "ConfigBusca"
       },
@@ -1076,14 +1221,14 @@
       },
       "ConfigLimites": {
         "properties": {
-          "max_vagas_lista": {
+          "max_paginas_por_termo": {
             "type": "integer",
-            "title": "Max Vagas Lista"
+            "title": "Max Paginas Por Termo"
           }
         },
         "type": "object",
         "required": [
-          "max_vagas_lista"
+          "max_paginas_por_termo"
         ],
         "title": "ConfigLimites"
       },
@@ -1305,6 +1450,10 @@
             "type": "string",
             "title": "Modalidade"
           },
+          "palavra_chave": {
+            "type": "string",
+            "title": "Palavra Chave"
+          },
           "publicada_em": {
             "anyOf": [
               {
@@ -1337,6 +1486,7 @@
           "cidade",
           "estado",
           "modalidade",
+          "palavra_chave",
           "publicada_em",
           "visto"
         ],
@@ -1489,6 +1639,17 @@
               }
             ],
             "title": "Modalidade"
+          },
+          "conjunto_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conjunto Id"
           }
         },
         "type": "object",

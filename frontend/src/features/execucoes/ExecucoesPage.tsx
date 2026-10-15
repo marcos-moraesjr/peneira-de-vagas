@@ -179,7 +179,7 @@ function ConfigView({ config }: { config: Config }) {
     ["Janela da busca", `${config.busca.janela_horas} h`],
     ["Pontos por termo no título / na descrição", `${config.filtro.peso_titulo} / ${config.filtro.peso_descricao}`],
     ["Pontuação mínima", String(config.filtro.min_score)],
-    ["Vagas lidas por fonte", String(config.limites.max_vagas_lista)],
+    ["Páginas abertas por palavra-chave (por fonte)", String(config.limites.max_paginas_por_termo)],
     ["Pausa entre ações", `${config.ritmo.pausa_min_s}–${config.ritmo.pausa_max_s} s`],
   ];
   return (

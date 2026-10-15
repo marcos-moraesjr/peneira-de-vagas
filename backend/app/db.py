@@ -112,8 +112,61 @@ ALTER TABLE jobs_novo RENAME TO jobs;
 
 _MIGRATION_V6 = "ALTER TABLE jobs ADD COLUMN modalidade TEXT NOT NULL DEFAULT '';"
 
+_MIGRATION_V7 = "ALTER TABLE jobs ADD COLUMN palavra_chave TEXT NOT NULL DEFAULT '';"
+
+# V8: `keywords` ganha o tipo `ranking` (palavras que só pontuam; `busca` passa a ser só a query). As palavras `busca`
+# antigas valiam para os dois usos e são apagadas a pedido do usuário (recriadas do zero); exclusões e vagas ficam.
+_MIGRATION_V8 = """
+CREATE TABLE keywords_novo (
+    id INTEGER PRIMARY KEY,
+    termo TEXT NOT NULL,
+    termo_normalizado TEXT NOT NULL,
+    tipo TEXT NOT NULL CHECK (tipo IN ('busca', 'ranking', 'exclusao')),
+    criada_em TEXT NOT NULL,
+    conjunto_id INTEGER NOT NULL REFERENCES conjuntos(id) ON DELETE CASCADE,
+    UNIQUE (conjunto_id, termo_normalizado, tipo)
+);
+INSERT INTO keywords_novo (id, termo, termo_normalizado, tipo, criada_em, conjunto_id)
+    SELECT id, termo, termo_normalizado, tipo, criada_em, conjunto_id FROM keywords WHERE tipo = 'exclusao';
+DROP TABLE keywords;
+ALTER TABLE keywords_novo RENAME TO keywords;
+"""
+
+# V9: a vaga pertence a um conjunto (uma linha por conjunto) e some junto com ele. As vagas existentes ficam com o
+# primeiro conjunto (não havia a informação); a unicidade passa a incluir o conjunto.
+_MIGRATION_V9 = """
+CREATE TABLE jobs_novo (
+    id INTEGER PRIMARY KEY,
+    fonte TEXT NOT NULL,
+    id_da_vaga TEXT NOT NULL,
+    titulo TEXT NOT NULL,
+    empresa TEXT NOT NULL,
+    link TEXT NOT NULL,
+    trecho TEXT NOT NULL,
+    pontos INTEGER NOT NULL,
+    run_id INTEGER REFERENCES runs(id) ON DELETE SET NULL,
+    encontrada_em TEXT NOT NULL,
+    visto INTEGER NOT NULL DEFAULT 0,
+    localidade TEXT NOT NULL DEFAULT '',
+    publicada_em TEXT,
+    modalidade TEXT NOT NULL DEFAULT '',
+    palavra_chave TEXT NOT NULL DEFAULT '',
+    conjunto_id INTEGER NOT NULL REFERENCES conjuntos(id) ON DELETE CASCADE,
+    UNIQUE (conjunto_id, fonte, id_da_vaga)
+);
+INSERT INTO jobs_novo (id, fonte, id_da_vaga, titulo, empresa, link, trecho, pontos, run_id, encontrada_em, visto,
+                       localidade, publicada_em, modalidade, palavra_chave, conjunto_id)
+    SELECT id, fonte, id_da_vaga, titulo, empresa, link, trecho, pontos, run_id, encontrada_em, visto,
+           localidade, publicada_em, modalidade, palavra_chave, (SELECT MIN(id) FROM conjuntos) FROM jobs;
+DROP TABLE jobs;
+ALTER TABLE jobs_novo RENAME TO jobs;
+"""
+
 # Versão do esquema → script. Banco existente é copiado para backup_dir antes de qualquer migração.
-MIGRATIONS = {1: _SCHEMA_V1, 2: _MIGRATION_V2, 3: _MIGRATION_V3, 4: _MIGRATION_V4, 5: _MIGRATION_V5, 6: _MIGRATION_V6}
+MIGRATIONS = {
+    1: _SCHEMA_V1, 2: _MIGRATION_V2, 3: _MIGRATION_V3, 4: _MIGRATION_V4,
+    5: _MIGRATION_V5, 6: _MIGRATION_V6, 7: _MIGRATION_V7, 8: _MIGRATION_V8, 9: _MIGRATION_V9,
+}
 SCHEMA_VERSION = max(MIGRATIONS)
 
 
@@ -199,22 +252,27 @@ def close_stale_runs(conn: sqlite3.Connection, now: str) -> None:
     conn.commit()
 
 
-def filter_unknown(conn: sqlite3.Connection, jobs: list[Job]) -> list[Job]:
-    """Mantém só as vagas cujo (fonte, id_da_vaga) ainda não está no banco."""
-    known = {(row["fonte"], row["id_da_vaga"]) for row in conn.execute("SELECT fonte, id_da_vaga FROM jobs")}
+def filter_unknown(conn: sqlite3.Connection, jobs: list[Job], conjunto_id: int) -> list[Job]:
+    """Mantém só as vagas cujo (fonte, id_da_vaga) ainda não está gravado **neste conjunto**."""
+    known = {
+        (row["fonte"], row["id_da_vaga"])
+        for row in conn.execute("SELECT fonte, id_da_vaga FROM jobs WHERE conjunto_id=?", (conjunto_id,))
+    }
     return [job for job in jobs if (job.fonte, job.id) not in known]
 
 
-def insert_new_jobs(conn: sqlite3.Connection, jobs: list[Job], scores: dict[str, int], run_id: int, now: str) -> int:
-    """Grava só as vagas desconhecidas (fonte, id_da_vaga); devolve quantas eram novas."""
+def insert_new_jobs(
+    conn: sqlite3.Connection, jobs: list[Job], scores: dict[str, int], run_id: int, now: str, conjunto_id: int
+) -> int:
+    """Grava, no conjunto, só as vagas desconhecidas (fonte, id_da_vaga); devolve quantas eram novas."""
     inserted = 0
     for job in jobs:
         cursor = conn.execute(
-            "INSERT OR IGNORE INTO jobs (fonte, id_da_vaga, titulo, empresa, link, trecho, pontos, run_id, encontrada_em, localidade, publicada_em, modalidade) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT OR IGNORE INTO jobs (fonte, id_da_vaga, titulo, empresa, link, trecho, pontos, run_id, encontrada_em, localidade, publicada_em, modalidade, palavra_chave, conjunto_id) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 job.fonte, job.id, job.titulo, job.empresa, job.link, job.trecho,
-                scores.get(job.id, 0), run_id, now, job.localidade, job.publicada_em, job.modalidade,
+                scores.get(job.id, 0), run_id, now, job.localidade, job.publicada_em, job.modalidade, job.palavra_chave, conjunto_id,
             ),
         )
         inserted += cursor.rowcount

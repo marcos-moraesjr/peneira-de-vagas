@@ -49,9 +49,9 @@ export function renderWithClient(ui: ReactElement) {
 }
 
 export const CONFIG = {
-  busca: { localidades: ["Brasil"], modalidade: [], janela_horas: 24, keyword_max_length: 80 },
+  busca: { localidades: ["Brasil"], modalidade: [], janela_horas: 24, keyword_max_length: 80, max_termos_busca: 6 },
   filtro: { peso_titulo: 3, peso_descricao: 1, min_score: 3, trecho_max_chars: 4000 },
-  limites: { max_vagas_lista: 100 },
+  limites: { max_paginas_por_termo: 3 },
   ritmo: { pausa_min_s: 2, pausa_max_s: 6, rolagem_min_s: 0.25, rolagem_max_s: 0.7 },
   navegador: { abas_paralelas: false },
   api: { jobs_page_size: 50, poll_interval_ms: 50 },
@@ -73,6 +73,7 @@ export function makeJob(id: number, overrides: Record<string, unknown> = {}) {
     cidade: "",
     estado: "",
     modalidade: "",
+    palavra_chave: "",
     publicada_em: null,
     visto: false,
     ...overrides,

@@ -14,17 +14,30 @@ export function useConjuntos() {
   return useQuery({ queryKey: ["conjuntos"], queryFn: () => apiGet<Conjunto[]>("/api/conjuntos") });
 }
 
-/** Criar, ativar ou excluir um conjunto muda quais palavras valem: recarrega conjuntos e palavras. */
+/** Criar, renomear, ativar ou excluir um conjunto muda quais palavras valem e quais vagas aparecem: recarrega conjuntos, palavras e vagas. */
 function useConjuntoMutation<T>(mutationFn: (value: T) => Promise<unknown>) {
   const client = useQueryClient();
   return useMutation({
     mutationFn,
-    onSuccess: () => Promise.all([client.invalidateQueries({ queryKey: ["conjuntos"] }), client.invalidateQueries({ queryKey: ["keywords"] })]),
+    onSuccess: () =>
+      Promise.all([
+        client.invalidateQueries({ queryKey: ["conjuntos"] }),
+        client.invalidateQueries({ queryKey: ["keywords"] }),
+        client.invalidateQueries({ queryKey: ["jobs"] }),
+      ]),
   });
 }
 
 export function useAddConjunto() {
   return useConjuntoMutation((nome: string) => apiSend<Conjunto>("POST", "/api/conjuntos", { nome }));
+}
+
+export function useRenameConjunto() {
+  return useConjuntoMutation(({ id, nome }: { id: number; nome: string }) => apiSend<Conjunto>("PATCH", `/api/conjuntos/${id}`, { nome }));
+}
+
+export function useCopyConjunto() {
+  return useConjuntoMutation(({ id, nome }: { id: number; nome: string }) => apiSend<Conjunto>("POST", `/api/conjuntos/${id}/copiar`, { nome }));
 }
 
 export function useActivateConjunto() {
@@ -96,6 +109,7 @@ export type JobFilters = {
   cidade?: string;
   estado?: string;
   modalidade?: string;
+  conjuntoId?: number;
   ordenar?: string;
   direcao?: "asc" | "desc";
   maxDias?: number;
@@ -113,6 +127,7 @@ export function useJobs(filters: JobFilters, page: number, live = false) {
   if (filters.cidade) params.set("cidade", filters.cidade);
   if (filters.estado) params.set("estado", filters.estado);
   if (filters.modalidade) params.set("modalidade", filters.modalidade);
+  if (filters.conjuntoId !== undefined) params.set("conjunto_id", String(filters.conjuntoId));
   if (filters.maxDias !== undefined) params.set("max_dias", String(filters.maxDias));
   if (filters.ordenar) params.set("ordenar", filters.ordenar);
   if (filters.ordenar && filters.direcao) params.set("direcao", filters.direcao);
@@ -145,7 +160,7 @@ export function useSetSeen() {
 export function useMarkAllSeen() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (filters: { fonte?: string; q?: string; cidade?: string; estado?: string; modalidade?: string; max_dias?: number }) =>
+    mutationFn: (filters: { fonte?: string; q?: string; cidade?: string; estado?: string; modalidade?: string; max_dias?: number; conjunto_id?: number }) =>
       apiSend<{ atualizadas: number }>("POST", "/api/jobs/mark-seen", filters),
     onSuccess: () => client.invalidateQueries({ queryKey: ["jobs"] }),
   });
@@ -154,7 +169,8 @@ export function useMarkAllSeen() {
 export function useClearJobs() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: () => apiSend<{ removidas: number }>("DELETE", "/api/jobs"),
+    mutationFn: (conjuntoId?: number) =>
+      apiSend<{ removidas: number }>("DELETE", conjuntoId === undefined ? "/api/jobs" : `/api/jobs?conjunto_id=${conjuntoId}`),
     onSuccess: () => client.invalidateQueries({ queryKey: ["jobs"] }),
   });
 }

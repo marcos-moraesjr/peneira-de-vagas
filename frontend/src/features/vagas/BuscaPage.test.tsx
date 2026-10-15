@@ -133,4 +133,20 @@ describe("BuscaPage", () => {
     expect(await screen.findByLabelText("Nova palavra-chave")).toBeInTheDocument();
     expect(screen.getByLabelText("Nova exclusão")).toBeInTheDocument();
   });
+
+  it("separa as palavras da busca (query) das de ranking (pontuação) e das exclusões", async () => {
+    setup({});
+    expect(await screen.findByRole("region", { name: "Palavras-chave da busca" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Palavras-chave de ranking" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Exclusões" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Nova palavra de ranking")).toBeInTheDocument();
+  });
+
+  it("separa as palavras da busca (query) das de ranking (pontuação) e das exclusões", async () => {
+    setup({});
+    expect(await screen.findByRole("region", { name: "Palavras-chave da busca" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Palavras-chave de ranking" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Exclusões" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Nova palavra de ranking")).toBeInTheDocument();
+  });
 });

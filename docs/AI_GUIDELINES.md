@@ -60,7 +60,7 @@ por "testo depois".
 - Abrir a API além de `127.0.0.1` ou enviar dados a terceiros além das três fontes de vagas: decisão **exclusiva do usuário**.
 - Frontend não repete regra de negócio nem validação: exibe e envia; quem decide é o backend.
 - Ritmo humano é regra, não detalhe: uma aba por plataforma (paralelismo entre plataformas só com `navegador.abas_paralelas`, opção do usuário; nunca várias abas na mesma plataforma), sem remover as pausas variáveis, sem aumentar o
-  teto de vagas lidas por fonte (`limites.max_vagas_lista`) sem pedido explícito.
+  limite de páginas abertas por palavra-chave e por fonte (`limites.max_paginas_por_termo`) sem pedido explícito.
 - Testes automatizados nunca acessam LinkedIn, Indeed ou Gupy; usam amostras salvas. A execução real
   (`integration`) de LinkedIn, Indeed e Gupy é do usuário: não executar, automatizar nem agendar.
 - Nunca apagar nem sobrescrever o `.db` do usuário; migração destrutiva só com pedido explícito e cópia prévia.

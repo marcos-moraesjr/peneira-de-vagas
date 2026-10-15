@@ -163,7 +163,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/conjuntos/{conjunto_id}/ativar": {
+    "/api/conjuntos/{conjunto_id}/copiar": {
         parameters: {
             query?: never;
             header?: never;
@@ -172,8 +172,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Activate Conjunto */
-        post: operations["activate_conjunto_api_conjuntos__conjunto_id__ativar_post"];
+        /** Copy Conjunto */
+        post: operations["copy_conjunto_api_conjuntos__conjunto_id__copiar_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -192,6 +192,24 @@ export interface paths {
         post?: never;
         /** Delete Conjunto */
         delete: operations["delete_conjunto_api_conjuntos__conjunto_id__delete"];
+        options?: never;
+        head?: never;
+        /** Rename Conjunto */
+        patch: operations["rename_conjunto_api_conjuntos__conjunto_id__patch"];
+        trace?: never;
+    };
+    "/api/conjuntos/{conjunto_id}/ativar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Activate Conjunto */
+        post: operations["activate_conjunto_api_conjuntos__conjunto_id__ativar_post"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -366,6 +384,8 @@ export interface components {
             janela_horas: number;
             /** Keyword Max Length */
             keyword_max_length: number;
+            /** Max Termos Busca */
+            max_termos_busca: number;
         };
         /** ConfigFiltro */
         ConfigFiltro: {
@@ -380,8 +400,8 @@ export interface components {
         };
         /** ConfigLimites */
         ConfigLimites: {
-            /** Max Vagas Lista */
-            max_vagas_lista: number;
+            /** Max Paginas Por Termo */
+            max_paginas_por_termo: number;
         };
         /** ConfigNavegador */
         ConfigNavegador: {
@@ -469,6 +489,8 @@ export interface components {
             estado: string;
             /** Modalidade */
             modalidade: string;
+            /** Palavra Chave */
+            palavra_chave: string;
             /** Publicada Em */
             publicada_em: string | null;
             /** Visto */
@@ -518,6 +540,8 @@ export interface components {
             estado?: string | null;
             /** Modalidade */
             modalidade?: string | null;
+            /** Conjunto Id */
+            conjunto_id?: number | null;
         };
         /** MarkSeenOut */
         MarkSeenOut: {
@@ -806,6 +830,7 @@ export interface operations {
                 cidade?: string | null;
                 estado?: string | null;
                 modalidade?: string | null;
+                conjunto_id?: number | null;
             };
             header?: never;
             path?: never;
@@ -835,7 +860,9 @@ export interface operations {
     };
     clear_jobs_api_jobs_delete: {
         parameters: {
-            query?: never;
+            query?: {
+                conjunto_id?: number | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -849,6 +876,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["JobsCleared"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -1067,7 +1103,42 @@ export interface operations {
             };
         };
     };
-    activate_conjunto_api_conjuntos__conjunto_id__ativar_post: {
+    copy_conjunto_api_conjuntos__conjunto_id__copiar_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conjunto_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConjuntoIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConjuntoOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_conjunto_api_conjuntos__conjunto_id__delete: {
         parameters: {
             query?: never;
             header?: never;
@@ -1096,7 +1167,42 @@ export interface operations {
             };
         };
     };
-    delete_conjunto_api_conjuntos__conjunto_id__delete: {
+    rename_conjunto_api_conjuntos__conjunto_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conjunto_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConjuntoIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConjuntoOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    activate_conjunto_api_conjuntos__conjunto_id__ativar_post: {
         parameters: {
             query?: never;
             header?: never;
