@@ -5,10 +5,11 @@ from datetime import datetime, timezone
 
 import pytest
 
-from backend.app.sources.browser import BrowserSource
+from backend.app.sources.browser import BrowserSource, PlaywrightNavigator
 from backend.app.sources.errors import SourceBlocked, SourceLayoutChanged, SourceUnavailable
 from backend.app.sources.types import Job
 from backend.app.sources.verification import VerificationGate
+from playwright.sync_api import Error as PlaywrightError
 
 
 class FakeSite:
@@ -71,6 +72,62 @@ class FakeNavigator:
         if selectors == ["#when"]:
             return self._current.get("published", "")
         return self._current.get("detail", "")
+
+    def expand_detail(self, js):
+        self.expanded = getattr(self, "expanded", [])
+        self.expanded.append(js)
+        return True
+
+    def open_detail(self, js):
+        self.opened_details = getattr(self, "opened_details", [])
+        self.opened_details.append(js)
+        self._current = next(iter(self.details.values()), {})
+        return True
+
+
+class ExpandableSite(FakeSite):
+    open_detail_js = "OPEN __JOB_ID__"
+    expand_detail_js = "EXPAND"
+
+
+class PanelOnlySite(FakeSite):
+    open_detail_js = "OPEN __JOB_ID__"
+    detail_navigation_fallback = False
+
+
+class ProgressiveCard:
+    def __init__(self, page, card_id):
+        self.page = page
+        self.card_id = card_id
+
+    def get_attribute(self, name):
+        return self.card_id if name == "data-occludable-job-id" else None
+
+    def scroll_into_view_if_needed(self, timeout):
+        self.page.scrolled.append(self.card_id)
+        self.page.loaded.add(self.card_id)
+
+
+class ProgressivePage:
+    def __init__(self, card_ids, loaded):
+        self.card_ids = card_ids
+        self.loaded = set(loaded)
+        self.scrolled = []
+
+    def locator(self, selector):
+        return self
+
+    def count(self):
+        return len(self.card_ids)
+
+    def nth(self, index):
+        return ProgressiveCard(self, self.card_ids[index])
+
+    def evaluate(self, js):
+        return [
+            {"id": card_id, "title": f"Vaga {card_id}" if card_id in self.loaded else "", "company": "ACME", "text": ""}
+            for card_id in self.card_ids
+        ]
 
 
 def card(n):
@@ -169,6 +226,18 @@ def test_site_sem_cards_incrementais_le_de_uma_vez(settings):
     assert scroll_pauses == []
 
 
+def test_navegador_progressivo_nao_rola_cards_ja_renderizados():
+    page = ProgressivePage(["1", "2", "3"], loaded=["1"])
+    pauses = []
+    navigator = PlaywrightNavigator(page, timeout_ms=1000)
+
+    jobs = navigator.extract_progressive("JS", "li", lambda: pauses.append(1))
+
+    assert [job["id"] for job in jobs] == ["1", "2", "3"]
+    assert page.scrolled == ["2", "3"]
+    assert len(pauses) == 2
+
+
 def test_cada_palavra_chave_gera_uma_busca(settings):
     nav = FakeNavigator({})
     source, *_ = make_source(settings, nav)
@@ -187,6 +256,27 @@ def test_cada_vaga_guarda_a_palavra_chave_que_a_trouxe_e_repetida_fica_com_a_pri
         "https://site/?q=b&start=0": {"raw": [card(1), card(2)]},
     }
     assert [(j.id, j.palavra_chave) for j in source.search(["a", "b"])] == [("1", "a"), ("2", "b")]
+
+
+def test_busca_abre_o_detalhe_de_cada_pagina_antes_de_continuar_a_paginar(settings):
+    nav = FakeNavigator(
+        {
+            "https://site/?q=x&start=0": {"raw": [card(1)]},
+            "https://site/?q=x&start=2": {"raw": []},
+        },
+        details={"https://site/job/1": {"detail": "descrição completa"}},
+    )
+    source, *_ = make_source(settings, nav)
+    recebidas = []
+
+    source.search_and_enrich(["x"], lambda jobs: jobs, on_job=recebidas.append)
+
+    assert recebidas[0].trecho == "descrição completa"
+    assert nav.opened == [
+        "https://site/?q=x&start=0",
+        "https://site/job/1",
+        "https://site/?q=x&start=2",
+    ]
 
 
 def with_localidades(settings, localidades):
@@ -229,6 +319,54 @@ def test_enrich_substitui_o_trecho_pela_descricao_completa(settings):
     source, pauses, _ = make_source(settings, nav)
     assert source.enrich([job])[0].trecho == "descrição completa"
     assert pauses
+
+
+def test_enrich_expande_o_detalhe_antes_de_ler_o_texto(settings):
+    job = Job("1", "Vaga 1", "ACME", "https://site/job/1", "curto", "fake")
+    nav = FakeNavigator({}, details={"https://site/job/1": {"detail": "descriÃ§Ã£o completa"}})
+
+    @contextmanager
+    def session():
+        yield nav
+
+    source = BrowserSource(ExpandableSite(), settings, session, lambda: None, lambda: None)
+    source.enrich([job])
+
+    assert nav.opened_details == ['OPEN "1"']
+    assert nav.expanded == ["EXPAND"]
+
+
+def test_fonte_de_painel_sem_fallback_nao_abre_a_url_individual(settings):
+    job = Job("1", "Vaga 1", "ACME", "https://site/job/1", "curto", "fake")
+    nav = FakeNavigator({}, details={job.link: {"detail": "não deve abrir"}})
+    nav.open_detail = lambda js: False
+
+    @contextmanager
+    def session():
+        yield nav
+
+    source = BrowserSource(PanelOnlySite(), settings, session, pause=lambda: None, scroll_pause=lambda: None)
+    with pytest.raises(SourceLayoutChanged, match="painel"):
+        source.enrich([job])
+    assert nav.opened == []
+
+
+def test_painel_e_tentado_ate_o_limite_configurado_antes_da_falha(settings):
+    job = Job("1", "Vaga 1", "ACME", "https://site/job/1", "curto", "fake")
+    nav = FakeNavigator({})
+    attempts = []
+    nav.open_detail = lambda js: attempts.append(js) and False
+
+    @contextmanager
+    def session():
+        yield nav
+
+    pauses = []
+    source = BrowserSource(PanelOnlySite(), settings, session, pause=lambda: None, scroll_pause=lambda: pauses.append(1))
+    with pytest.raises(SourceLayoutChanged, match="3 tentativa"):
+        source.enrich([job])
+    assert len(attempts) == settings.navegador.max_tentativas_painel == 3
+    assert len(pauses) == 2
 
 
 def test_enrich_entrega_cada_vaga_ao_callback_assim_que_o_detalhe_e_lido(settings):
@@ -383,6 +521,86 @@ def test_reabertura_que_continua_falhando_apos_a_verificacao_interrompe_a_fonte(
     source = make_source_with_gate(settings, nav, gate)
     with pytest.raises(SourceUnavailable):
         source.search(["x"])
+
+
+def test_navegador_repete_goto_abortado_ate_ter_sucesso():
+    class Page:
+        def __init__(self):
+            self.calls = 0
+
+        def goto(self, url, wait_until, timeout):
+            self.calls += 1
+            if self.calls < 3:
+                raise PlaywrightError("net::ERR_ABORTED")
+
+    page = Page()
+    PlaywrightNavigator(page, timeout_ms=1000, max_tentativas_abertura=3).open("https://indeed.test/job")
+    assert page.calls == 3
+
+
+def test_navegador_informa_status_http_e_nao_repete_resposta_de_erro():
+    """O código do Chromium esconde o status HTTP que explica a falha da página."""
+    url = "https://linkedin.test/jobs?start=25"
+
+    class Response:
+        def __init__(self, response_url):
+            self.url = response_url
+            self.status = 429
+
+    class Page:
+        def __init__(self):
+            self.calls = 0
+            self.listener = None
+
+        def on(self, event, listener):
+            assert event == "response"
+            self.listener = listener
+
+        def remove_listener(self, event, listener):
+            assert event == "response"
+            assert listener is self.listener
+            self.listener = None
+
+        def goto(self, url, wait_until, timeout):
+            self.calls += 1
+            self.listener(Response(url))
+            raise PlaywrightError("net::ERR_HTTP_RESPONSE_CODE_FAILURE")
+
+    page = Page()
+    with pytest.raises(SourceUnavailable, match=r"HTTP 429.*ERR_HTTP_RESPONSE_CODE_FAILURE"):
+        PlaywrightNavigator(page, timeout_ms=1000, max_tentativas_abertura=3).open(url)
+    assert page.calls == 1
+    assert page.listener is None
+
+
+def test_navegador_aborta_depois_do_limite_de_gotos_abortados():
+    class Page:
+        def goto(self, url, wait_until, timeout):
+            raise PlaywrightError("net::ERR_ABORTED")
+
+    with pytest.raises(SourceUnavailable, match="ERR_ABORTED"):
+        PlaywrightNavigator(Page(), timeout_ms=1000, max_tentativas_abertura=2).open("https://indeed.test/job")
+
+
+def test_falha_de_abertura_informa_fonte_etapa_e_url(settings):
+    nav = FakeNavigator({"https://site/?q=x&start=0": {"raw": []}})
+
+    def open_falha(url):
+        raise SourceUnavailable(
+            f"Falha ao abrir {url} após 3 tentativas: net::ERR_ABORTED",
+            motivo="http_erro",
+        )
+
+    nav.open = open_falha
+    source, *_ = make_source(settings, nav)
+
+    with pytest.raises(SourceUnavailable) as erro:
+        source.search(["x"])
+
+    assert erro.value.detalhe == (
+        "Fonte fake: falha na etapa busca: Falha ao abrir "
+        "https://site/?q=x&start=0 após 3 tentativas: net::ERR_ABORTED"
+    )
 
 
 def test_bloqueio_no_detalhe_com_confirmacao_retoma_a_vaga(settings):

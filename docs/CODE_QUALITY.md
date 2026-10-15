@@ -1,4 +1,4 @@
-# Regras de Qualidade de Código — JobScanner
+# Regras de Qualidade de Código — Peneira de Vagas
 
 Para humanos e agentes. Convenções de módulos, config e logging:
 [`ARCHITECTURE.md`](ARCHITECTURE.md#convenções). Processo do agente: [`AI_GUIDELINES.md`](AI_GUIDELINES.md).

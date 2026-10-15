@@ -1,7 +1,7 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "JobScanner",
+    "title": "Peneira de Vagas",
     "version": "0.1.0"
   },
   "paths": {
@@ -1168,26 +1168,16 @@
             "type": "array",
             "title": "Modalidade"
           },
-          "janela_horas": {
+          "janela_dias": {
             "type": "integer",
-            "title": "Janela Horas"
-          },
-          "keyword_max_length": {
-            "type": "integer",
-            "title": "Keyword Max Length"
-          },
-          "max_termos_busca": {
-            "type": "integer",
-            "title": "Max Termos Busca"
+            "title": "Janela Dias"
           }
         },
         "type": "object",
         "required": [
           "localidades",
           "modalidade",
-          "janela_horas",
-          "keyword_max_length",
-          "max_termos_busca"
+          "janela_dias"
         ],
         "title": "ConfigBusca"
       },
@@ -1683,6 +1673,39 @@
               }
             ],
             "title": "Fontes"
+          },
+          "localidade": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Localidade"
+          },
+          "modalidade": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modalidade"
+          },
+          "janela_dias": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Janela Dias"
           }
         },
         "type": "object",

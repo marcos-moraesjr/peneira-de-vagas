@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from backend.app import db
 from backend.app.main import create_app
+from backend.app.routes import runs as runs_route
 from backend.app.sources.types import Job
 
 NOW = "2026-10-14T12:00:00+00:00"
@@ -53,6 +54,28 @@ def test_iniciar_busca_devolve_202_e_resultado_por_fonte(client):
     assert run["fontes"] == [
         {"fonte": "stub", "status": "ok", "motivo": None, "detalhe": None, "lidas": 2, "aprovadas": 2, "novas": 2, "scanner_versao": ""}
     ]
+
+
+def test_busca_padrao_registra_as_tres_fontes(settings):
+    """A execução sem filtro explícito não pode perder a Gupy da lista de fontes."""
+    with TestClient(create_app(settings, spawn=lambda fn: None, now=lambda: NOW)) as test_client:
+        resposta = test_client.post("/api/runs")
+        run = test_client.get(f"/api/runs/{resposta.json()['id']}").json()
+    assert [fonte["fonte"] for fonte in run["fontes"]] == ["linkedin", "indeed", "gupy"]
+
+
+def test_busca_aceita_janela_de_recencia_em_dias(settings, monkeypatch):
+    source = StubSource(jobs=[job("1")])
+    monkeypatch.setattr(runs_route, "build_sources", lambda run_settings, gate: [source])
+    with make_client(settings, [source]) as test_client:
+        response = test_client.post("/api/runs", json={"janela_dias": 7})
+    assert response.status_code == 202
+
+
+def test_busca_rejeita_janela_de_recencia_invalida(client):
+    response = client.post("/api/runs", json={"janela_dias": 0})
+    assert response.status_code == 422
+    assert "janela_dias=0" in response.json()["detail"]
 
 
 def test_segunda_busca_durante_uma_em_andamento_devolve_409(settings):
@@ -335,6 +358,18 @@ def test_busca_em_varias_fontes_roda_so_as_escolhidas_na_ordem_do_registro(setti
         resposta = test_client.post("/api/runs", json={"fontes": ["c", "a"]})
         run = test_client.get(f"/api/runs/{resposta.json()['id']}").json()
     assert [fonte["fonte"] for fonte in run["fontes"]] == ["a", "c"]
+
+
+def test_localidade_da_execucao_somente_aceita_estado_brasileiro(client):
+    resposta = client.post("/api/runs", json={"localidade": "Campinas, SP"})
+    assert resposta.status_code == 422
+    assert "estado brasileiro" in resposta.json()["detail"]
+
+
+def test_modalidade_da_execucao_somente_aceita_valor_conhecido(client):
+    resposta = client.post("/api/runs", json={"modalidade": "nuvem"})
+    assert resposta.status_code == 422
+    assert "modalidade" in resposta.json()["detail"]
 
 
 def test_busca_com_lista_vazia_devolve_422(settings):

@@ -1,11 +1,12 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { CONFIG, makeRun, makeSource, mockApi, renderWithClient } from "../../test/mockApi";
+import { VagasPage } from "./VagasPage";
 import { BuscaPage } from "./BuscaPage";
 
 const keyword = { id: 1, termo: "Engenheiro Mecânico", tipo: "busca", criada_em: "2026-10-14T12:00:00+00:00" };
 
-function setup(opts: { jobs?: unknown[]; runs?: unknown[] | (() => unknown[]); keywords?: unknown[]; extra?: Record<string, unknown> } = {}) {
+function setup(opts: { jobs?: unknown[]; runs?: unknown[] | (() => unknown[]); keywords?: unknown[]; page?: "vagas" | "parametros"; extra?: Record<string, unknown> } = {}) {
   const jobs = opts.jobs ?? [];
   const api = mockApi({
     "GET /api/config": CONFIG,
@@ -17,7 +18,7 @@ function setup(opts: { jobs?: unknown[]; runs?: unknown[] | (() => unknown[]); k
     "POST /api/jobs/mark-seen": { atualizadas: 2 },
     ...opts.extra,
   });
-  renderWithClient(<BuscaPage />);
+  renderWithClient(opts.page === "parametros" ? <BuscaPage /> : <VagasPage />);
   return api;
 }
 
@@ -40,6 +41,16 @@ describe("BuscaPage", () => {
     await waitFor(() => expect(button).toBeEnabled());
     await user.click(button);
     await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.path === "/api/runs")).toBe(true));
+  });
+
+  it("envia a localidade escolhida como parte da execução", async () => {
+    const user = userEvent.setup();
+    const { calls } = setup({ jobs: [] });
+    const input = await screen.findByRole("combobox", { name: "Estado da busca" });
+    expect(within(input).getByRole("option", { name: "São Paulo" })).toBeInTheDocument();
+    await user.selectOptions(input, "São Paulo");
+    await user.click(screen.getByRole("button", { name: "Buscar agora" }));
+    await waitFor(() => expect(calls.find((c) => c.method === "POST" && c.path === "/api/runs")?.body).toEqual({ fontes: null, localidade: "São Paulo" }));
   });
 
   it("vem com todas as plataformas marcadas e Buscar agora busca em todas", async () => {
@@ -87,6 +98,12 @@ describe("BuscaPage", () => {
     expect(within(progress).getByText(/LinkedIn/)).toBeInTheDocument();
     expect(within(progress).getByText(/buscando/i)).toBeInTheDocument();
     expect(within(progress).getByText(/aguardando/i)).toBeInTheDocument();
+    expect(progress.parentElement).toHaveClass("border", "border-linha", "bg-painel");
+    expect(progress.parentElement?.parentElement).toContainElement(screen.getByRole("button", { name: "Marcar todas como vistas" }));
+    expect(progress.parentElement?.parentElement).toHaveClass("items-center");
+    expect(within(progress).getByText(/LinkedIn/)).toHaveClass("text-sinal-fg");
+    expect(within(progress).getByText(/buscando/i)).toHaveClass("text-atencao-fg");
+    expect(within(progress).getByText(/aguardando/i)).toHaveClass("text-atencao-fg");
   });
 
   it("sem execução em andamento não há botão Interromper", async () => {
@@ -107,7 +124,23 @@ describe("BuscaPage", () => {
     expect(alert).not.toHaveTextContent("Gupy");
   });
 
-  it("falha de fonte oferece Reiniciar, que busca de novo só nas fontes que falharam", async () => {
+  it("falha de fonte abre um card com o detalhe retornado pela API", async () => {
+    const user = userEvent.setup();
+    setup({
+      runs: [
+        makeRun(5, "concluida", [
+          makeSource("indeed", { status: "falha", motivo: "http_erro", detalhe: "Page.goto: Navigation interrupted" }),
+        ]),
+      ],
+    });
+
+    await user.click(await screen.findByRole("button", { name: "Ver detalhes do Indeed" }));
+
+    const dialog = await screen.findByRole("dialog", { name: /erro no indeed/i });
+    expect(dialog).toHaveTextContent("Page.goto: Navigation interrupted");
+  });
+
+  it("falha de fonte oferece retomada, que busca de novo só nas fontes que falharam", async () => {
     const user = userEvent.setup();
     const { calls } = setup({
       runs: [
@@ -118,24 +151,29 @@ describe("BuscaPage", () => {
         ]),
       ],
     });
-    await user.click(await screen.findByRole("button", { name: "Reiniciar" }));
+    await user.click(await screen.findByRole("button", { name: "Retomar de onde parou" }));
     await waitFor(() => expect(calls.find((c) => c.method === "POST" && c.path === "/api/runs")?.body).toEqual({ fontes: ["linkedin", "indeed"] }));
   });
 
-  it("sem falha ou com busca em andamento não há botão Reiniciar", async () => {
+  it("sem falha ou com busca em andamento não há botão de retomada", async () => {
     setup({ runs: [makeRun(5, "concluida", [makeSource("gupy")])] });
     await screen.findByRole("button", { name: "Buscar agora" });
-    expect(screen.queryByRole("button", { name: "Reiniciar" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Retomar de onde parou" })).not.toBeInTheDocument();
   });
 
   it("exibe os painéis de palavras-chave e de exclusões", async () => {
-    setup({});
+    setup({ page: "parametros" });
     expect(await screen.findByLabelText("Nova palavra-chave")).toBeInTheDocument();
     expect(screen.getByLabelText("Nova exclusão")).toBeInTheDocument();
   });
 
+  it("deixa explícito o limite fixo de seis palavras-chave de busca", async () => {
+    setup({ page: "parametros" });
+    expect(await screen.findByText("Máximo de 6 palavras-chave de busca por conjunto.")).toBeInTheDocument();
+  });
+
   it("separa as palavras da busca (query) das de ranking (pontuação) e das exclusões", async () => {
-    setup({});
+    setup({ page: "parametros" });
     expect(await screen.findByRole("region", { name: "Palavras-chave da busca" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Palavras-chave de ranking" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Exclusões" })).toBeInTheDocument();
@@ -143,7 +181,7 @@ describe("BuscaPage", () => {
   });
 
   it("separa as palavras da busca (query) das de ranking (pontuação) e das exclusões", async () => {
-    setup({});
+    setup({ page: "parametros" });
     expect(await screen.findByRole("region", { name: "Palavras-chave da busca" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Palavras-chave de ranking" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Exclusões" })).toBeInTheDocument();

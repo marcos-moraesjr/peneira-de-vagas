@@ -1,4 +1,4 @@
-# JobScanner — Briefing para o design da interface
+# Peneira de Vagas — Briefing para o design da interface
 
 App web **pessoal e local** de busca de vagas (um usuário, sem login, pt-BR). A API executa a busca no
 LinkedIn, Indeed e Gupy; a interface dispara a busca e exibe os resultados. Escopo em [`MVP.md`](MVP.md);

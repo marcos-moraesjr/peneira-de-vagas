@@ -1,4 +1,4 @@
-# Diretrizes para Agentes de IA — JobScanner
+# Diretrizes para Agentes de IA — Peneira de Vagas
 
 Ponto de entrada (`CLAUDE.md`/`AGENTS.md` apontam para cá); prevalece sobre os demais docs. Aqui só
 comportamento; especificações ficam nos docs abaixo.

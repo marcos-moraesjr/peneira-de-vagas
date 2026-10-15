@@ -3,7 +3,7 @@ import { useClearRuns, useConfig, useDeleteRun, useDocumentationInstruction, use
 import type { Config, Run, Scanner } from "../../api/types";
 import { CopyButton } from "../../components/CopyButton";
 import { ErrorBox } from "../../components/ErrorBox";
-import { buttonSecondary, card, inputClass } from "../../components/ui";
+import { buttonDanger, buttonSecondary, card, inputClass } from "../../components/ui";
 import { describeFailure, sourceLabel } from "../../lib/failures";
 import { formatDate, formatDateTime, formatDuration } from "../../lib/format";
 
@@ -113,14 +113,25 @@ function RunDetail({ run, onClose }: { run: Run; onClose: () => void }) {
   );
 }
 
-type RunsTableProps = { runs: Run[]; onSelect: (id: number) => void; onDelete: (id: number) => void; disabled: boolean };
+type RunsTableProps = {
+  runs: Run[];
+  onSelect: (id: number) => void;
+  onDelete: (id: number) => void;
+  disabled: boolean;
+  onClear: () => void;
+  clearDisabled: boolean;
+};
 
-function RunsTable({ runs, onSelect, onDelete, disabled }: RunsTableProps) {
+function RunsTable({ runs, onSelect, onDelete, disabled, onClear, clearDisabled }: RunsTableProps) {
   const [sort, setSort] = useState<SortState>({ key: "id", dir: "desc" });
   const toggle = (key: SortKey) =>
     setSort((current) => ({ key, dir: current.key === key && current.dir === "asc" ? "desc" : "asc" }));
   return (
-    <div className={`${card} overflow-x-auto`}>
+    <section className={`${card} overflow-x-auto`} aria-labelledby="runs-history-title">
+      <h2 id="runs-history-title" className="text-titulo text-grafite-900">Histórico de execuções</h2>
+      <p className="mb-3 text-xs text-grafite-500">
+        Consulte as buscas já realizadas e abra uma execução para ver o resultado de cada fonte.
+      </p>
       <table aria-label="Execuções" className="w-full text-left text-sm">
         <thead className="text-rotulo uppercase text-grafite-500">
           <tr className="text-xs uppercase text-grafite-500">
@@ -137,8 +148,12 @@ function RunsTable({ runs, onSelect, onDelete, disabled }: RunsTableProps) {
                 </button>
               </th>
             ))}
-            <th scope="col" className="py-1">
-              <span className="sr-only">Ações</span>
+            <th scope="col" className="py-1 text-right">
+              <div className="flex justify-end">
+                <button type="button" className={buttonDanger} disabled={clearDisabled} onClick={onClear}>
+                  Limpar execuções
+                </button>
+              </div>
             </th>
           </tr>
         </thead>
@@ -156,7 +171,7 @@ function RunsTable({ runs, onSelect, onDelete, disabled }: RunsTableProps) {
               <td className="text-right">
                 <button
                   type="button"
-                  className={buttonSecondary}
+                  className={buttonDanger}
                   aria-label={`Excluir execução #${run.id}`}
                   disabled={disabled || run.status === "executando"}
                   onClick={() => onDelete(run.id)}
@@ -168,7 +183,7 @@ function RunsTable({ runs, onSelect, onDelete, disabled }: RunsTableProps) {
           ))}
         </tbody>
       </table>
-    </div>
+    </section>
   );
 }
 
@@ -176,7 +191,7 @@ function ConfigView({ config }: { config: Config }) {
   const rows: [string, string][] = [
     ["Localidades", config.busca.localidades.join(", ") || "qualquer"],
     ["Modalidade", config.busca.modalidade.join(", ") || "qualquer"],
-    ["Janela da busca", `${config.busca.janela_horas} h`],
+    ["Janela padrão da busca", `${config.busca.janela_dias} dias`],
     ["Pontos por termo no título / na descrição", `${config.filtro.peso_titulo} / ${config.filtro.peso_descricao}`],
     ["Pontuação mínima", String(config.filtro.min_score)],
     ["Páginas abertas por palavra-chave (por fonte)", String(config.limites.max_paginas_por_termo)],
@@ -291,27 +306,26 @@ export function ExecucoesPage() {
   return (
     <div className="space-y-4">
       {scanners.data && scanners.data.length > 0 && <ScannersTable scanners={scanners.data} />}
+      <DocumentationPanel />
+      {config.data && <ConfigView config={config.data} />}
       {runs.isError && <ErrorBox message="Não foi possível carregar as execuções. Verifique se a API está rodando." />}
       {runs.isLoading && <p className="text-sm text-grafite-500">Carregando execuções…</p>}
       {runs.isSuccess && runs.data.length === 0 && <p className="text-sm text-grafite-500">Nenhuma execução ainda.</p>}
-      <div className="flex justify-end">
-        <button
-          type="button"
-          className={buttonSecondary}
-          disabled={clear.isPending || !runs.data?.length}
-          onClick={() => {
+      {clear.error && <ErrorBox message={clear.error.message} />}
+      {runs.data && (
+        <RunsTable
+          runs={runs.data}
+          onSelect={setSelectedId}
+          onDelete={deleteRun}
+          disabled={remove.isPending}
+          clearDisabled={clear.isPending || !runs.data.length}
+          onClear={() => {
             if (window.confirm("Apagar o histórico de execuções? As vagas encontradas são mantidas.")) clear.mutate();
           }}
-        >
-          Limpar execuções
-        </button>
-      </div>
-      {clear.error && <ErrorBox message={clear.error.message} />}
-      {runs.data && runs.data.length > 0 && <RunsTable runs={runs.data} onSelect={setSelectedId} onDelete={deleteRun} disabled={remove.isPending} />}
+        />
+      )}
       {selectedRun && <RunDetail run={selectedRun} onClose={closeDetail} />}
       {remove.error && <ErrorBox message={remove.error.message} />}
-      <DocumentationPanel />
-      {config.data && <ConfigView config={config.data} />}
     </div>
   );
 }

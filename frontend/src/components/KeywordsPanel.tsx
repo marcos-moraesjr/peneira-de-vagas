@@ -24,6 +24,12 @@ const TEXTS: Record<KeywordType, { titulo: string; campo: string; vazio: string;
   },
 };
 
+const CHIP_COLORS: Record<KeywordType, string> = {
+  busca: "border-sinal/40 bg-sinal-bg text-sinal-fg",
+  ranking: "border-atencao/50 bg-atencao-bg text-atencao-fg",
+  exclusao: "border-erro/40 bg-erro-bg text-erro-fg",
+};
+
 export function KeywordsPanel({ tipo, titulo }: { tipo: KeywordType; titulo?: string }) {
   const texts = TEXTS[tipo];
   const keywords = useKeywords(tipo);
@@ -68,13 +74,13 @@ export function KeywordsPanel({ tipo, titulo }: { tipo: KeywordType; titulo?: st
       {keywords.data?.length === 0 && <p className="mt-2 text-sm text-grafite-500">{texts.vazio}</p>}
       <ul className="mt-2 flex flex-wrap gap-2">
         {keywords.data?.map((keyword) => (
-          <li key={keyword.id} className={`flex items-center gap-2 rounded-selo border py-1 pl-2.5 pr-1.5 text-dado ${tipo !== "exclusao" ? "border-linha bg-papel text-grafite-900" : "border-dashed border-grafite-400 text-grafite-700"}`}>
+          <li key={keyword.id} className={`flex items-center gap-2 rounded-selo border py-1 pl-2.5 pr-1.5 text-dado ${CHIP_COLORS[tipo]}`}>
             <span>{keyword.termo}</span>
             <button
               type="button"
               aria-label={`Remover ${keyword.termo}`}
               onClick={() => remove.mutate(keyword.id)}
-              className="rounded-full px-1 text-grafite-400 no-underline hover:text-grafite-900"
+              className="rounded-full px-1 text-current opacity-60 no-underline hover:opacity-100"
             >
               ✕
             </button>

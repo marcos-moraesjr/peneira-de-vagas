@@ -1,4 +1,4 @@
-# JobScanner — Arquitetura
+# Peneira de Vagas — Arquitetura
 
 Fonte de verdade de fluxo, contratos, módulos, config e convenções. Stack e exclusões:
 [`TECH_STACK.md`](TECH_STACK.md). Escopo: [`MVP.md`](MVP.md); ordem de construção: [`FASES.md`](FASES.md);
@@ -53,7 +53,7 @@ Tudo sob `/api`, JSON, só em `127.0.0.1`. Erros: `422` (entrada inválida), `40
 | Rota | Efeito |
 | --- | --- |
 | `GET /api/health` | `{status, db}` |
-| `POST /api/runs` | inicia a busca; corpo opcional `{fontes}` (`null`/ausente = todas as plataformas; lista = só essas, rodam na ordem do registro; antes era `{fonte}` com um único nome); `202 {id}`; `409` se há outra em andamento; `422` se a lista for vazia ou tiver fonte inexistente (valor e esperado) |
+| `POST /api/runs` | inicia a busca; corpo opcional `{fontes, localidade, modalidade, janela_dias}` (`fontes` nulo/ausente = todas; localidade, modalidade e a janela em dias são selecionadas no card de busca da página Vagas; `janela_dias` ≥ 1; lista = só essas fontes); `202 {id}`; `409` se há outra em andamento; `422` se a lista for vazia, tiver fonte inexistente ou filtro inválido |
 | `GET /api/runs?limit=` | histórico (mais recentes primeiro), cada um com suas `fontes` |
 | `DELETE /api/runs/{id}` | exclui uma execução (botão **Excluir** da linha, com confirmação) e seus `run_sources`; `200 {removidas: 1}`; `404` se não existe; `409` se ela está em andamento. As vagas são mantidas (`run_id` nulo) |
 | `DELETE /api/runs` | limpa o histórico: apaga **todas** as execuções (e seus `run_sources`); `200 {removidas}`; `409` se há execução em andamento. As vagas nunca são apagadas: ficam com `run_id` nulo (antes, execuções que originaram vagas eram preservadas e a limpeza não removia nada se todas tinham originado) |
@@ -76,7 +76,7 @@ Tudo sob `/api`, JSON, só em `127.0.0.1`. Erros: `422` (entrada inválida), `40
 | `GET /api/browser` · `POST /api/browser/open` | se o Chrome dedicado está aberto (sonda CDP) · abre-o com perfil próprio e porta só local (`ja_aberto` se já estava); 422 se o Chrome não for achado em `chrome_paths` |
 | `GET /api/scanners/instrucao?fonte=` | instrução pronta para o Claude Code **refazer só a documentação** das plataformas (todas ou uma), com versões atuais, palavras-chave cadastradas e regras de segurança; 422 se a fonte for desconhecida |
 | `GET /api/scanners` | versão e estado (`ok`/`atencao`/`refazer`) de cada scanner; em `refazer`, traz a `instrucao` pronta para o Claude (`SCANNERS.md`) |
-| `GET /api/config` | config em vigor: seções `busca` (inclui `max_termos_busca`), `filtro`, `limites` (`max_paginas_por_termo`), `ritmo`, `navegador` (só `abas_paralelas`), `api` (caminhos, `cdp_url`, `chrome_paths` e URLs das fontes ficam de fora) |
+| `GET /api/config` | config em vigor: seções `busca` (sem o teto fixo de termos), `filtro`, `limites` (`max_paginas_por_termo`), `ritmo`, `navegador` (só `abas_paralelas`), `api` (caminhos, `cdp_url`, `chrome_paths` e URLs das fontes ficam de fora) |
 | `PUT /api/config` | corpo = o mesmo formato do `GET` (completo); valida, regrava só esses valores no `config.toml` (comentários e demais chaves intactos) e passa a valer na hora; `422` se inválido (arquivo intacto), `409` se há execução em andamento |
 
 Motivos de falha de fonte (enum): `captcha`, `login`, `cloudflare`, `seletor_nao_encontrado`,
@@ -109,14 +109,16 @@ Ajustar aqui ao criar cada diretório.
 | `backend/app/services/chrome.py` · `routes/browser.py` | `is_open`, `find_chrome`, `open_chrome`: sonda, descoberta e abertura do Chrome dedicado; `cdp_url` só aceita 127.0.0.1/localhost (validado na config) |
 | `backend/tests/` | pytest, um `test_<módulo>.py` por módulo; `conftest.py`: SQLite temporário, `Settings` e "agora" injetados; `samples/` (JSON/HTML salvos, sem dados pessoais) |
 | `frontend/src/api/` | `client.ts` (`apiGet` tipado + `apiSend`), `hooks.ts`; `schema.d.ts` e `openapi.json` gerados e versionados |
-| `frontend/src/features/` | `vagas` (lista paginada por números de página (`Pagination`: `limit` e `offset` da API), filtros, busca, seletor de conjuntos e painéis de palavras-chave), `execucoes` (histórico em tabela ordenável pelo cabeçalho, detalhe por fonte em card ao clicar, botão de excluir na linha, e config) |
-| `frontend/src/components/` | componentes comuns (`Tabs`, `ErrorBox`, `SourceBadge`, `ui.ts` com classes Tailwind compartilhadas) |
-| `frontend/public/`, `frontend/src/index.css` | ícone da marca Peneira e tokens de identidade (variáveis `--pn-*`, temas claro e escuro via `data-theme`, escolhido pelo botão da barra (`ThemeToggle`, salvo em `localStorage` `peneira-tema`) ou, sem escolha, pelo `prefers-color-scheme` em `index.html`; mapeadas no `@theme` do Tailwind; fonte única Noto Sans empacotada (`@fontsource/noto-sans`, pesos 400–700; a do Indeed), com a pilha do sistema como reserva) |
+| `frontend/src/features/` | `vagas` (controles de execução, plataformas, estado, Chrome, lista paginada por números de página (`Pagination`: `limit` e `offset` da API), filtros e seletor de conjuntos; durante a execução, o status por fonte (`RunStatus`) aparece em uma faixa com borda alinhada ao grupo dos botões de marcar/excluir vagas, usando cores semânticas por estado), `configuracoes` (parâmetros ajustáveis), `execucoes` (histórico em tabela ordenável pelo cabeçalho, detalhe por fonte em card ao clicar, botão de excluir na linha, e config), `vagas/BuscaPage` (aba Parâmetros de busca, com palavras-chave e exclusões) |
+| `frontend/src/components/` | componentes comuns (`Tabs`, `ErrorBox`, `SourceBadge`, `ConjuntosPanel` com tabela para ativar, editar e excluir conjuntos, botões de uso uniformes e exclusão no padrão vermelho `buttonDanger`, e formulário para criar vazio ou copiar um conjunto existente, `ui.ts` com classes Tailwind compartilhadas) |
+| `frontend/public/`, `frontend/src/index.css` | ícone da marca Peneira de Vagas e tokens de identidade (variáveis `--pn-*`, temas claro e escuro via `data-theme`, escolhido pelo botão da barra (`ThemeToggle`, salvo em `localStorage` `peneira-de-vagas-tema`, com leitura do nome legado) ou, sem escolha, pelo `prefers-color-scheme` em `index.html`; mapeadas no `@theme` do Tailwind; fonte única Noto Sans empacotada (`@fontsource/noto-sans`, pesos 400–700; a do Indeed), com a pilha do sistema como reserva) |
 | `frontend/dist/` | build estático (gerado, não versionado) |
 | `scripts/chrome-dedicado.*` | abre o Chrome dedicado (perfil e porta CDP) |
 | `data/chrome-profile/` | perfil do Chrome dedicado (não versionado) |
-| `data/jobscanner.db` | banco SQLite (não versionado) |
+| `data/peneira-de-vagas.db` | banco SQLite (não versionado; na primeira abertura, uma instalação existente é copiada de `data/jobscanner.db`) |
 | `logs/` | log da execução (não versionado) |
+
+Durante a execucao, `RunStatus` fica na mesma linha do grupo de acoes de marcar e excluir vagas, com borda propria e cores semanticas por estado.
 
 ## Contrato das fontes
 
@@ -132,7 +134,7 @@ Cada `sources/<fonte>.py` expõe `fetch(config, ...) -> list[Job]`. `Job`:
 | `fonte` | `str` | `linkedin`, `indeed` ou `gupy` |
 | `palavra_chave` | `str` | primeira palavra-chave do conjunto ativo cuja busca devolveu a vaga (`BrowserSource`/`GupySource` a gravam ao juntar os termos; vaga achada por vários termos fica com o primeiro); `""` em vagas gravadas antes do esquema v7 |
 | `localidade` | `str` | vazio permitido. Gupy: `city, state`; LinkedIn: legenda do card (local e modalidade); Indeed: `[data-testid="text-location"]` |
-| `publicada_em` | `str \| None` | data de publicação em ISO 8601. Gupy: `publishedDate`. **LinkedIn: lida só na página de detalhe** (`.job-details-jobs-unified-top-card__tertiary-description-container`, texto relativo "há 8 horas" convertido para ISO por `parse_relative_date`; mês = 30 dias, ano = 365), e o detalhe agora é aberto para todas as vagas novas (sem teto; antes só as primeiras `max_paginas_detalhe` = 15 tinham data); só vaga cujo detalhe não trouxe a data fica `None`. **Indeed: também só no detalhe**, primeiro `datePosted` do JSON-LD (`script[type="application/ld+json"]`, ISO exato, observado no HTML real) e, na reserva, procurando "Publicada há N dias"/"Posted N days ago"/"Publicada hoje" no texto da página (`body`; **seletor não observado**; "Ativa há…" e "mais de 30 dias" são ignorados; aceita "Publicada/Publicado/Postado/Posted"). **Fallback comum (LinkedIn e Indeed):** sem data em nenhum seletor, `find_published_line` procura no texto da página uma linha (separada por quebra de linha, "·" ou "|") que seja inteira a data, sem depender de classe CSS. Vagas abertas no detalhe sem data geram aviso no log da fonte. `sources/relative_date.py` faz a conversão. Antes: só o seletor do LinkedIn e o regex "Publicada/Posted" do Indeed, sem fallback |
+| `publicada_em` | `str \| None` | data de publicação em ISO 8601. Gupy: `publishedDate`. **LinkedIn: lida no painel de detalhe** (`.job-details-jobs-unified-top-card__tertiary-description-container`, texto relativo "há 8 horas" convertido para ISO por `parse_relative_date`; mês = 30 dias, ano = 365). Sem data em nenhum seletor, `find_published_line` procura no texto da página uma linha (separada por quebra de linha, "·" ou "|") que seja inteira a data, sem depender de classe CSS. **Indeed: sempre `None`**; a resposta do painel da lista capturada em 15/10/2026 traz `datePublished: null`, e o scanner não abre `/viewjob` somente para obter `datePosted`. |
 
 Cada fonte expõe também `name` e `enrich(jobs) -> list[Job]` (abre o detalhe; na Gupy é identidade).
 Falhas são exceções de `sources/errors.py` (com `motivo` e `detalhe`), nunca lista vazia disfarçada. **Zero
@@ -153,8 +155,9 @@ isolado em `PlaywrightNavigator`, o que permite testar o fluxo com um navegador 
 - Resposta: `data[]` (`id`, `name`, `description`, `careerPageName`, `city`, `state`, `workplaceType`,
   `publishedDate`, `jobUrl`…) e `pagination.total`. Campo ausente → `SourceLayoutChanged`; HTTP ≠ 200
   (inclusive 403) → `SourceUnavailable`/`http_erro`, **sem cabeçalhos para disfarçar o cliente**.
-- A API devolve **tudo** que casa com o termo, inclusive vagas antigas (2022…) e sem filtro de recência:
-  na primeira execução, quase tudo aparece como "nova"; a deduplicação cobre as seguintes.
+- A API devolve tudo que casa com o termo, inclusive vagas antigas (2022…). O adaptador aplica localmente
+  `[busca] janela_dias` sobre `publishedDate` antes da deduplicação: vagas anteriores a *agora − janela* saem;
+  as sem data continuam, pois o campo pode ser omitido pela API.
 - `jobUrl` leva um token em base64: usado como link, sem interpretar (a query string é removida).
 
 ### LinkedIn e Indeed
@@ -174,14 +177,18 @@ isolado em `PlaywrightNavigator`, o que permite testar o fluxo com um navegador 
 - **LinkedIn lê card a card** (`lazy_cards`): o `<li data-occludable-job-id>` já traz o ID, mas título e empresa
   só aparecem depois de rolar até ele (7–11 cards renderizados ao carregar, de 25). Card sem título é
   descartado e **nunca gravado**, para a vaga não deixar de ser avaliada depois. Indeed lê tudo de uma vez.
+- **Busca e detalhe são intercalados por página**: após ler e triar uma página, LinkedIn e Indeed abrem os detalhes
+  elegíveis imediatamente na mesma aba antes de buscar a próxima página. Assim a execução não passa toda a janela
+  inicial apenas rolando resultados; o detalhe continua limitado às vagas novas que passaram na triagem local.
 - Seletores observados: LinkedIn `a[href*="/jobs/view/"] strong` (título), `.artdeco-entity-lockup__subtitle`
-  (empresa), `.artdeco-entity-lockup__caption` (local); Indeed `a.jcs-JobTitle[data-jk]` (ID e título em
+  (empresa), `.artdeco-entity-lockup__caption` (local); Indeed `a[data-jk]` (ID e título em
   `span[title]`), `[data-testid="company-name"]`, `[data-testid="text-location"]` (local), itens `li` do card (trecho). Classes com hash não são usadas.
 - "Anunciada novamente há N horas" no LinkedIn = vaga repostada; quem decide se é nova é o SQLite.
 - O banner de cookies do Indeed não bloqueia a leitura; escolha uma opção uma vez, à mão, no Chrome dedicado.
 - Pausas variáveis entre ações (e curtas ao rolar); uma aba por vez.
-- Tela de login, CAPTCHA/verificação, página Cloudflare ou seletor ausente → exceção da fonte; **sem retentativa de contorno**.
-- **Bloqueio: a fonte espera o usuário** (`VerificationGate`, `[navegador] espera_verificacao_s`). A aba fica aberta, a tela mostra o aviso com o botão **Já concluí a verificação** e, ao confirmar, a fonte reabre a página que bloqueou e segue de onde parou (o que já foi lido é mantido). Se a reabertura falhar (o site ainda redireciona após a verificação e o `goto` é abortado), tenta uma vez mais após a pausa; falhando de novo, `http_erro`. Antes: a primeira falha na reabertura encerrava a fonte. Se o bloqueio persistir, volta a esperar; sem confirmação no prazo, ou sem portão, vale o comportamento abaixo. Antes: o bloqueio encerrava a fonte na hora. Nada é resolvido ou contornado pelo programa.
+- Tela de login, CAPTCHA/verificação, página Cloudflare ou seletor ausente → exceção da fonte; **sem retentativa de contorno**. Um `goto` abortado pelo navegador (`ERR_ABORTED`) é repetido até `[navegador] max_tentativas_abertura` (padrão 3). A abertura do painel da vaga é repetida até `[navegador] max_tentativas_painel` (padrão 3), com as pausas humanas configuradas; ao atingir o limite, falha como `seletor_nao_encontrado`. A retomada manual executa apenas as fontes que falharam; ao reler a listagem, a deduplicação não reabre os detalhes das vagas já gravadas. `ERR_HTTP_RESPONSE_CODE_FAILURE` é encerrado de imediato e o detalhe registra o status HTTP recebido, quando o Chromium o expõe.
+- Falhas de abertura registram no detalhe da fonte a plataforma, a etapa (`busca`/`detalhe`), a URL, o número de tentativas e o erro original do Playwright; o front exibe esse detalhe no botão **Ver detalhes**.
+- **Bloqueio: a fonte espera o usuário** (`VerificationGate`, `[navegador] espera_verificacao_s`). A aba fica aberta, a tela mostra o aviso com o botão **Já concluí a verificação** e, ao confirmar, a fonte reabre a página que bloqueou e segue de onde parou (o que já foi lido é mantido). Se a reabertura falhar (o site ainda redireciona após a verificação e o `goto` é abortado), aplica `[navegador] max_tentativas_abertura` após as pausas; atingido o limite, `http_erro`. Antes: a primeira falha na reabertura encerrava a fonte. Se o bloqueio persistir, volta a esperar; sem confirmação no prazo, ou sem portão, vale o comportamento abaixo. Antes: o bloqueio encerrava a fonte na hora. Nada é resolvido ou contornado pelo programa.
 - **Bloqueio (`SourceBlocked`) sem confirmação mantém a aba aberta** no Chrome dedicado, para o usuário concluir a verificação à
   mão; a próxima execução abre uma aba nova (antes: a aba era sempre fechada). Outros erros e o sucesso continuam
   fechando a aba. A aba deixada aberta é responsabilidade do usuário fechar.
@@ -225,21 +232,21 @@ Datas em ISO 8601 (UTC); o front formata em pt-BR com `Intl`. "Agora" é injetad
 Todo valor que ajusta comportamento mora aqui, nunca como literal (`CODE_QUALITY.md` §5). `config.toml` lido
 por `backend/app/config.py` (`tomllib`) e editável pela aba Configurações **só** nas seções `busca`, `filtro`, `limites`,
 `ritmo`, `api` e, de `navegador`, apenas `abas_paralelas` (`PUT /api/config`; escrita em `services/config_edit.py`, sem biblioteca: troca só o valor da linha).
-Antes: `janela_horas`, `trecho_max_chars`, pesos e `poll_interval_ms` não tinham limite; agora exigem `> 0` (pesos, `min_score` e pausas, `>= 0`); caminhos relativos partem da raiz do projeto. Host e porta são
+Antes: `janela_dias`, `trecho_max_chars`, pesos e `poll_interval_ms` não tinham limite; agora exigem `> 0` (pesos, `min_score` e pausas, `>= 0`); caminhos relativos partem da raiz do projeto. Host e porta são
 argumentos do `uvicorn` (`127.0.0.1` por padrão; abrir para a rede é decisão registrada no TECH_STACK).
 
 | Parâmetro | Default | Efeito |
 | --- | --- | --- |
-| `[geral] db_path` | `data/jobscanner.db` | arquivo SQLite (a pasta é criada se faltar) |
+| `[geral] db_path` | `data/peneira-de-vagas.db` | arquivo SQLite (a pasta é criada se faltar; o banco com nome anterior é copiado automaticamente uma única vez) |
 | `[geral] frontend_dist` | `frontend/dist` | build estático servido pela API em `/` |
 | `[geral] log_dir` | `logs` | pasta do log |
 | `[padrao] palavras_chave` | `["Engenheiro Mecânico"]` | seed da tabela `keywords` (tipo `busca`, conjunto ativo), aplicado **uma única vez** (flag `seeded`); depois disso, a lista vive no SQLite e é editada pelo front |
 | `[padrao] exclusoes` | `[]` | seed das exclusões, mesma regra |
-| `[busca] keyword_max_length` | `80` | tamanho máximo de um termo |
-| `[busca] max_termos_busca` | `6` | máximo de palavras-chave `busca` por conjunto (cada termo gera uma consulta por fonte; consultas demais levam a bloqueio); `422` ao exceder, exclusões não contam; na execução só os primeiros `max_termos_busca` termos vão às fontes. Editável na tela Configurações (controle deslizante, 1–10; antes: `10`, e só barrava termos novos) |
-| `[busca] localidades` / `modalidade` | `[]` / `[]` | lista de cidades ou estados (`"Campinas, SP"`, `"Minas Gerais"`; textos não vazios, sem repetição ignorando caixa; vazia = sem filtro de local), **só no `config.toml`: a aba Configurações não os edita mais** (o `PUT /api/config` os preserva como vieram; antes eram editáveis na tela); e lista de `remoto`/`hibrido`/`presencial` (vazia = todas). **Filtram as vagas listadas (filtro local), não vão na busca da plataforma.** Antes: iam na busca (`location`/`l`, `f_WT`, `workplaceType`, uma busca por localidade/modalidade) |
+| `[busca] keyword_max_length` | `80` | proteção técnica fixa para o tamanho máximo de um termo; não é exposta nem alterável pela API de configuração |
+| `[busca] max_termos_busca` | `6` | máximo fixo de palavras-chave `busca` por conjunto (cada termo gera uma consulta por fonte; consultas demais levam a bloqueio); `422` ao exceder, exclusões não contam. Não é exposto nem alterável pela API de configuração; a aba **Parâmetros de busca** informa o teto. |
+| `[busca] localidades` / `modalidade` | `[]` / `[]` | configuração legada de cidades/estados e modalidades. A barra da página **Vagas** envia um estado e uma modalidade por execução; `services/search_query.py` traduz o estado para `location` (LinkedIn) e `l` (Indeed), e a modalidade para `f_WT` no LinkedIn e `workplaceType` na Gupy. O Indeed não recebe parâmetro de modalidade observado; o filtro local comum continua como fallback. A Gupy não possui parâmetro de localidade observado. |
 | `[filtro] aceitar_desconhecido` | `true` | vaga sem localidade/modalidade informada (ou só "Brasil", ou remota) passa pelo filtro de local e modalidade; `false` descarta. Só no `config.toml` (não aparece na tela) |
-| `[busca] janela_horas` | `24` | filtro de recência da própria busca (onde a fonte permite) |
+| `[busca] janela_dias` | `3` | filtro de recência da própria busca. A aba **Vagas** permite definir a janela (em dias) para cada execução; o valor da config é o padrão inicial |
 | `[filtro] peso_titulo` / `peso_descricao` | `3` / `1` | pontos por termo no título e no trecho |
 | `[filtro] min_score` | `3` | pontuação mínima para aprovar |
 | `[limites] max_paginas_por_termo` | `3` | páginas de resultados abertas por palavra-chave e por fonte (LinkedIn 25 vagas/página, Indeed 10, Gupy 50; máximo de páginas por fonte = `max_termos_busca` × este valor); editável na tela Configurações (controle deslizante, 1–10). Antes: `max_vagas_lista` (teto de vagas da fonte inteira, 300) |
@@ -251,6 +258,8 @@ argumentos do `uvicorn` (`127.0.0.1` por padrão; abrir para a rede é decisão 
 | `[navegador] cdp_url` | `http://127.0.0.1:9222` | endereço do Chrome dedicado (só `localhost`) |
 | `[navegador] timeout_s` | `30` | espera máxima por página/elemento |
 | `[navegador] espera_verificacao_s` | `600` | tempo que a fonte espera o usuário concluir a verificação e confirmar; esgotado (ou sem confirmar), falha como antes. Antes: o bloqueio encerrava a fonte na hora |
+| `[navegador] max_tentativas_abertura` | `3` | número de tentativas de abertura para `ERR_ABORTED`; atingido o limite, registra `http_erro` na fonte e a execução continua com as demais |
+| `[navegador] max_tentativas_painel` | `3` | número de tentativas de clique no painel de detalhe antes de registrar `seletor_nao_encontrado` |
 | `[navegador] abas_paralelas` | `false` | `true`: as fontes rodam ao mesmo tempo, uma aba por plataforma (cada aba mantém as próprias pausas). Antes: sempre em sequência, sem esta chave |
 | `[navegador] probe_timeout_s` / `chrome_paths` | `1.5` / caminhos do Chrome (Windows, Linux, macOS) | espera ao sondar o CDP; onde procurar o Chrome para o botão "Abrir Chrome dedicado" (o primeiro que existir) |
 | `[geral] chrome_profile_dir` | `data/chrome-profile` | perfil do Chrome dedicado (nunca o pessoal) |
@@ -259,7 +268,7 @@ argumentos do `uvicorn` (`127.0.0.1` por padrão; abrir para a rede é decisão 
 | `[api] poll_interval_ms` | `2000` | intervalo do polling do front (exposto em `GET /api/config`) |
 | `[versionamento] falhas_consecutivas` / `max_idade_dias` | `2` / `90` | falhas de quebra seguidas (na versão atual) que mandam refazer o scanner; idade que pede atenção |
 | `[versionamento] motivos_de_quebra` | `seletor_nao_encontrado`, `zero_resultados`, `http_erro` | motivos que contam como scanner quebrado (bloqueios não contam) |
-| `[gupy] base_url`, `page_size`, `timeout_s` | `portal.gupy.io/api/job-search/jobs`, `50`, `20` | endpoint (parâmetros `jobName`, `limit`, `offset`, `workplaceType`), página e timeout. A Gupy não tem filtro de recência (a deduplicação cobre) nem de localidade nesta versão |
+| `[gupy] base_url`, `page_size`, `timeout_s` | `portal.gupy.io/api/job-search/jobs`, `50`, `20` | endpoint (parâmetros `jobName`, `limit`, `offset`, `workplaceType`), página e timeout. A Gupy não tem filtro remoto de recência nem de localidade; o adaptador filtra localmente por `publishedDate` e `[busca] janela_dias` |
 
 Os valores `(a definir)` dependem das decisões em aberto de `MVP.md` §11. Parâmetro novo é registrado aqui
 na mesma sessão.

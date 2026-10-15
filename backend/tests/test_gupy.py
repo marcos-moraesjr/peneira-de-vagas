@@ -1,5 +1,6 @@
 import json
 from dataclasses import replace
+from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
@@ -13,7 +14,7 @@ SAMPLE = json.loads((Path(__file__).parent / "samples" / "gupy_jobs.json").read_
 
 def make_source(settings, handler):
     client = httpx.Client(transport=httpx.MockTransport(handler))
-    return GupySource(settings, client=client)
+    return GupySource(settings, client=client, clock=lambda: datetime(2022, 3, 1, tzinfo=timezone.utc))
 
 
 def test_converte_resposta_da_gupy_para_o_formato_unico(settings):
@@ -33,6 +34,20 @@ def test_vaga_da_gupy_sem_cidade_ou_data_fica_sem_localidade_e_sem_publicacao(se
     source = make_source(settings, lambda request: httpx.Response(200, json={**SAMPLE, "data": [item]}))
     job = source.search(["x"])[0]
     assert job.localidade == "" and job.publicada_em is None
+
+
+def test_gupy_descarta_vaga_publicada_antes_da_janela_de_recencia(settings):
+    recente = {**SAMPLE["data"][0], "id": 1003, "publishedDate": "2026-10-12T12:00:00.000Z"}
+    antiga = {**SAMPLE["data"][1], "publishedDate": "2022-03-01T10:00:00.000Z"}
+    source = GupySource(
+        replace(settings, busca=replace(settings.busca, janela_dias=3)),
+        client=httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(
+            200, json={"data": [recente, antiga], "pagination": {"total": 2}}
+        ))),
+        clock=lambda: datetime(2026, 10, 15, 12, tzinfo=timezone.utc),
+    )
+
+    assert [job.id for job in source.search(["x"])] == ["1003"]
 
 
 def test_cada_vaga_guarda_a_palavra_chave_que_a_trouxe_e_repetida_fica_com_a_primeira(settings):
@@ -117,7 +132,7 @@ def test_mesma_vaga_em_duas_palavras_chave_aparece_uma_vez(settings):
     assert sorted(ids) == ["1001", "1002"]
 
 
-def test_modalidade_e_localidade_da_config_nao_vao_para_a_api(settings):
+def test_modalidade_vai_para_a_api_mas_localidade_nao(settings):
     vistos = []
 
     def handler(request):
@@ -127,8 +142,33 @@ def test_modalidade_e_localidade_da_config_nao_vao_para_a_api(settings):
     busca = replace(settings.busca, localidades=["Campinas, SP"], modalidade=["remoto", "hibrido"])
     jobs = make_source(replace(settings, busca=busca), handler).search(["x"])
     assert len(vistos) == 1
-    assert "workplaceType" not in vistos[0] and "location" not in vistos[0]
+    assert vistos[0]["workplaceType"] == "remote" and "location" not in vistos[0]
     assert sorted(job.id for job in jobs) == ["1001", "1002"]
+
+
+def test_modalidade_da_config_vai_para_a_api_da_gupy(settings):
+    vistos = []
+
+    def handler(request):
+        vistos.append(dict(request.url.params))
+        return httpx.Response(200, json=SAMPLE)
+
+    busca = replace(settings.busca, modalidade=["remoto"])
+    make_source(replace(settings, busca=busca), handler).search(["x"])
+    assert vistos[0]["workplaceType"] == "remote"
+
+
+def test_gupy_omite_localidade_na_api_e_deixa_o_filtro_local_decidir(settings):
+    vistos = []
+
+    def handler(request):
+        vistos.append(dict(request.url.params))
+        return httpx.Response(200, json=SAMPLE)
+
+    busca = replace(settings.busca, localidades=["Campinas, SP"])
+    jobs = make_source(replace(settings, busca=busca), handler).search(["x"])
+    assert "location" not in vistos[0]
+    assert len(jobs) == 2
 
 
 def test_resposta_sem_data_e_mudanca_de_layout(settings):

@@ -11,6 +11,20 @@ from backend.app.sources.types import Job
 NOW = "2026-10-14T12:00:00+00:00"
 
 
+def test_migra_copia_banco_com_nome_legado_sem_sobrescrever_o_novo(tmp_path):
+    legado = tmp_path / "jobscanner.db"
+    destino = tmp_path / "peneira-de-vagas.db"
+    legado.write_bytes(b"historico")
+
+    assert db.migrate_legacy_database(destino) is True
+    assert destino.read_bytes() == b"historico"
+    assert legado.read_bytes() == b"historico"
+
+    destino.write_bytes(b"atual")
+    assert db.migrate_legacy_database(destino) is False
+    assert destino.read_bytes() == b"atual"
+
+
 def make_job(id_da_vaga="1", fonte="gupy", titulo="Engenheiro Mecânico", modalidade=""):
     return Job(id=id_da_vaga, titulo=titulo, empresa="ACME", link=f"https://x/{id_da_vaga}", trecho="texto", fonte=fonte, modalidade=modalidade)
 

@@ -44,16 +44,16 @@ function ProblemsTable() {
 export function TutorialPage() {
   return (
     <div className="space-y-4">
-      <h2 className="text-display text-grafite-900">Como usar o Peneira</h2>
+      <h2 className="text-display text-grafite-900">Como usar o Peneira de Vagas</h2>
       <p className="text-sm text-grafite-500">
-        O Peneira busca vagas no LinkedIn, no Indeed e na Gupy, filtra pelas suas palavras-chave e mostra só o que
+        O Peneira de Vagas busca vagas no LinkedIn, no Indeed e na Gupy, filtra pelas suas palavras-chave e mostra só o que
         é novo. Tudo roda na sua máquina.
       </p>
 
       <ol aria-label="Passos" className="space-y-3">
         <Step title="Abra o Chrome dedicado">
           <p>
-            LinkedIn e Indeed são lidos pelo Chrome real, num perfil só do Peneira (nunca o seu pessoal). Na aba
+            LinkedIn e Indeed são lidos pelo Chrome real, num perfil só do Peneira de Vagas (nunca o seu pessoal). Na aba
             Vagas, clique em <strong>Abrir Chrome dedicado</strong>: o aviso "Chrome dedicado aberto" aparece quando ele
             estiver pronto. Deixe a janela aberta durante a busca.
           </p>
@@ -70,7 +70,7 @@ export function TutorialPage() {
 
         <Step title="Entre nos sites (uma vez)">
           <p>
-            Nessa janela, faça login no LinkedIn e no Indeed <strong>à mão</strong>; o Peneira nunca digita
+            Nessa janela, faça login no LinkedIn e no Indeed <strong>à mão</strong>; o Peneira de Vagas nunca digita
             credenciais. No Indeed, escolha uma opção no aviso de cookies. A sessão fica salva no perfil dedicado, então
             isso só se repete se os sites pedirem de novo.
           </p>
@@ -78,7 +78,7 @@ export function TutorialPage() {
 
         <Step title="Cadastre as palavras-chave">
           <p>
-            Na aba Busca, digite um termo em <strong>Palavras-chave da busca</strong> e tecle Enter: cada uma vira uma
+            Na aba Parâmetros de busca, digite um termo em <strong>Palavras-chave da busca</strong> e tecle Enter: cada uma vira uma
             busca nas plataformas. Em <strong>Palavras-chave de ranking</strong> ficam os termos que não fazem busca,
             só pontuam as vagas encontradas. Use <strong>Exclusões</strong> para descartar vagas com certos termos,
             como "estágio". O termo
@@ -108,7 +108,7 @@ export function TutorialPage() {
       <section className={`${card} space-y-2`}>
         <h3 className="text-base font-semibold text-grafite-900">Se alguma fonte falhar</h3>
         <p className="text-sm text-grafite-500">
-          Uma fonte que falha aparece em destaque na aba Busca, com a causa e o que fazer. As demais continuam. Falha
+            Uma fonte que falha aparece em destaque na aba Vagas, com a causa e o que fazer. As demais continuam. Falha
           nunca é a mesma coisa que "nenhuma vaga".
         </p>
         <ProblemsTable />
@@ -118,7 +118,7 @@ export function TutorialPage() {
         <h3 className="text-base font-semibold text-grafite-900">Quando o scanner quebra</h3>
         <p>
           Sites mudam sem aviso. Se uma fonte falhar por layout, zero resultados ou erro de HTTP várias vezes seguidas,
-          a aba Busca mostra "o scanner precisa ser refeito". Clique em <strong>Copiar instrução para o Claude</strong>{" "}
+            a aba Vagas mostra "o scanner precisa ser refeito". Clique em <strong>Copiar instrução para o Claude</strong>{" "}
           e cole numa sessão do Claude Code neste repositório: ele explora a plataforma de novo e gera a versão
           seguinte do scanner. A aba Execuções mostra a versão de cada scanner.
         </p>

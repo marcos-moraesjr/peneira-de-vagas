@@ -49,7 +49,7 @@ export function renderWithClient(ui: ReactElement) {
 }
 
 export const CONFIG = {
-  busca: { localidades: ["Brasil"], modalidade: [], janela_horas: 24, keyword_max_length: 80, max_termos_busca: 6 },
+  busca: { localidades: ["Brasil"], modalidade: [], janela_dias: 3, keyword_max_length: 80, max_termos_busca: 6 },
   filtro: { peso_titulo: 3, peso_descricao: 1, min_score: 3, trecho_max_chars: 4000 },
   limites: { max_paginas_por_termo: 3 },
   ritmo: { pausa_min_s: 2, pausa_max_s: 6, rolagem_min_s: 0.25, rolagem_max_s: 0.7 },

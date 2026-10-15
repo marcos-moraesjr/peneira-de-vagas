@@ -10,6 +10,7 @@ from urllib.parse import urlencode
 from ..config import Settings
 from ..services.filters import normalize
 from ..services.localizacao import detect_modalidade
+from ..services.search_query import platform_params
 from .relative_date import parse_relative_date
 from .types import Job
 
@@ -19,6 +20,18 @@ EMPTY_MARKERS = ("nenhuma vaga correspondente", "no matching jobs", "nenhum resu
 
 # Na página de detalhe: "Cidade · Anunciada novamente há 8 horas · 95 candidaturas" (observado em 14/10/2026).
 PUBLISHED_SELECTORS = [".job-details-jobs-unified-top-card__tertiary-description-container"]
+
+OPEN_DETAIL_JS = """() => {
+  const jobId = __JOB_ID__;
+  const card = [...document.querySelectorAll('li[data-occludable-job-id]')]
+    .find((item) => item.getAttribute('data-occludable-job-id') === jobId);
+  if (!card) return false;
+  const title = card.querySelector('a[href*="/jobs/view/"] strong')
+    || card.querySelector('a[href*="/jobs/view/"]');
+  if (!title) return false;
+  title.click();
+  return true;
+}"""
 
 
 EXTRACT_JS = """() => {
@@ -39,7 +52,9 @@ class LinkedInSite:
     card_selector = CARD_SELECTOR
     lazy_cards = True
     published_selectors = PUBLISHED_SELECTORS
+    open_detail_js = OPEN_DETAIL_JS
     detail_selectors = [
+        '[data-testid="expandable-text-box"]',
         "article",
         ".jobs-description__content",
         ".jobs-box__html-content",
@@ -53,12 +68,13 @@ class LinkedInSite:
         self.page_size = settings.linkedin.page_size
 
     def search_url(self, termo: str, start: int) -> str:
-        """Só termo, janela e página: localidade e modalidade não vão na busca (o filtro local decide)."""
+        """Monta a URL com os parâmetros canônicos adaptados para o LinkedIn."""
         params = {
             "keywords": termo,
-            "f_TPR": f"r{self._settings.busca.janela_horas * SECONDS_PER_HOUR}",
+            "f_TPR": f"r{self._settings.busca.janela_dias * 24 * SECONDS_PER_HOUR}",
             "start": start,
         }
+        params.update(platform_params(self.name, self._settings))
         return f"{self._settings.linkedin.base_url}?{urlencode(params)}"
 
     def classify(self, url: str, title: str, text: str) -> str | None:

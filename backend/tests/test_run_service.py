@@ -68,6 +68,26 @@ def test_grava_apenas_vagas_aprovadas_e_conta_lidas_aprovadas_novas(conn, settin
     assert conn.execute("SELECT status FROM runs").fetchone()[0] == "concluida"
 
 
+def test_fonte_paginada_enriquece_durante_a_busca(conn, settings):
+    eventos = []
+
+    class FontePaginada(FakeSource):
+        def search_and_enrich(self, termos, select_jobs, on_job=None):
+            eventos.append("pagina")
+            selecionadas = select_jobs(self._jobs)
+            eventos.append("detalhe")
+            for vaga in selecionadas:
+                if on_job:
+                    on_job(vaga)
+            return list(self._jobs)
+
+    fonte = FontePaginada(jobs=[job("1")])
+    run_all(conn, settings, [fonte])
+
+    assert eventos == ["pagina", "detalhe"]
+    assert conn.execute("SELECT COUNT(*) FROM jobs").fetchone()[0] == 1
+
+
 def test_vaga_detalhada_e_gravada_na_hora_mesmo_se_a_fonte_falha_depois(conn, settings):
     class FalhaNoSegundoDetalhe(FakeSource):
         def enrich(self, jobs, on_job=None):

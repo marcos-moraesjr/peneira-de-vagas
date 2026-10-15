@@ -1,4 +1,4 @@
-# Fases de Desenvolvimento — JobScanner
+# Fases de Desenvolvimento — Peneira de Vagas
 
 Ordem de construção do MVP descrito em [`MVP.md`](MVP.md), com a stack de
 [`TECH_STACK.md`](TECH_STACK.md). Cada fase termina com algo **utilizável** e
@@ -22,7 +22,7 @@ Extra pedido pelo usuário depois da Fase 4: **versionamento dos scanners** (`ba
 
 Extra pedido pelo usuário: **abas em paralelo** (`[navegador] abas_paralelas`, padrão `false`; uma aba por plataforma, todas ao mesmo tempo; ver `LESSONS.md`).
 
-Extra pedido pelo usuário (2026-10-15): **identidade visual Peneira v2** no front (tokens grafite/verde-sinal, fonte única do sistema, como o LinkedIn (no lugar da DM Sans e da DM Mono do design, a pedido), temas claro e escuro, ícone e favicon novos); ajuste puramente visual, sem lógica nova.
+Extra pedido pelo usuário (2026-10-15): **identidade visual Peneira de Vagas v2** no front (tokens grafite/verde-sinal, fonte única do sistema, como o LinkedIn (no lugar da DM Sans e da DM Mono do design, a pedido), temas claro e escuro, ícone e favicon novos); ajuste puramente visual, sem lógica nova.
 
 Desvios registrados: o `README` e a API usam a porta **8100** (a 8000 estava em uso pelo FinApp); `Python 3.14`
 no ambiente de desenvolvimento; Tailwind 4.1.11 no lugar da 4.0.0 (falha de build); `BackgroundTasks` não foi

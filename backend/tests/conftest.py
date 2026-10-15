@@ -23,7 +23,7 @@ def settings(tmp_path) -> Settings:
         }
     )
     # Linha de base fixa: os testes não dependem do que o usuário ajustou no config.toml.
-    busca = replace(base.busca, janela_horas=24)
+    busca = replace(base.busca, janela_dias=1)
     filtro = replace(base.filtro, min_score=3, trecho_max_chars=4000)
     api = replace(base.api, poll_interval_ms=2000)
     return base.__class__(**{**base.__dict__, "geral": geral, "busca": busca, "filtro": filtro, "api": api})

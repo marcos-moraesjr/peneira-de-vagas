@@ -57,11 +57,38 @@ Crie conforme a necessidade; sugestão inicial:
 
 ## Entradas
 
+### Indeed: descrição no painel, sem abrir a vaga individual (2026-10-15)
+- **Antes:** o scanner abria `/viewjob?jk=…` para cada vaga nova, para ler a descrição e o JSON-LD `datePosted`.
+- **Depois:** clica no título do card pelo `data-jk` e lê a descrição completa no painel `DESKTOP_EMBEDDED` da listagem. Se o painel não abrir, falha como mudança de seletor; não há fallback para a URL individual.
+- **Motivo:** a captura real da listagem confirmou `autoOpenTwoPaneViewjobResponse.sanitizedJobDescription`. A resposta do painel tem `datePublished: null`, então `publicada_em` deixa de ser coletada; a recência permanece sob `fromage` e deduplicação.
+- **Risco futuro:** o Indeed pode mudar o comportamento do título ou os seletores do painel; o teste cobre o clique por `data-jk`, e a falha explícita pede nova exploração em vez de navegar silenciosamente.
+
+### `ERR_HTTP_RESPONSE_CODE_FAILURE` na paginação do LinkedIn (2026-10-15)
+- **Contexto**: depois da primeira página, a abertura de `start=25` falhou com `net::ERR_HTTP_RESPONSE_CODE_FAILURE` e a fonte encerrou após uma única tentativa.
+- **Causa raiz**: `ERR_HTTP_RESPONSE_CODE_FAILURE` é a forma como o Chromium informa que a navegação recebeu uma resposta HTTP malsucedida; o código anterior descartava o status (por exemplo, 403, 429 ou 5xx), que é a causa acionável.
+- **Impacto**: o detalhe mostrava apenas um erro genérico e levava à tentativa equivocada de tratar qualquer resposta HTTP como transitória.
+- **Correção**: a abertura captura o status da resposta principal e o inclui no detalhe da falha. A fonte não repete `ERR_HTTP_RESPONSE_CODE_FAILURE`, pois 4xx/429 podem ser login, bloqueio ou limitação de taxa; só `ERR_ABORTED` mantém as tentativas configuradas.
+- **Risco futuro**: se o Chromium não emitir a resposta antes de falhar, o status continuará ausente; nesse caso o detalhe preserva o erro original e a execução real do usuário é necessária para diagnosticar a infraestrutura da plataforma.
+
+### `ERR_ABORTED` sem contexto suficiente no Indeed (2026-10-15)
+- **Contexto**: a abertura de uma vaga do Indeed falhou em `page.goto` com `net::ERR_ABORTED`; a tela mostrava apenas uma mensagem técnica curta.
+- **Causa raiz**: o Playwright interrompeu a navegação durante a espera por `domcontentloaded`; o erro original não trazia a etapa nem o limite de tentativas no detalhe apresentado ao usuário.
+- **Impacto**: ficou difícil distinguir falha na busca de falha no detalhe e diagnosticar se o limite de tentativas havia sido atingido.
+- **Correção**: o detalhe agora informa fonte, etapa, URL, tentativas realizadas/limite e erro original; o botão **Ver detalhes** continua exibindo a mensagem completa sem expor dados da sessão.
+- **Risco futuro**: `ERR_ABORTED` pode continuar sendo causado por redirecionamento, login ou bloqueio externo; verificar o detalhe e o log antes de alterar seletores.
+
+### Detalhes só depois de toda a paginação (2026-10-15)
+- **Contexto**: execução real do LinkedIn e do Indeed; o navegador passava vários minutos rolando resultados sem abrir uma vaga.
+- **Causa raiz**: `BrowserSource.search` precisava concluir todas as palavras-chave e páginas antes de o serviço chamar `enrich`.
+- **Impacto**: a descrição completa só começava a ser coletada depois de toda a rolagem; execuções longas pareciam travadas e podiam ser interrompidas antes do detalhe.
+- **Correção**: scanners LinkedIn `1.8.2` e Indeed `1.9.2` intercalam triagem, detalhe e paginação, mantendo uma aba por fonte e sem abrir detalhes rejeitados.
+- **Risco futuro**: se o fluxo voltar a separar `search` e `enrich`, o sintoma reaparece; manter teste que verifica a ordem página → detalhe → próxima página.
+
 ### Remoção: copiar perfil do Chrome pessoal (2026-10-14)
 - **Como funcionava**: botão "Copiar perfil" na aba Vagas (`GET /api/browser/profiles`, `POST /api/browser/profile/copy`).
   `chrome_profile.py` lia o `Local State` do Chrome pessoal, copiava a pasta do perfil escolhido (ignorando caches) para
   `chrome-profile.tmp`, trocava pelo `chrome-profile/` no fim (o antigo ia para `backups/`) e gravava o marcador
-  `jobscanner-profile.json`; o Chrome dedicado abria com `--profile-directory=<pasta copiada>`. A tela mostrava um alerta
+  `peneira-de-vagas-profile.json`; o Chrome dedicado abria com `--profile-directory=<pasta copiada>`. A tela mostrava um alerta
   enquanto nenhum perfil fora copiado.
 - **Parâmetros removidos**: `[navegador] chrome_user_data_dirs` e `copy_ignore`; módulo `services/chrome_profile.py`;
   schemas `ProfileOut`, `ProfilesOut`, `CopyProfileIn`, `CopyProfileOut`; componente `ProfileCopy`, hooks `useProfiles`
@@ -144,3 +171,8 @@ Crie conforme a necessidade; sugestão inicial:
 - **Antes:** as vagas eram globais: a mesma vaga (`fonte`, `id_da_vaga`) existia uma vez, a lista misturava as buscas de todos os conjuntos e a deduplicação ignorava qual conjunto a achou.
 - **Depois:** cada vaga fica atrelada ao conjunto que estava **ativo quando a execução começou** (`jobs.conjunto_id`); a mesma vaga achada por dois conjuntos vira uma linha em cada, com pontuação e `visto` próprios, e a deduplicação (vaga já conhecida, sem reabrir o detalhe) vale por conjunto. A lista, "Marcar todas como vistas" e "Excluir todas as vagas" valem para o conjunto ativo ou o escolhido no seletor da página Vagas (`conjunto_id`). Excluir um conjunto exclui as vagas dele junto. Migração 9: as vagas já existentes foram atreladas ao primeiro conjunto (a informação de origem não existia) e o `.db` é copiado para `backups/` antes.
 - **Motivo**: pedido do usuário. **Consequência**: trocar o conjunto ativo troca a lista de vagas, e uma vaga em dois conjuntos aparece (e é lida) duas vezes.
+
+### Remoção: botão Copiar por linha nos conjuntos (2026-10-15)
+- **Como funcionava**: cada linha da tabela tinha um botão **Copiar**, que abria a edição contextual para informar o nome da cópia.
+- **Depois**: o botão foi removido das linhas. O formulário **Novo conjunto** ganhou a lista **Copiar palavras de**, com a opção **Começar vazio** e os conjuntos existentes; ao escolher uma origem, o nome digitado cria a cópia com todas as palavras.
+- **Motivo**: pedido do usuário. A tabela fica focada em selecionar, editar e excluir, enquanto criação e cópia ficam reunidas no mesmo fluxo.

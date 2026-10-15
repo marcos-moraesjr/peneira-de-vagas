@@ -8,11 +8,11 @@ import { BuscaPage } from "./features/vagas/BuscaPage";
 import { VagasPage } from "./features/vagas/VagasPage";
 
 const TABS = [
-  { id: "busca", label: "Busca" },
+  { id: "tutorial", label: "Tutorial" },
+  { id: "busca", label: "Parâmetros de busca" },
   { id: "vagas", label: "Vagas" },
   { id: "execucoes", label: "Execuções" },
   { id: "config", label: "Configurações" },
-  { id: "tutorial", label: "Tutorial" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -34,7 +34,7 @@ function Logo() {
   return (
     <h1 className="flex items-center gap-2 text-[17px] font-semibold tracking-[-0.03em]">
       <img src="/peneira-icon.svg" alt="" className="h-[22px] w-[22px]" />
-      <span>peneira<span className="text-sinal">.</span></span>
+      <span>Peneira de Vagas</span>
     </h1>
   );
 }

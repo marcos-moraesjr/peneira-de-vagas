@@ -16,12 +16,23 @@ describe("ConfigPage", () => {
     expect(screen.getByLabelText("Pausa máxima (s)")).toHaveValue(6);
   });
 
+  it("nomeia os grupos conforme o propósito e explica ritmo e interface", async () => {
+    setup();
+    for (const nome of ["Rankeamento de vagas", "Limites de busca", "Ritmo de buscas", "Interface"]) {
+      expect(await screen.findByRole("region", { name: nome })).toBeInTheDocument();
+    }
+    expect(screen.getByText("Menor espera entre uma ação e outra no navegador.")).toBeInTheDocument();
+    expect(screen.getByText("Quantidade de vagas exibidas por página na lista.")).toBeInTheDocument();
+  });
+
   it("não oferece localidade nem modalidade (o filtro fica só no config.toml)", async () => {
     setup();
     await screen.findByLabelText("Pontuação mínima para aparecer");
     expect(screen.queryByLabelText("Localidades")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Adicionar localidade" })).not.toBeInTheDocument();
     for (const nome of ["Remoto", "Híbrido", "Presencial"]) expect(screen.queryByRole("checkbox", { name: nome })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Janela de recência (horas)")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Janela de recência (dias)")).not.toBeInTheDocument();
   });
 
   it("pesos e pontuação mínima são controles deslizantes com o valor à vista", async () => {
@@ -33,25 +44,22 @@ describe("ConfigPage", () => {
     expect(screen.getByTestId("valor-filtro.peso_titulo")).toHaveTextContent("3");
   });
 
-  it("limite de palavras-chave e de páginas por palavra-chave são controles deslizantes", async () => {
+  it("deixa apenas o limite de páginas por palavra-chave ajustável", async () => {
     const user = userEvent.setup();
     const { calls } = setup();
-    const termos = await screen.findByRole("slider", { name: "Palavras-chave por busca (máximo)" });
+    await screen.findByRole("slider", { name: "Páginas abertas por palavra-chave (em cada fonte)" });
+    expect(screen.queryByLabelText("Tamanho máximo da palavra-chave")).not.toBeInTheDocument();
+    expect(screen.queryByRole("slider", { name: "Palavras-chave por busca (máximo)" })).not.toBeInTheDocument();
     const paginas = screen.getByRole("slider", { name: "Páginas abertas por palavra-chave (em cada fonte)" });
-    expect(termos).toHaveValue("6");
     expect(paginas).toHaveValue("3");
-    expect(termos).toHaveAttribute("min", "1");
     expect(paginas).toHaveAttribute("min", "1");
-    fireEvent.change(termos, { target: { value: "4" } });
     fireEvent.change(paginas, { target: { value: "5" } });
-    expect(screen.getByTestId("valor-busca.max_termos_busca")).toHaveTextContent("4");
     expect(screen.getByTestId("valor-limites.max_paginas_por_termo")).toHaveTextContent("5");
     await user.click(screen.getByRole("button", { name: "Salvar" }));
     await screen.findByText(/configuração salva/i);
     const put = calls.find((c) => c.method === "PUT");
     expect(put?.body).toEqual({
       ...CONFIG,
-      busca: { ...CONFIG.busca, max_termos_busca: 4 },
       limites: { max_paginas_por_termo: 5 },
     });
   });

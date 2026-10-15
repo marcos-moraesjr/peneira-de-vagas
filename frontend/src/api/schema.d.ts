@@ -380,12 +380,8 @@ export interface components {
             localidades: string[];
             /** Modalidade */
             modalidade: string[];
-            /** Janela Horas */
-            janela_horas: number;
-            /** Keyword Max Length */
-            keyword_max_length: number;
-            /** Max Termos Busca */
-            max_termos_busca: number;
+            /** Janela Dias */
+            janela_dias: number;
         };
         /** ConfigFiltro */
         ConfigFiltro: {
@@ -552,6 +548,12 @@ export interface components {
         RunIn: {
             /** Fontes */
             fontes?: string[] | null;
+            /** Localidade */
+            localidade?: string | null;
+            /** Modalidade */
+            modalidade?: string | null;
+            /** Janela Dias */
+            janela_dias?: number | null;
         };
         /** RunOut */
         RunOut: {

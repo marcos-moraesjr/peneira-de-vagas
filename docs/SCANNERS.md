@@ -97,7 +97,7 @@ Faça, seguindo TDD (teste vermelho antes do código):
 | google | removido | 2026-10-15 | Fonte removida a pedido do usuário: `sources/google.py`, `[google]` da config, amostras e testes apagados; sai de `scanners.toml`, do registro de fontes e da tela. Execuções antigas com `fonte = google` seguem no banco |
 | linkedin | 1.5.0 | 2026-10-15 | Data de publicação não vinha na prática: o seletor foi observado no painel lateral da busca, mas a fonte abre `/jobs/view/<id>/`. Agora cada seletor é tentado em ordem e, sem data em nenhum, procura no texto da página uma linha que seja inteira a data ("Há 3 dias", "Anunciada novamente há 8 horas"; `find_published_line`, sem depender de classe CSS). Sem mudança nos seletores. **Não verificado no DOM real** (execução é do usuário): se a página de detalhe não tiver a data em linha própria, a vaga segue sem data e o log avisa |
 | indeed | 1.5.0 | 2026-10-15 | Idem LinkedIn para a busca da linha da data no texto da página; a leitura do `body` passa a aceitar também "Publicado"/"Postado" (masculino) além de "Publicada"/"Posted". "Ativa há…" e "há mais de 30 dias" seguem ignorados. Execução com vagas sem data passa a gravar no log "N de M vagas … sem data de publicação". **Não verificado no DOM real** |
-| indeed | 1.7.0 | 2026-10-15 | `publicada_em` passa a vir do JSON-LD do detalhe (`<script type="application/ld+json">`, `JobPosting.datePosted`, ISO exato), **observado em HTML real salvo pelo usuário** (`tests/samples/indeed_detail_jsonld.json`). O texto "Publicada há…" não existe na página (só "Recém publicada" em JSON interno); o texto do `body` fica como reserva. Causa de 33 de 33 vagas sem data nas versões 1.4.0–1.5.0. Não verificado: `inner_text` de `<script>` no Playwright (pela especificação devolve o `textContent`) |
+| indeed | 1.7.0 | 2026-10-15 | `publicada_em` passou a vir do JSON-LD do detalhe (`JobPosting.datePosted`, ISO exato), observado em HTML real salvo pelo usuário. O texto "Publicada há…" não existe na página (só "Recém publicada" em JSON interno); o texto do `body` ficou como reserva. A amostra e essa leitura foram removidas no scanner 1.10.0, que lê apenas o painel da listagem. |
 | linkedin | 1.7.0 | 2026-10-15 | Limite de leitura por palavra-chave, não mais por fonte: cada termo abre até `[limites] max_paginas_por_termo` páginas de resultados (`start` de 25 em 25; a paginação para antes se a página vier vazia ou só repetir vagas do próprio termo). Sem mudança nos seletores nem na URL |
 | indeed | 1.8.0 | 2026-10-15 | Idem LinkedIn: páginas por palavra-chave (`start` de 10 em 10). Sem mudança nos seletores nem na URL |
 | gupy | 1.4.0 | 2026-10-15 | Idem LinkedIn: páginas da API por palavra-chave (`offset` de `page_size` em `page_size`). Sem mudança na API |
@@ -106,6 +106,20 @@ Faça, seguindo TDD (teste vermelho antes do código):
 | gupy | 1.5.0 | 2026-10-15 | `Job` ganha `palavra_chave`: a primeira palavra-chave cuja busca devolveu a vaga (vaga repetida em outra busca fica com a primeira). Sem mudança nos seletores nem no que a fonte lê |
 | linkedin | 1.8.1 | 2026-10-15 | Após a verificação manual, se a reabertura da página falha (`goto` abortado pelo redirecionamento do site), tenta mais uma vez após a pausa, em vez de encerrar a fonte com `http_erro`. Sem mudança nos seletores nem no que a fonte lê |
 | indeed | 1.9.1 | 2026-10-15 | Idem LinkedIn: uma nova tentativa de reabrir a página após a verificação manual |
+| linkedin | 1.8.2 | 2026-10-15 | Busca e detalhe passam a ocorrer por página: depois de rolar e triar uma página, abre imediatamente os detalhes elegíveis antes de continuar a paginação; mantém uma aba por fonte |
+| indeed | 1.9.2 | 2026-10-15 | Idem LinkedIn: abre os detalhes elegíveis de cada página antes de continuar a paginação |
+| linkedin | 1.8.3 | 2026-10-15 | A localidade canônica da execução é traduzida para o parâmetro `location` da busca |
+| indeed | 1.9.3 | 2026-10-15 | A localidade canônica da execução é traduzida para o parâmetro `l` da busca |
+| linkedin | 1.8.5 | 2026-10-15 | `goto` abortado (`ERR_ABORTED`) é repetido até `[navegador] max_tentativas_abertura`; depois a fonte falha como `http_erro` |
+| indeed | 1.9.4 | 2026-10-15 | Idem LinkedIn: `goto` abortado (`ERR_ABORTED`) é repetido até `[navegador] max_tentativas_abertura`; depois a fonte falha como `http_erro` |
+| gupy | 1.5.1 | 2026-10-15 | A camada de consulta explicita que a Gupy não suporta localidade na API observada; o filtro local permanece como fallback |
+| linkedin | 1.8.4 | 2026-10-15 | A modalidade canônica é traduzida para `f_WT` (`1` remoto, `2` presencial, `3` híbrido) |
+| gupy | 1.5.2 | 2026-10-15 | A modalidade canônica é traduzida para `workplaceType` (`remote`, `on-site` ou `hybrid`); localidade segue como filtro local |
+| linkedin | 1.8.10 | 2026-10-15 | `goto` com `ERR_HTTP_RESPONSE_CODE_FAILURE` (observado ao abrir a segunda página) registra o status HTTP recebido e encerra a fonte, sem repetir uma possível resposta 4xx/429; `ERR_ABORTED` mantém as tentativas configuradas |
+| indeed | 1.9.6 | 2026-10-15 | Idem LinkedIn: `ERR_HTTP_RESPONSE_CODE_FAILURE` registra o status HTTP e não é repetido |
+| indeed | 1.10.0 | 2026-10-15 | A descrição completa passa a ser lida no painel `DESKTOP_EMBEDDED`: clica em `a.jcs-JobTitle[data-jk]` da listagem e extrai `#jobDescriptionText`/`.jobsearch-JobComponent-description`, sem abrir `/viewjob`. A data deixa de ser coletada, pois `datePublished` do painel capturado é nulo; se o painel não abrir, a fonte falha como seletor alterado, sem fallback de URL. |
+| indeed | 1.10.1 | 2026-10-15 | Corrige a abertura do painel: usa `a[data-jk]`, o identificador estável da vaga, em vez da classe visual `jcs-JobTitle` removida pelo site. A abertura do painel é repetida até `[navegador] max_tentativas_painel` antes de registrar `seletor_nao_encontrado`. |
+| gupy | 1.6.0 | 2026-10-15 | Aplica localmente `[busca] janela_dias` a `publishedDate` antes da deduplicação; vaga anterior ao corte não é devolvida. A API não oferece parâmetro de recência observado; vaga sem `publishedDate` permanece para não gerar falso negativo. |
 
 ## Refazer só a documentação das plataformas
 
@@ -122,3 +136,9 @@ Se houver divergência, ele pergunta se deve atualizar os scanners; aí vale o p
 
 As regras de segurança vão junto na instrução: só o Chrome dedicado, sem abrir vagas para candidatura, sem
 aceitar cookies nem digitar credenciais, sem resolver CAPTCHA nem contornar bloqueios.
+
+O scanner LinkedIn 1.8.9 compara o atributo `data-occludable-job-id` de cada card diretamente, sem interpolar o ID em um seletor CSS. Isso evita erro de sintaxe quando o ID e serializado com aspas.
+
+O LinkedIn compartilha a leitura progressiva com o Indeed. Cards que jÃ¡ chegam completos no DOM nÃ£o sÃ£o rolados novamente; somente cards lazy incompletos recebem a rolagem e a pausa configurada.
+
+O scanner LinkedIn 1.8.8 lÃª a descriÃ§Ã£o completa de `data-testid="expandable-text-box"` pelo `textContent` do painel lateral, sem acionar “mais” e sem navegar para a URL individual da vaga. O tÃ­tulo do card ainda Ã© acionado para carregar o painel; se ele nÃ£o abrir, a URL individual continua como fallback.

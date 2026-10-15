@@ -15,7 +15,11 @@ EDITABLE = ("busca", "filtro", "limites", "ritmo", "navegador", "api")
 @router.get("/config", response_model=ConfigOut)
 def get_config(settings: Settings = Depends(get_settings)) -> dict:
     """Parâmetros de comportamento em vigor; caminhos, cdp_url e URLs das fontes ficam de fora."""
-    return {name: asdict(getattr(settings, name)) for name in EDITABLE}
+    values = {name: asdict(getattr(settings, name)) for name in EDITABLE}
+    # Proteção operacional fixa: o teto de consultas não é ajustável pela API/tela.
+    values["busca"].pop("max_termos_busca")
+    values["busca"].pop("keyword_max_length")
+    return values
 
 
 @router.put("/config", response_model=ConfigOut)

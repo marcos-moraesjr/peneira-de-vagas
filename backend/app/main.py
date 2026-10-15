@@ -34,7 +34,7 @@ def _setup_logging(settings: Settings) -> None:
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
         handlers=[
-            logging.FileHandler(settings.geral.log_dir / "jobscanner.log", encoding="utf-8"),
+            logging.FileHandler(settings.geral.log_dir / "peneira-de-vagas.log", encoding="utf-8"),
             logging.StreamHandler(),
         ],
     )
@@ -63,6 +63,7 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        db.migrate_legacy_database(settings.geral.db_path)
         conn = db.connect(settings.geral.db_path)
         try:
             db.init_db(conn, settings, app.state.now())
@@ -71,7 +72,7 @@ def create_app(
             conn.close()
         yield
 
-    app = FastAPI(title="JobScanner", lifespan=lifespan)
+    app = FastAPI(title="Peneira de Vagas", lifespan=lifespan)
     app.state.settings = settings
     app.state.sources_factory = sources_factory or (lambda: build_sources(app.state.settings, app.state.gate))
     app.state.spawn = spawn or spawn_thread

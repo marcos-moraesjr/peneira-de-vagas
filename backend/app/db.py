@@ -170,6 +170,16 @@ MIGRATIONS = {
 SCHEMA_VERSION = max(MIGRATIONS)
 
 
+def migrate_legacy_database(path: Path) -> bool:
+    """Copia o banco do nome anterior apenas na primeira abertura com a nova marca."""
+    path = Path(path)
+    legacy_path = path.with_name("jobscanner.db")
+    if path.name != "peneira-de-vagas.db" or path.exists() or not legacy_path.exists():
+        return False
+    shutil.copy2(legacy_path, path)
+    return True
+
+
 def connect(path: Path) -> sqlite3.Connection:
     """Conexão própria por requisição; linhas acessíveis por nome. Usada por uma thread de cada vez (dependência e rota podem cair em threads diferentes do pool)."""
     Path(path).parent.mkdir(parents=True, exist_ok=True)
@@ -192,7 +202,7 @@ def _current_version(conn: sqlite3.Connection) -> int | None:
 def _backup_database(settings: Settings) -> None:
     settings.geral.backup_dir.mkdir(parents=True, exist_ok=True)
     count = len(list(settings.geral.backup_dir.glob("*.db")))
-    shutil.copy2(settings.geral.db_path, settings.geral.backup_dir / f"jobscanner-pre-migracao-{count + 1}.db")
+    shutil.copy2(settings.geral.db_path, settings.geral.backup_dir / f"peneira-de-vagas-pre-migracao-{count + 1}.db")
 
 
 def _seed_keywords(conn: sqlite3.Connection, settings: Settings, now: str) -> None:

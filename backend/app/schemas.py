@@ -9,6 +9,9 @@ class HealthOut(BaseModel):
 
 class RunIn(BaseModel):
     fontes: list[str] | None = None  # None = todas as fontes
+    localidade: str | None = None
+    modalidade: str | None = None
+    janela_dias: int | None = None
 
 
 class RunStarted(BaseModel):
@@ -127,9 +130,7 @@ class KeywordOut(BaseModel):
 class ConfigBusca(BaseModel):
     localidades: list[str]
     modalidade: list[str]
-    janela_horas: int
-    keyword_max_length: int
-    max_termos_busca: int
+    janela_dias: int
 
 
 class ConfigFiltro(BaseModel):

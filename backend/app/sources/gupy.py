@@ -6,10 +6,12 @@ careerPageName, jobUrl. Se um deles sumir, é mudança de layout.
 import re
 from collections.abc import Callable
 from dataclasses import replace
+from datetime import datetime, timedelta, timezone
 
 import httpx
 
 from ..config import Settings
+from ..services.search_query import platform_params
 from .errors import SourceLayoutChanged, SourceUnavailable
 from .types import Job
 
@@ -28,9 +30,12 @@ def _canonical_link(url: str) -> str:
 class GupySource:
     name = "gupy"
 
-    def __init__(self, settings: Settings, client: httpx.Client | None = None):
+    def __init__(
+        self, settings: Settings, client: httpx.Client | None = None, clock: Callable[[], datetime] | None = None
+    ):
         self._settings = settings
         self._client = client
+        self._clock = clock or (lambda: datetime.now(timezone.utc))
 
     def search(self, termos: list[str]) -> list[Job]:
         client = self._client or httpx.Client(timeout=self._settings.gupy.timeout_s)
@@ -48,12 +53,30 @@ class GupySource:
         return jobs
 
     def _collect(self, client: httpx.Client, termos: list[str]) -> list[Job]:
+        cutoff = self._clock() - timedelta(days=self._settings.busca.janela_dias)
         found: dict[str, Job] = {}
         for termo in termos:
             for job in self._pages(client, termo):
-                if job.id not in found:
+                if self._inside_recency_window(job, cutoff) and job.id not in found:
                     found[job.id] = replace(job, palavra_chave=termo)
         return list(found.values())
+
+    def _inside_recency_window(self, job: Job, cutoff: datetime) -> bool:
+        """Aceita vagas sem data, pois a API pode omitir o campo, e compara as datadas em UTC.
+
+        Formato inválido é mudança explícita no contrato da API, nunca uma vaga silenciosamente aceita.
+        """
+        if not job.publicada_em:
+            return True
+        try:
+            published = datetime.fromisoformat(job.publicada_em.replace("Z", "+00:00"))
+        except (AttributeError, ValueError) as error:
+            raise SourceLayoutChanged(f"publishedDate inválido na vaga {job.id}: {job.publicada_em!r}") from error
+        if published.tzinfo is None:
+            published = published.replace(tzinfo=timezone.utc)
+        if cutoff.tzinfo is None:
+            cutoff = cutoff.replace(tzinfo=timezone.utc)
+        return published >= cutoff
 
     def _pages(self, client: httpx.Client, termo: str):
         """Pede até `max_paginas_por_termo` páginas da API; para antes se acabarem as vagas do termo."""
@@ -70,6 +93,7 @@ class GupySource:
 
     def _request(self, client: httpx.Client, termo: str, offset: int) -> dict:
         params = {"jobName": termo, "limit": self._settings.gupy.page_size, "offset": offset}
+        params.update(platform_params(self.name, self._settings))
         try:
             response = client.get(self._settings.gupy.base_url, params=params)
         except httpx.HTTPError as error:

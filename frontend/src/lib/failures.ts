@@ -42,13 +42,13 @@ const TEXTS: Record<string, { message: string; action: string }> = {
   },
   erro_interno: {
     message: "erro inesperado ao ler a fonte.",
-    action: "Veja o detalhe e o log em logs/jobscanner.log.",
+    action: "Veja o detalhe e o log em logs/peneira-de-vagas.log.",
   },
 };
 
 /** Motivo padronizado da API → frase simples + ação para o usuário. */
 export function describeFailure(_fonte: string, motivo: string): { message: string; action: string } {
-  return TEXTS[motivo] ?? { message: `falhou (${motivo}).`, action: "Veja o log em logs/jobscanner.log." };
+  return TEXTS[motivo] ?? { message: `falhou (${motivo}).`, action: "Veja o log em logs/peneira-de-vagas.log." };
 }
 
 /** Todos os motivos padronizados de falha de fonte, na ordem em que o tutorial os explica. */

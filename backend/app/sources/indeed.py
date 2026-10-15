@@ -2,21 +2,16 @@
 Cloudflare e verificações são detectados e tratados como falha da fonte; nunca contornados.
 
 O card não traz data de publicação; o filtro de recência é só o `fromage` da URL (efeito não confirmado)
-mais a deduplicação. O trecho é o conjunto de itens <li> do card (tipo de vaga, salário, resumo).
+mais a deduplicação. A descrição completa é lida no painel da listagem, sem abrir `/viewjob`.
 """
-import json
-import math
-import re
-from datetime import datetime
 from urllib.parse import urlencode, urlsplit
 
 from ..config import Settings
 from ..services.filters import normalize
 from ..services.localizacao import detect_modalidade
-from .relative_date import parse_relative_date
+from ..services.search_query import platform_params
 from .types import Job
 
-HOURS_PER_DAY = 24
 CARD_SELECTOR = "div.job_seen_beacon"
 EMPTY_MARKERS = ("nao encontrou nenhum resultado", "did not match any jobs", "nenhuma vaga")
 CLOUDFLARE_TITLES = ("just a moment", "um momento", "attention required")
@@ -27,7 +22,9 @@ EXTRACT_JS = """() => {
   const clean = (t) => (t || '').replace(/\\s+/g, ' ').trim();
   const text = (root, selector) => { const e = root.querySelector(selector); return e ? clean(e.innerText || e.textContent) : ''; };
   return [...document.querySelectorAll('div.job_seen_beacon')].map((card) => {
-    const link = card.querySelector('a.jcs-JobTitle[data-jk]');
+  // `jcs-JobTitle` é uma classe de apresentação e mudou no site. `data-jk`
+  // é o identificador estável usado também para abrir o painel.
+  const link = card.querySelector('a[data-jk]');
     const titled = link && link.querySelector('span[title]');
     return {
       id: link ? link.getAttribute('data-jk') || '' : '',
@@ -39,16 +36,24 @@ EXTRACT_JS = """() => {
   });
 }"""
 
+OPEN_DETAIL_JS = """() => {
+  const jobId = __JOB_ID__;
+  const title = [...document.querySelectorAll('a[data-jk]')]
+    .find((link) => link.getAttribute('data-jk') === jobId);
+  if (!title) return false;
+  title.click();
+  return true;
+}"""
+
 
 class IndeedSite:
     name = "indeed"
     extract_js = EXTRACT_JS
     card_selector = CARD_SELECTOR
     lazy_cards = False
+    open_detail_js = OPEN_DETAIL_JS
+    detail_navigation_fallback = False
     detail_selectors = ["#jobDescriptionText", ".jobsearch-JobComponent-description"]
-    # Observado em 15/10/2026: o detalhe traz a data exata em `datePosted` do JSON-LD (JobPosting); não há texto
-    # "Publicada há…" visível ("Recém publicada" só vem em JSON interno). O corpo da página fica como reserva.
-    published_selectors = ['script[type="application/ld+json"]', "body"]
 
     def __init__(self, settings: Settings):
         self._settings = settings
@@ -57,12 +62,13 @@ class IndeedSite:
         self._origin = f"{parts.scheme}://{parts.netloc}"
 
     def search_url(self, termo: str, start: int) -> str:
-        """Só termo, janela e página: localidade e modalidade não vão na busca (o filtro local decide)."""
+        """Monta a URL com a localidade adaptada; modalidade permanece no filtro local."""
         params = {
             "q": termo,
-            "fromage": max(1, math.ceil(self._settings.busca.janela_horas / HOURS_PER_DAY)),
+            "fromage": self._settings.busca.janela_dias,
             "start": start,
         }
+        params.update(platform_params(self.name, self._settings))
         return f"{self._settings.indeed.base_url}?{urlencode(params)}"
 
     def classify(self, url: str, title: str, text: str) -> str | None:
@@ -74,24 +80,6 @@ class IndeedSite:
         if any(marker in text_n for marker in CAPTCHA_TEXTS):
             return "captcha"
         return None
-
-    def parse_published(self, text: str, now: datetime) -> str | None:
-        """JSON-LD do detalhe (`datePosted`) ou, na reserva, o texto de "Publicada…"/"Posted…" (o "Ativa há 2 dias" de vaga reativada não é publicação)."""
-        if text.lstrip().startswith("{"):
-            return self._date_posted(text)
-        normalized = normalize(text)
-        if re.search(r"publicad[oa] hoje|postad[oa] hoje|just posted|posted today", normalized):
-            return now.strftime("%Y-%m-%dT%H:%M:%SZ")
-        found = re.search(r"(publicad[oa]|postad[oa]|posted).{0,40}", normalized)
-        return parse_relative_date(found.group(0), now) if found else None
-
-    @staticmethod
-    def _date_posted(json_ld: str) -> str | None:
-        try:
-            posted = json.loads(json_ld).get("datePosted")
-        except (ValueError, AttributeError):
-            return None
-        return posted if isinstance(posted, str) and re.match(r"\d{4}-\d{2}-\d{2}T", posted) else None
 
     def is_empty_page(self, text: str) -> bool:
         normalized = normalize(text)

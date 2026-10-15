@@ -4,6 +4,15 @@ import { CONFIG, makeRun, makeScanner, makeSource, mockApi, renderWithClient } f
 import { ExecucoesPage } from "./ExecucoesPage";
 
 describe("ExecucoesPage", () => {
+  it("mostra o histórico descrito após a configuração em vigor", async () => {
+    mockApi({ "GET /api/config": CONFIG, "GET /api/runs": [makeRun(1, "concluida", [makeSource("gupy")])] });
+    renderWithClient(<ExecucoesPage />);
+    const config = await screen.findByRole("heading", { name: "Configuração em vigor" });
+    const history = screen.getByRole("heading", { name: "Histórico de execuções" });
+    expect(config.compareDocumentPosition(history) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText("Consulte as buscas já realizadas e abra uma execução para ver o resultado de cada fonte.")).toBeInTheDocument();
+  });
+
   it("lista execuções e, ao clicar, abre o card com o resultado de cada fonte", async () => {
     const user = userEvent.setup();
     mockApi({

@@ -75,13 +75,8 @@ def _pre_approve(jobs: list[Job], flt: Filter, settings: Settings) -> list[Job]:
 
 
 def _run_source(conn, settings, source: Source, termos, flt, conjunto_id: int, run_id: int, now: str) -> None:
-    jobs = source.search(termos)
-    if not jobs:
-        raise SourceEmpty("A fonte não devolveu nenhuma vaga")
     local_filter = getattr(source, "local_filter", True)
-    candidates = _pre_approve(jobs, flt, settings) if local_filter else jobs
-    unknown = db.filter_unknown(conn, candidates, conjunto_id)
-    aprovadas = len(candidates) - len(unknown)  # já gravadas em execuções anteriores: passaram na avaliação completa
+    aprovadas = 0
     novas = 0
 
     def save(job: Job) -> None:
@@ -91,7 +86,27 @@ def _run_source(conn, settings, source: Source, termos, flt, conjunto_id: int, r
         aprovadas += len(ok)
         novas += db.insert_new_jobs(conn, ok, pontos, run_id, now, conjunto_id)
 
-    source.enrich(unknown, on_job=save)
+    def select_page(page: list[Job]) -> list[Job]:
+        """Triagem e deduplicação da página antes de abrir os detalhes."""
+        nonlocal aprovadas
+        candidates = _pre_approve(page, flt, settings) if local_filter else page
+        unknown = db.filter_unknown(conn, candidates, conjunto_id)
+        aprovadas += len(candidates) - len(unknown)
+        return unknown
+
+    search_and_enrich = getattr(source, "search_and_enrich", None)
+    if callable(search_and_enrich):
+        jobs = search_and_enrich(termos, select_page, on_job=save)
+    else:
+        jobs = source.search(termos)
+        if not jobs:
+            raise SourceEmpty("A fonte não devolveu nenhuma vaga")
+        candidates = _pre_approve(jobs, flt, settings) if local_filter else jobs
+        unknown = db.filter_unknown(conn, candidates, conjunto_id)
+        aprovadas = len(candidates) - len(unknown)
+        source.enrich(unknown, on_job=save)
+    if not jobs:
+        raise SourceEmpty("A fonte não devolveu nenhuma vaga")
     _update_source(conn, run_id, source.name, status="ok", lidas=len(jobs), aprovadas=aprovadas, novas=novas)
 
 

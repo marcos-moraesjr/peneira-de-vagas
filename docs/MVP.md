@@ -1,4 +1,4 @@
-# MVP — JobScanner
+# MVP — Peneira de Vagas
 
 Documento de escopo da primeira versão. Stack em [`TECH_STACK.md`](TECH_STACK.md);
 ordem de construção em [`FASES.md`](FASES.md); telas em [`DESIGN_BRIEF.md`](DESIGN_BRIEF.md).

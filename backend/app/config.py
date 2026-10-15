@@ -30,7 +30,7 @@ class Padrao:
 class Busca:
     keyword_max_length: int
     max_termos_busca: int
-    janela_horas: int
+    janela_dias: int
     localidades: list[str]
     modalidade: list[str]
 
@@ -65,6 +65,8 @@ class Navegador:
     chrome_paths: list[str]
     abas_paralelas: bool
     espera_verificacao_s: int
+    max_tentativas_abertura: int
+    max_tentativas_painel: int
 
 
 @dataclass(frozen=True)
@@ -165,12 +167,14 @@ def validate(settings: Settings) -> None:
     positives = {
         "keyword_max_length": settings.busca.keyword_max_length,
         "max_termos_busca": settings.busca.max_termos_busca,
-        "janela_horas": settings.busca.janela_horas,
+        "janela_dias": settings.busca.janela_dias,
         "trecho_max_chars": settings.filtro.trecho_max_chars,
         "poll_interval_ms": settings.api.poll_interval_ms,
         "max_paginas_por_termo": settings.limites.max_paginas_por_termo,
         "jobs_page_size": settings.api.jobs_page_size,
         "gupy.page_size": settings.gupy.page_size,
+        "max_tentativas_abertura": settings.navegador.max_tentativas_abertura,
+        "max_tentativas_painel": settings.navegador.max_tentativas_painel,
     }
     for name, value in positives.items():
         if value <= 0:

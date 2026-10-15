@@ -18,7 +18,7 @@ def test_config_padrao_limita_a_6_termos_e_3_paginas_por_termo():
 def test_config_resolve_caminhos_relativos_a_partir_da_raiz():
     settings = load_settings(CONFIG_PATH)
     assert settings.geral.db_path.is_absolute()
-    assert settings.geral.db_path.name == "jobscanner.db"
+    assert settings.geral.db_path.name == "peneira-de-vagas.db"
 
 
 def test_config_com_chave_ausente_informa_secao_e_chave(tmp_path):
@@ -86,7 +86,7 @@ def test_pausa_de_rolagem_valida_minimo_e_maximo():
 @pytest.mark.parametrize(
     ("secao", "chave", "valor"),
     [
-        ("busca", "janela_horas", 0),
+        ("busca", "janela_dias", 0),
         ("busca", "max_termos_busca", 0),
         ("limites", "max_paginas_por_termo", 0),
         ("api", "poll_interval_ms", 0),

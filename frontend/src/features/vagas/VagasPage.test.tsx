@@ -154,19 +154,52 @@ describe("VagasPage", () => {
     });
   });
 
+  it("envia a modalidade escolhida na barra de busca", async () => {
+    const user = userEvent.setup();
+    const { calls } = setup({ jobs: [] });
+    const select = await screen.findByRole("combobox", { name: "Modalidade da busca" });
+    expect(select.parentElement?.parentElement?.className).toContain("border-l");
+    await user.selectOptions(select, "remoto");
+    await user.click(screen.getByRole("button", { name: "Buscar agora" }));
+    await waitFor(() => expect(calls.find((c) => c.method === "POST" && c.path === "/api/runs")?.body).toEqual({ fontes: null, modalidade: "remoto" }));
+  });
+
+  it("envia a janela de recência em dias na busca", async () => {
+    const user = userEvent.setup();
+    const { calls } = setup({ jobs: [] });
+    const input = await screen.findByLabelText("Janela de recência (dias)");
+    await user.clear(input);
+    await user.type(input, "7");
+    await user.click(screen.getByRole("button", { name: "Buscar agora" }));
+    await waitFor(() => expect(calls.find((c) => c.method === "POST" && c.path === "/api/runs")?.body).toEqual({ fontes: null, janela_dias: 7 }));
+  });
+
+  it("aplica o estado da busca também à lista para não exibir vagas antigas de outras UFs", async () => {
+    const user = userEvent.setup();
+    const { calls } = setup({ jobs: [makeJob(1)] });
+    await user.selectOptions(await screen.findByRole("combobox", { name: "Estado da busca" }), "São Paulo");
+    await user.click(screen.getByRole("button", { name: "Buscar agora" }));
+
+    await waitFor(() => {
+      const last = [...calls].reverse().find((c) => c.path.startsWith("/api/jobs?"));
+      expect(last?.path).toContain("estado=S%C3%A3o+Paulo");
+    });
+    expect(calls.find((c) => c.method === "POST" && c.path === "/api/runs")?.body).toEqual({ fontes: null, localidade: "São Paulo" });
+  });
+
   it("filtra por modalidade: envia na listagem e em marcar como vistas; Todas remove", async () => {
     const user = userEvent.setup();
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const { calls } = setup({ jobs: [makeJob(1)] });
     await screen.findByRole("link", { name: "Engenheiro Mecânico 1" });
-    await user.selectOptions(screen.getByLabelText("Modalidade"), "remoto");
+    await user.selectOptions(screen.getByLabelText("Modalidade da lista"), "remoto");
     await waitFor(() => {
       const last = [...calls].reverse().find((c) => c.path.startsWith("/api/jobs?"));
       expect(last?.path).toContain("modalidade=remoto");
     });
     await user.click(screen.getByRole("button", { name: "Marcar todas como vistas" }));
     await waitFor(() => expect(calls.find((c) => c.path === "/api/jobs/mark-seen")?.body).toEqual({ modalidade: "remoto" }));
-    await user.selectOptions(screen.getByLabelText("Modalidade"), "");
+    await user.selectOptions(screen.getByLabelText("Modalidade da lista"), "");
     await waitFor(() => {
       const last = [...calls].reverse().find((c) => c.path.startsWith("/api/jobs?"));
       expect(last?.path).not.toContain("modalidade");
@@ -209,7 +242,7 @@ describe("VagasPage", () => {
 
   it("antes da primeira busca orienta a clicar em Buscar agora", async () => {
     setup({ jobs: [], runs: [] });
-    expect(await screen.findByText(/clique em buscar agora/i)).toBeInTheDocument();
+    expect(await screen.findByText(/use os controles acima/i)).toBeInTheDocument();
   });
 
   it("depois de uma busca sem vagas novas mostra que não há vagas novas", async () => {

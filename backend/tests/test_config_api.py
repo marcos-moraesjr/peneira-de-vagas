@@ -91,19 +91,21 @@ def test_busca_seguinte_usa_a_config_nova_nas_fontes_reais(settings, arquivo):
     assert gupy._settings.limites.max_paginas_por_termo == 7
 
 
-def test_limites_de_termos_e_de_paginas_por_termo_sao_editaveis(settings, arquivo):
+def test_limite_de_termos_fica_fixo_e_so_paginas_por_termo_e_editavel(settings, arquivo):
     with _client(settings, arquivo) as client:
         novo = client.get("/api/config").json()
-        assert (novo["busca"]["max_termos_busca"], novo["limites"]["max_paginas_por_termo"]) == (6, 3)
-        novo["busca"]["max_termos_busca"] = 3
+        assert "max_termos_busca" not in novo["busca"]
+        assert "keyword_max_length" not in novo["busca"]
+        novo["busca"]["max_termos_busca"] = 3  # campo forjado não pode baixar o teto fixo
+        novo["busca"]["keyword_max_length"] = 3  # proteção técnica também não é configurável pela API
         novo["limites"]["max_paginas_por_termo"] = 5
         assert client.put("/api/config", json=novo).status_code == 200
-        novo["busca"]["max_termos_busca"] = 0
-        assert client.put("/api/config", json=novo).status_code == 422
         atual = client.get("/api/config").json()
-    assert (atual["busca"]["max_termos_busca"], atual["limites"]["max_paginas_por_termo"]) == (3, 5)
+    assert "max_termos_busca" not in atual["busca"]
+    assert "keyword_max_length" not in atual["busca"]
+    assert atual["limites"]["max_paginas_por_termo"] == 5
     texto = arquivo.read_text(encoding="utf-8")
-    assert "max_termos_busca = 3 " in texto and "max_paginas_por_termo = 5 " in texto
+    assert "max_termos_busca = 6 " in texto and "max_paginas_por_termo = 5 " in texto
 
 
 def test_put_grava_varias_modalidades_como_lista(settings, arquivo):

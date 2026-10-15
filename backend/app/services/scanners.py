@@ -132,7 +132,7 @@ def evaluate(conn: sqlite3.Connection, settings: Settings, manifest: Manifest, t
 
 DOC_INSTRUCTION = """Refaça a documentação das plataformas de vagas: {plataformas}.
 
-Contexto: o JobScanner lê cada plataforma com um scanner versionado (docs/SCANNERS.md). A documentação atual \
+Contexto: o Peneira de Vagas lê cada plataforma com um scanner versionado (docs/SCANNERS.md). A documentação atual \
 está em docs/EXPLORACAO_PLATAFORMAS.md e pode estar desatualizada.
 
 Plataformas e versão atual do scanner:
@@ -151,7 +151,7 @@ sinal de bloqueio.
 4. Não altere o código nem as amostras agora. Ao final, mostre as divergências e pergunte se devo atualizar \
 os scanners (via TDD, subindo a versão em backend/scanners.toml e registrando em docs/SCANNERS.md).
 
-Regras de segurança: use só o Chrome dedicado do JobScanner (nunca o perfil pessoal); não abra vagas para \
+Regras de segurança: use só o Chrome dedicado do Peneira de Vagas (nunca o perfil pessoal); não abra vagas para \
 candidatura nem envie formulários; não aceite banners de cookies nem digite credenciais (se algo disso for \
 necessário, peça a mim); não resolva CAPTCHA e não contorne bloqueios: se aparecerem, pare e relate."""
 

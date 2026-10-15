@@ -1,4 +1,4 @@
-# Stack Técnica — JobScanner
+# Stack Técnica — Peneira de Vagas
 
 Decisões, justificativas e **exclusões explícitas**. Se uma biblioteca não está
 nesta página, ela não está no projeto. **Adicionar uma exige aprovação explícita
@@ -67,7 +67,7 @@ para baixar navegadores próprios.
 ## Estrutura do projeto
 
 ```
-jobscanner/
+peneira-de-vagas/
 ├── backend/
 │   ├── app/
 │   │   ├── main.py        # create_app(): rotas, lifespan, build estático

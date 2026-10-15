@@ -1,11 +1,16 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { useClearJobs, useConfig, useConjuntos, useJobs, useMarkAllSeen, useRuns, useSetSeen } from "../../api/hooks";
+import { useClearJobs, useConfig, useConjuntos, useJobs, useKeywords, useMarkAllSeen, useRuns, useSetSeen, useStartRun } from "../../api/hooks";
 import type { SeenFilter } from "../../api/types";
-import { ErrorBox } from "../../components/ErrorBox";
 import { buttonSecondary, inputClass } from "../../components/ui";
 import { SOURCES, sourceLabel } from "../../lib/failures";
 import { MODALIDADES } from "../../lib/format";
+import { ErrorBox } from "../../components/ErrorBox";
+import { ChromeStatus } from "./ChromeStatus";
+import { FailureBanner } from "./FailureBanner";
+import { RunBar, RunStatus } from "./RunBar";
+import { ScannerBanner } from "./ScannerBanner";
+import { VerificationPrompt } from "./VerificationPrompt";
 import { Pagination } from "./Pagination";
 import { JobsList, type Sort, type SortColumn } from "./JobsList";
 
@@ -59,6 +64,9 @@ export function VagasPage() {
   const [page, setPage] = useState(1);
   const [sort, setSort] = useState<Sort>(null);
   const [conjuntoEscolhido, setConjuntoEscolhido] = useState<number | null>(null);
+  const [localidade, setLocalidade] = useState("");
+  const [modalidadeBusca, setModalidadeBusca] = useState("");
+  const [janelaDias, setJanelaDias] = useState<string | undefined>();
 
   const conjuntos = useConjuntos().data ?? [];
   // Sem escolha (ou com o conjunto escolhido já excluído), a lista acompanha o conjunto ativo (o servidor decide).
@@ -67,6 +75,8 @@ export function VagasPage() {
   const maxDiasValue = maxDias === "" ? undefined : Number(maxDias);
   const runs = useRuns();
   const latest = runs.data?.[0];
+  const keywords = useKeywords("busca");
+  const startRun = useStartRun();
   const jobs = useJobs({ visto: seen === "novas" ? false : undefined, fonte, q, cidade, estado, modalidade, conjuntoId, ordenar: sort?.column, direcao: sort?.direction, maxDias: maxDiasValue }, page, latest?.status === "executando");
   const setSeenMutation = useSetSeen();
   const markAll = useMarkAllSeen();
@@ -74,7 +84,9 @@ export function VagasPage() {
   useReloadJobsWhenRunFinishes(latest?.status);
 
   const items = jobs.data?.items ?? [];
-  const pageSize = useConfig().data?.api.jobs_page_size;
+  const config = useConfig().data;
+  const pageSize = config?.api.jobs_page_size;
+  const janelaDiasBusca = janelaDias ?? String(config?.busca.janela_dias ?? 3);
   const totalPages = pageSize && jobs.data ? Math.max(1, Math.ceil(jobs.data.total / pageSize)) : 1;
   // Se a lista encolher (vagas marcadas como vistas, filtro), não fica numa página que deixou de existir.
   useEffect(() => {
@@ -94,8 +106,36 @@ export function VagasPage() {
     }
   }
 
+  function runSearch(sources: string[] | null) {
+    // O estado escolhido na busca também define o recorte inicial da lista.
+    // Sem isso, vagas antigas do conjunto continuam visíveis e parecem ter
+    // ignorado o filtro, especialmente quando a Gupy não traz novas vagas.
+    setEstado(localidade);
+    setPage(1);
+    startRun.mutate({ fontes: sources, ...(localidade ? { localidade } : {}), ...(modalidadeBusca ? { modalidade: modalidadeBusca } : {}), ...(janelaDias ? { janela_dias: Number(janelaDias) } : {}) });
+  }
+
   return (
     <div className="space-y-3">
+      <RunBar
+        latest={latest}
+        canSearch={(keywords.data?.length ?? 0) > 0}
+        starting={startRun.isPending}
+        sources={SOURCES}
+        onSearch={runSearch}
+        estado={localidade}
+        onEstadoChange={setLocalidade}
+        modalidade={modalidadeBusca}
+        onModalidadeChange={setModalidadeBusca}
+        janelaDias={janelaDiasBusca}
+        onJanelaDiasChange={setJanelaDias}
+        hint={keywords.data?.length || !keywords.isSuccess ? undefined : "Adicione ao menos uma palavra-chave na aba Parâmetros de busca."}
+      />
+      {startRun.error && <ErrorBox message={startRun.error.message} />}
+      <VerificationPrompt running={latest?.status === "executando"} />
+      <ChromeStatus />
+      <FailureBanner run={latest} onRestart={runSearch} restarting={startRun.isPending} />
+      <ScannerBanner />
       <div className="flex flex-wrap items-center gap-3">
         {conjuntos.length > 0 && (
           <label className="flex items-center gap-2 text-sm text-grafite-700">
@@ -147,6 +187,7 @@ export function VagasPage() {
         <label className="flex items-center gap-2 text-sm text-grafite-700">
           Modalidade
           <select
+            aria-label="Modalidade da lista"
             value={modalidade}
             onChange={(event) => {
               setModalidade(event.target.value);
@@ -175,7 +216,8 @@ export function VagasPage() {
             className={`${inputClass} w-20`}
           />
         </label>
-        <div className="ml-auto flex flex-wrap gap-3">
+        <RunStatus latest={latest} />
+        <div className="ml-auto flex flex-wrap items-center gap-3">
           <button type="button" className={buttonSecondary} onClick={markAllSeen}>
             Marcar todas como vistas
           </button>
@@ -223,7 +265,7 @@ export function VagasPage() {
       {jobs.isSuccess && items.length === 0 && (
         <p className="rounded-painel border border-dashed border-linha px-4 py-8 text-center text-sm text-grafite-500">
           {runs.data?.length === 0
-            ? "Nenhuma busca feita ainda. Vá à aba Busca e clique em Buscar agora."
+            ? "Nenhuma busca feita ainda. Use os controles acima ou a aba Parâmetros de busca."
             : seen === "novas"
               ? "Nenhuma vaga nova."
               : "Nenhuma vaga encontrada."}

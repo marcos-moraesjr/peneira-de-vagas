@@ -1,6 +1,5 @@
 """Partes puras das fontes de navegador: URLs, detecção de bloqueio e mapeamento de vagas."""
 from datetime import datetime, timezone
-from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
@@ -63,8 +62,16 @@ def test_indeed_url_traz_termo_dias_e_pagina(settings):
     assert "start=10" in url
 
 
-def test_indeed_janela_em_horas_vira_dias_arredondando_para_cima(settings):
-    assert "fromage=2" in IndeedSite(with_busca(settings, janela_horas=30)).search_url("x", 0)
+def test_indeed_envia_a_janela_em_dias(settings):
+    assert "fromage=2" in IndeedSite(with_busca(settings, janela_dias=2)).search_url("x", 0)
+
+
+def test_localidade_canonica_vira_location_no_linkedin_e_l_no_indeed(settings):
+    configurada = with_busca(settings, localidades=["São Paulo"])
+    linkedin = LinkedInSite(configurada).search_url("x", 0)
+    indeed = IndeedSite(configurada).search_url("x", 0)
+    assert "location=S%C3%A3o+Paulo" in linkedin
+    assert "l=S%C3%A3o+Paulo" in indeed
 
 
 @pytest.mark.parametrize(
@@ -102,12 +109,14 @@ def test_marcadores_de_pagina_sem_resultado(settings):
     assert not LinkedInSite(settings).is_empty_page("Resultados da busca")
 
 
-# ---------- Localidade e modalidade não vão para a busca (o filtro local decide) ----------
+# ---------- A busca canônica é adaptada por plataforma ----------
 
-def test_localidade_e_modalidade_da_config_nao_entram_na_url_de_busca(settings):
+def test_modalidade_nao_entra_na_url_mas_localidade_e_adaptada(settings):
     configurada = with_busca(settings, localidades=["Campinas, SP"], modalidade=["remoto", "hibrido"])
-    for url in (LinkedInSite(configurada).search_url("x", 0), IndeedSite(configurada).search_url("x", 0)):
-        assert "location" not in url and "f_WT" not in url and "l=" not in url and "Campinas" not in url
+    linkedin = LinkedInSite(configurada).search_url("x", 0)
+    indeed = IndeedSite(configurada).search_url("x", 0)
+    assert "f_WT=1" in linkedin and "Campinas" in linkedin
+    assert "l=Campinas" in indeed and "f_WT" not in indeed
 
 
 def test_linkedin_card_nao_renderizado_so_com_id_e_ignorado(settings):
@@ -145,39 +154,10 @@ def test_linkedin_sem_data_relativa_devolve_none():
     assert parse_relative_date("", AGORA) is None
 
 
-# ---------- Indeed: data de publicação no texto do detalhe ----------
-
-@pytest.mark.parametrize(
-    "texto,esperado",
-    [
-        ("Engenheiro Mecânico\nACME\nPublicada há 3 dias\nDescrição…", "2026-10-11T12:00:00Z"),
-        ("Posted 5 days ago · Active 2 days ago", "2026-10-09T12:00:00Z"),
-        ("Postado há 3 dias", "2026-10-11T12:00:00Z"),
-        ("Vaga publicado há 2 semanas", "2026-09-30T12:00:00Z"),
-        ("Publicada hoje", "2026-10-14T12:00:00Z"),
-        ("Postado hoje", "2026-10-14T12:00:00Z"),
-        ("Just posted", "2026-10-14T12:00:00Z"),
-        ("Publicada há mais de 30 dias", None),
-        ("Vaga sem data. Ativa há 2 dias", None),
-        ("", None),
-    ],
-)
-def test_indeed_converte_a_data_publicada_do_detalhe(settings, texto, esperado):
-    assert IndeedSite(settings).parse_published(texto, AGORA) == esperado
-
-
-def test_indeed_le_a_data_do_json_ld_e_depois_do_corpo_da_pagina_de_detalhe(settings):
-    assert IndeedSite(settings).published_selectors == ['script[type="application/ld+json"]', "body"]
-
-
-def test_indeed_le_a_data_exata_do_json_ld_do_detalhe(settings):
-    amostra = (Path(__file__).parent / "samples" / "indeed_detail_jsonld.json").read_text(encoding="utf-8")
-    assert IndeedSite(settings).parse_published(amostra, AGORA) == "2026-10-14T21:58:45.795Z"
-
-
-@pytest.mark.parametrize("texto", ['{"@type": "JobPosting"}', '{"datePosted": "ontem"}', "{quebrado"])
-def test_indeed_json_ld_sem_data_valida_nao_gera_data(settings, texto):
-    assert IndeedSite(settings).parse_published(texto, AGORA) is None
+def test_indeed_nao_coleta_data_para_evitar_abrir_a_vaga_individual(settings):
+    site = IndeedSite(settings)
+    assert not hasattr(site, "published_selectors")
+    assert site.detail_navigation_fallback is False
 
 
 # ---------- data por linha: independe de classe CSS ----------

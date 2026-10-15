@@ -8,7 +8,7 @@ from backend.app.services.config_edit import write_values
 TOML = """# cabeçalho
 [busca]
 localidade = "São Paulo # centro"   # local da busca
-janela_horas = 24
+janela_dias = 1
 [filtro]
 min_score = 3     # mínimo
 [ritmo]
@@ -27,12 +27,12 @@ def test_troca_so_o_valor_e_preserva_comentarios_e_outras_secoes(tmp_path):
     arquivo.write_text(TOML, encoding="utf-8")
     write_values(
         arquivo,
-        {"busca": {"localidade": "Campinas", "janela_horas": 48}, "filtro": {"min_score": 5}, "ritmo": {"pausa_min_s": 1.5}},
+        {"busca": {"localidade": "Campinas", "janela_dias": 2}, "filtro": {"min_score": 5}, "ritmo": {"pausa_min_s": 1.5}},
     )
     texto = arquivo.read_text(encoding="utf-8")
     assert '# local da busca' in texto and "# mínimo" in texto and "# cabeçalho" in texto
     dados = _ler(arquivo)
-    assert dados["busca"] == {"localidade": "Campinas", "janela_horas": 48}
+    assert dados["busca"] == {"localidade": "Campinas", "janela_dias": 2}
     assert dados["filtro"]["min_score"] == 5
     assert dados["ritmo"]["pausa_min_s"] == 1.5
     assert dados["outra"]["min_score"] == 99

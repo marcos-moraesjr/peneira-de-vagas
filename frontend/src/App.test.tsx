@@ -25,9 +25,15 @@ describe("App", () => {
     const user = userEvent.setup();
     mockApi(routes);
     renderWithClient(<App />);
-    await user.click(await screen.findByRole("tab", { name: "Busca" }));
-    expect(await screen.findByRole("button", { name: "Buscar agora" })).toBeInTheDocument();
+    await user.click(await screen.findByRole("tab", { name: "Parâmetros de busca" }));
     expect(screen.getByLabelText("Nova palavra-chave")).toBeInTheDocument();
+  });
+
+  it("mostra os controles da busca na aba Vagas", async () => {
+    mockApi(routes);
+    renderWithClient(<App />);
+    expect(await screen.findByRole("button", { name: "Buscar agora" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Estado da busca" })).toBeInTheDocument();
   });
 
   it("indica API e banco ok", async () => {
@@ -49,7 +55,7 @@ describe("App — tutorial", () => {
     mockApi(routes);
     renderWithClient(<App />);
     await user.click(await screen.findByRole("tab", { name: "Tutorial" }));
-    expect(await screen.findByRole("heading", { name: "Como usar o Peneira" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Como usar o Peneira de Vagas" })).toBeInTheDocument();
   });
 });
 
@@ -77,13 +83,13 @@ describe("App — tema", () => {
     expect(document.documentElement.dataset.theme).toBe("light");
     await user.click(toggle);
     expect(document.documentElement.dataset.theme).toBe("dark");
-    expect(localStorage.getItem("peneira-tema")).toBe("dark");
+    expect(localStorage.getItem("peneira-de-vagas-tema")).toBe("dark");
     await user.click(screen.getByRole("button", { name: /tema claro/i }));
     expect(document.documentElement.dataset.theme).toBe("light");
   });
 
   it("começa no tema salvo", async () => {
-    localStorage.setItem("peneira-tema", "dark");
+    localStorage.setItem("peneira-de-vagas-tema", "dark");
     mockApi(routes);
     renderWithClient(<App />);
     expect(await screen.findByRole("button", { name: /tema claro/i })).toBeInTheDocument();

@@ -1,4 +1,4 @@
-"""Chrome dedicado do JobScanner: detecta se está aberto (CDP) e o abre com perfil próprio.
+"""Chrome dedicado do Peneira de Vagas: detecta se está aberto (CDP) e o abre com perfil próprio.
 
 A porta de depuração só escuta em 127.0.0.1 e o perfil é sempre o dedicado, nunca o pessoal.
 """

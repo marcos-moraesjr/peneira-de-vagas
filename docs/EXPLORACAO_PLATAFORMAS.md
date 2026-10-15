@@ -1,4 +1,4 @@
-# JobScanner — Exploração das plataformas (14/10/2026)
+# Peneira de Vagas — Exploração das plataformas (14/10/2026)
 
 > **Status:** documento de pesquisa. **Valem** as seções 2 (exploração das plataformas), 3.1 (Chrome dedicado)
 > e 8 (riscos). **Superadas** pela arquitetura FastAPI + React (`ARCHITECTURE.md`): o Telegram, o
@@ -106,8 +106,8 @@ Ao carregar, o Indeed acrescenta `vjk=<jk>` sozinho. A ordenação padrão é
 | Local | `[data-testid="text-location"]` |
 | Atributos e trecho | itens `li` dentro do card ("Tempo integral", salário, trecho da descrição) |
 
-- **Não há data de publicação no card.** A data exata vem do detalhe da vaga (JSON-LD `datePosted`, observado em 15/10/2026). `fromage=1` e a deduplicação seguem como filtro de recência da lista.
-- Link da vaga: `https://br.indeed.com/viewjob?jk=<jk>` (formato conhecido, não validado nesta exploração).
+- **Painel de detalhe:** a captura real de 15/10/2026 usa `DESKTOP_EMBEDDED`; cada título é `a.jcs-JobTitle[data-jk]` com `role="button"` e o clique carrega `autoOpenTwoPaneViewjobResponse`, que contém `sanitizedJobDescription`. A descrição é lida no painel por `#jobDescriptionText` ou `.jobsearch-JobComponent-description`, sem abrir `/viewjob`.
+- **Não há data de publicação confiável no painel:** a resposta capturada tem `datePublished: null`. `fromage=1` e a deduplicação são o filtro de recência; o scanner não abre a URL individual só para preencher data.
 
 **Paginação:** `nav[role="navigation"]` com `a[data-testid="pagination-page-current"]`, `pagination-page-2` até `pagination-page-5` e `pagination-page-next`.
 
@@ -165,7 +165,7 @@ então o perfil dedicado é obrigatório. Crie `iniciar_chrome.bat`:
 ```bat
 "C:\Program Files\Google\Chrome\Application\chrome.exe" ^
   --remote-debugging-port=9222 ^
-  --user-data-dir=C:\jobscanner\data\chrome-profile
+  --user-data-dir=C:\peneira-de-vagas\data\chrome-profile
 ```
 
 Passos únicos, **manuais**, nesse Chrome:
@@ -180,7 +180,7 @@ Para subir o Chrome no logon, coloque um atalho do `.bat` na pasta Inicializar
 ### 3.2 Projeto
 
 ```
-jobscanner/
+peneira-de-vagas/
 ├── main.py
 ├── config.toml
 ├── .env                  # TELEGRAM_TOKEN, TELEGRAM_CHAT_ID (nunca versionado)
@@ -282,7 +282,7 @@ CREATE TABLE IF NOT EXISTS execucoes (
 """
 
 
-def conectar(caminho="jobscanner.db"):
+def conectar(caminho="peneira-de-vagas.db"):
     con = sqlite3.connect(caminho)
     con.row_factory = sqlite3.Row
     con.executescript(SCHEMA)
@@ -372,11 +372,11 @@ def vaga(v):
 
 
 def alerta(msg):
-    enviar(f"⚠️ JobScanner: {msg}")
+    enviar(f"⚠️ Peneira de Vagas: {msg}")
 ```
 
 A URL do Telegram carrega o token. Em `main.py`, silencie o log INFO do `httpx`,
-senão o token vai para o `jobscanner.log`.
+senão o token vai para o `peneira-de-vagas.log`.
 
 ### 4.5 `sources/gupy.py`
 
@@ -621,7 +621,7 @@ import filters
 import notify
 from sources import FonteBloqueada, FonteQuebrada, gupy, indeed, linkedin
 
-logging.basicConfig(level=logging.INFO, filename="jobscanner.log",
+logging.basicConfig(level=logging.INFO, filename="peneira-de-vagas.log",
                     format="%(asctime)s %(levelname)s %(message)s")
 logging.getLogger("httpx").setLevel(logging.WARNING)  # a URL do Telegram contém o token
 
@@ -706,8 +706,8 @@ já está no `main.py`.
 **Windows (Agendador de Tarefas):**
 
 ```
-schtasks /Create /TN "JobScanner" /SC DAILY /ST 08:00 /RI 120 /DU 10:01 ^
-  /TR "cmd /c cd /d C:\jobscanner && .venv\Scripts\python.exe main.py"
+schtasks /Create /TN "Peneira de Vagas" /SC DAILY /ST 08:00 /RI 120 /DU 10:01 ^
+  /TR "cmd /c cd /d C:\peneira-de-vagas && .venv\Scripts\python.exe main.py"
 ```
 
 - `/RI 120` repete a cada 120 min e `/DU 10:01` mantém a repetição até as 18:01. **Confirme na interface do Agendador que a última execução prevista é a das 18:00.**
@@ -743,7 +743,7 @@ Valores de referência de **14/10/2026**; mudam com o tempo.
 - **Janela de tempo é a deduplicação.** A execução das 8h captura a noite sem lógica especial, e uma execução perdida é compensada na seguinte. "Anunciada novamente" no LinkedIn não é vaga nova; o SQLite decide.
 - **Baseline na primeira execução** evita uma enxurrada de notificações com vagas antigas (a Gupy devolveria 20, de 2022 a 2026).
 - **Filtro restritivo:** só 2 de 15 títulos do Indeed continham "mecânic". Comece com título **ou** corpo e meça os falsos positivos e negativos antes de apertar.
-- **Conta e dados:** nunca versione `.env`, `jobscanner.db`, `jobscanner.log` nem `data/chrome-profile/`.
+- **Conta e dados:** nunca versione `.env`, `peneira-de-vagas.db`, `peneira-de-vagas.log` nem `data/chrome-profile/`.
 
 ## 9. Pendências de decisão
 

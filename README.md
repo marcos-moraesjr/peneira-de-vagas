@@ -1,4 +1,4 @@
-# JobScanner
+# Peneira de Vagas
 
 Aplicação **local** que busca vagas de emprego no **LinkedIn**, no **Indeed** e na **Gupy**. Você cadastra
 as palavras-chave no front end (padrão de desenvolvimento: **Engenheiro Mecânico**), clica em **Buscar
@@ -53,7 +53,7 @@ npm install
 
 Usa um perfil próprio (`data/chrome-profile/`), nunca o seu pessoal; a porta de depuração fica só em `localhost`.
 
-**Pelo app (recomendado):** na aba Busca, clique em **Abrir Chrome dedicado**. O indicador muda para "Chrome
+**Pelo app (recomendado):** na aba Vagas, clique em **Abrir Chrome dedicado**. O indicador muda para "Chrome
 dedicado aberto" quando ele estiver pronto. Se o Chrome não for achado, ajuste `chrome_paths` em
 `backend/config.toml`.
 
@@ -101,7 +101,7 @@ Não exponha a API além de `127.0.0.1`: ela não tem autenticação.
 4. A tela **Execuções** mostra o histórico e o motivo de qualquer fonte que tenha falhado.
 5. A aba **Tutorial** do app traz esses passos (Chrome dedicado, login, palavras-chave, busca) e a tabela de problemas comuns.
 
-Parâmetros fixos (localidade, pesos, limites, pausas; a localidade vem vazia, como na busca observada) ficam em `backend/config.toml`; referência completa em
+Pesos, limites e pausas ficam em `backend/config.toml`; o estado pode ser selecionado na página **Busca** e é adaptado por plataforma (LinkedIn/Indeed) ou filtrado localmente (Gupy). Referência completa em
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#configuração).
 
 ## Testes
@@ -120,7 +120,7 @@ manualmente, nunca em rotina.
 
 ## Dados e privacidade
 
-Tudo fica na sua máquina: banco em `data/jobscanner.db`, perfil do Chrome em `data/chrome-profile/`, logs em
+Tudo fica na sua máquina: banco em `data/peneira-de-vagas.db`, perfil do Chrome em `data/chrome-profile/`, logs em
 `logs/` (nenhum é versionado). A única comunicação externa são as requisições às três fontes de vagas.
 
 ## Quando um scanner quebra

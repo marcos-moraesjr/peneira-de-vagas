@@ -1,9 +1,9 @@
-# Parâmetros do JobScanner. Palavras-chave e exclusões são editadas na tela
+# Parâmetros do Peneira de Vagas. Palavras-chave e exclusões são editadas na tela
 # (tabela keywords); [padrao] só semeia a tabela na primeira vez.
 # Caminhos relativos partem da raiz do projeto.
 
 [geral]
-db_path = "data/jobscanner.db"
+db_path = "data/peneira-de-vagas.db"
 backup_dir = "backups"
 frontend_dist = "frontend/dist"
 log_dir = "logs"
@@ -16,14 +16,14 @@ exclusoes = []
 [busca]
 keyword_max_length = 80
 max_termos_busca = 6  # máximo de palavras-chave de busca por conjunto (cada termo vira uma consulta por fonte; consultas demais levam a bloqueio)
-janela_horas = 72
-localidades = []        # lista de cidades ou estados ("Campinas, SP", "Minas Gerais"); vazia = sem filtro de local. Filtra as vagas listadas (não vai na busca da plataforma)
+janela_dias = 3
+localidades = []        # fallback/configuração da busca; a localidade informada na página de Busca sobrescreve esta lista na execução
 modalidade = []         # lista: "remoto", "hibrido", "presencial"; vazia = todas. Filtra as vagas listadas (não vai na busca da plataforma)
 
 [filtro]
 peso_titulo = 3
 peso_descricao = 1
-min_score = 4
+min_score = 5
 trecho_max_chars = 2000
 aceitar_desconhecido = true   # vaga sem localidade/modalidade informada (ou só "Brasil", ou remota) passa pelo filtro de local e modalidade; false descarta
 
@@ -39,6 +39,8 @@ rolagem_max_s = 0.7
 [navegador]
 cdp_url = "http://127.0.0.1:9222"   # só localhost: a porta de depuração nunca sai da máquina
 timeout_s = 30
+max_tentativas_abertura = 3 # tentativas para um goto abortado (ERR_ABORTED) antes de falhar a fonte
+max_tentativas_painel = 3 # tentativas para abrir o painel de uma vaga antes de apontar seletor alterado
 probe_timeout_s = 1.5      # espera ao checar se o Chrome dedicado está aberto
 abas_paralelas = true     # true: uma aba por fonte, todas ao mesmo tempo (cada aba mantém suas pausas)
 espera_verificacao_s = 600   # tempo que a fonte espera você concluir a verificação (CAPTCHA/Cloudflare) e confirmar; esgotado, a fonte falha

@@ -19,33 +19,7 @@ type Field = {
 
 const GROUPS: { titulo: string; intro?: string; fields: Field[] }[] = [
   {
-    titulo: "Busca",
-    fields: [
-      {
-        section: "busca",
-        key: "janela_horas",
-        label: "Janela de recência (horas)",
-        kind: "number",
-      },
-      {
-        section: "busca",
-        key: "keyword_max_length",
-        label: "Tamanho máximo da palavra-chave",
-        kind: "number",
-      },
-      {
-        section: "busca",
-        key: "max_termos_busca",
-        label: "Palavras-chave por busca (máximo)",
-        kind: "slider",
-        min: 1,
-        max: 10,
-        dica: "Cada palavra-chave vira uma busca em cada plataforma; mais buscas aumentam o tempo e o risco de bloqueio.",
-      },
-    ],
-  },
-  {
-    titulo: "Filtro",
+    titulo: "Rankeamento de vagas",
     intro:
       "Cada vaga soma pontos pelas palavras-chave do conjunto ativo (da busca e de ranking) que aparecem no texto dela (cada palavra conta uma vez). Só entra na lista a vaga que atinge a pontuação mínima.",
     fields: [
@@ -80,7 +54,7 @@ const GROUPS: { titulo: string; intro?: string; fields: Field[] }[] = [
     ],
   },
   {
-    titulo: "Limites",
+    titulo: "Limites de busca",
     fields: [
       {
         section: "limites",
@@ -94,7 +68,7 @@ const GROUPS: { titulo: string; intro?: string; fields: Field[] }[] = [
     ],
   },
   {
-    titulo: "Ritmo",
+    titulo: "Ritmo de buscas",
     fields: [
       {
         section: "ritmo",
@@ -102,6 +76,7 @@ const GROUPS: { titulo: string; intro?: string; fields: Field[] }[] = [
         label: "Pausa mínima (s)",
         kind: "number",
         step: "any",
+        dica: "Menor espera entre uma ação e outra no navegador.",
       },
       {
         section: "ritmo",
@@ -109,6 +84,7 @@ const GROUPS: { titulo: string; intro?: string; fields: Field[] }[] = [
         label: "Pausa máxima (s)",
         kind: "number",
         step: "any",
+        dica: "Maior espera entre ações; o sistema sorteia uma pausa dentro deste intervalo.",
       },
       {
         section: "ritmo",
@@ -116,6 +92,7 @@ const GROUPS: { titulo: string; intro?: string; fields: Field[] }[] = [
         label: "Rolagem mínima (s)",
         kind: "number",
         step: "any",
+        dica: "Menor espera após rolar a lista para carregar o próximo card.",
       },
       {
         section: "ritmo",
@@ -123,6 +100,7 @@ const GROUPS: { titulo: string; intro?: string; fields: Field[] }[] = [
         label: "Rolagem máxima (s)",
         kind: "number",
         step: "any",
+        dica: "Maior espera após rolar a lista; mantém a navegação em ritmo humano.",
       },
     ],
   },
@@ -146,12 +124,14 @@ const GROUPS: { titulo: string; intro?: string; fields: Field[] }[] = [
         key: "jobs_page_size",
         label: "Vagas por página",
         kind: "number",
+        dica: "Quantidade de vagas exibidas por página na lista.",
       },
       {
         section: "api",
         key: "poll_interval_ms",
         label: "Intervalo de atualização (ms)",
         kind: "number",
+        dica: "Frequência com que a tela atualiza o andamento enquanto uma busca está em execução.",
       },
     ],
   },
