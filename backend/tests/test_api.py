@@ -179,6 +179,28 @@ def test_marcar_vaga_como_vista_e_desfazer(client):
     assert client.get("/api/jobs?visto=false").json()["total"] == 2
 
 
+def test_excluir_uma_vaga_esconde_da_lista_e_aparece_em_excluidas(client):
+    client.post("/api/runs")
+    vaga = client.get("/api/jobs").json()["items"][0]
+    assert client.patch(f"/api/jobs/{vaga['id']}", json={"excluida": True}).json()["excluida"] is True
+    assert client.get("/api/jobs").json()["total"] == 1
+    excluidas = client.get("/api/jobs?excluidas=true").json()
+    assert excluidas["total"] == 1 and excluidas["items"][0]["id"] == vaga["id"]
+    assert client.patch(f"/api/jobs/{vaga['id']}", json={"excluida": False}).json()["excluida"] is False
+    assert client.get("/api/jobs").json()["total"] == 2
+    assert client.get("/api/jobs?excluidas=true").json()["total"] == 0
+
+
+def test_vaga_excluida_nao_volta_como_nova_numa_busca_e_nao_entra_em_marcar_como_vistas(client):
+    client.post("/api/runs")
+    vaga = client.get("/api/jobs").json()["items"][0]
+    client.patch(f"/api/jobs/{vaga['id']}", json={"excluida": True})
+    client.post("/api/runs")
+    assert client.get("/api/jobs").json()["total"] == 1
+    assert client.post("/api/jobs/mark-seen", json={}).json() == {"atualizadas": 1}
+    assert client.get("/api/jobs?excluidas=true").json()["items"][0]["visto"] is False
+
+
 def test_marcar_vaga_inexistente_devolve_404(client):
     assert client.patch("/api/jobs/999", json={"visto": True}).status_code == 404
 
@@ -567,6 +589,18 @@ def test_lista_mostra_o_conjunto_ativo_e_aceita_escolher_outro(dois_conjuntos):
     assert ids_da_lista(client, f"?conjunto_id={outro}") == ["9"]
     resposta = client.get("/api/jobs?conjunto_id=999")
     assert resposta.status_code == 404 and "999" in resposta.json()["detail"]
+
+
+def test_lista_de_todos_os_conjuntos_ignora_o_filtro_de_conjunto(dois_conjuntos):
+    client, _ = dois_conjuntos
+    assert ids_da_lista(client, "?todos_conjuntos=true") == ["1", "2", "9"]
+    assert ids_da_lista(client, "?todos_conjuntos=false") == ["9"]
+
+
+def test_marcar_como_vistas_de_todos_os_conjuntos(dois_conjuntos):
+    client, _ = dois_conjuntos
+    assert client.post("/api/jobs/mark-seen", json={"todos_conjuntos": True}).json() == {"atualizadas": 3}
+    assert client.get("/api/jobs?todos_conjuntos=true&visto=false").json()["total"] == 0
 
 
 def test_marcar_como_vistas_vale_so_para_o_conjunto_escolhido(dois_conjuntos):

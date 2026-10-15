@@ -8,16 +8,17 @@ export type Sort = { column: SortColumn; direction: "asc" | "desc" } | null;
 type Props = {
   jobs: Job[];
   onSeen: (job: Job, visto: boolean) => void;
+  onExcluir: (job: Job, excluida: boolean) => void;
   sort: Sort;
   onSort: (column: SortColumn) => void;
 };
 
 // `width`: largura da coluna na tabela de layout fixo (soma 100%), para a tabela caber sem rolagem lateral.
 const COLUMNS: { label: string; column: SortColumn; width: string }[] = [
-  { label: "Vaga", column: "titulo", width: "w-[22%]" },
-  { label: "Empresa", column: "empresa", width: "w-[13%]" },
-  { label: "Palavra-chave", column: "palavra_chave", width: "w-[11%]" },
-  { label: "Cidade", column: "cidade", width: "w-[9%]" },
+  { label: "Vaga", column: "titulo", width: "w-[20%]" },
+  { label: "Empresa", column: "empresa", width: "w-[12%]" },
+  { label: "Palavra-chave", column: "palavra_chave", width: "w-[10%]" },
+  { label: "Cidade", column: "cidade", width: "w-[8%]" },
   { label: "Estado", column: "estado", width: "w-[5%]" },
   { label: "Modalidade", column: "modalidade", width: "w-[9%]" },
   { label: "Publicada", column: "publicada_em", width: "w-[8%]" },
@@ -25,15 +26,19 @@ const COLUMNS: { label: string; column: SortColumn; width: string }[] = [
   { label: "Plataforma", column: "fonte", width: "w-[8%]" },
   { label: "Pontos", column: "pontos", width: "w-[6%]" },
 ];
+const ACTION_WIDTH = "w-[5%]";
 const MAX_POINTS = 10;
 const cell = "px-3 py-2 align-middle break-words";
 
-export function JobsList({ jobs, onSeen, sort, onSort }: Props) {
+export function JobsList({ jobs, onSeen, onExcluir, sort, onSort }: Props) {
   return (
     <div className="max-h-[65vh] overflow-y-auto rounded-painel border border-linha bg-painel">
       <table className="w-full table-fixed text-left text-sm">
         <thead className="sticky top-0 z-10 border-b border-linha bg-linha-2 text-rotulo uppercase text-grafite-700">
           <tr>
+            <th scope="col" className={`px-3 py-3 ${ACTION_WIDTH}`}>
+              <span className="sr-only">Ações</span>
+            </th>
             {COLUMNS.map(({ label, column, width }) => {
               const active = sort?.column === column;
               return (
@@ -57,6 +62,17 @@ export function JobsList({ jobs, onSeen, sort, onSort }: Props) {
         <tbody className="divide-y divide-linha-2">
           {jobs.map((job) => (
             <tr key={job.id} className={`text-[13px] ${job.visto ? "text-grafite-500" : "bg-sinal-ponto/10 text-grafite-700"}`}>
+              <td className={`${cell} text-center`}>
+                <button
+                  type="button"
+                  onClick={() => onExcluir(job, !job.excluida)}
+                  aria-label={`${job.excluida ? "Restaurar" : "Excluir"} vaga ${job.titulo}`}
+                  title={job.excluida ? "Restaurar na lista" : "Remover da lista"}
+                  className="rounded-botao px-2 py-1 text-grafite-500 hover:bg-linha-2 hover:text-grafite-900"
+                >
+                  {job.excluida ? "↩" : "✕"}
+                </button>
+              </td>
               <td className={cell}>
                 <div className="flex items-center gap-2">
                   {!job.visto && (

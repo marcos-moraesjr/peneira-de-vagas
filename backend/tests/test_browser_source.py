@@ -369,6 +369,24 @@ def test_painel_e_tentado_ate_o_limite_configurado_antes_da_falha(settings):
     assert len(pauses) == 2
 
 
+def test_cada_painel_aberto_espera_a_pausa_de_detalhe_e_nao_a_de_rolagem(settings):
+    nav = FakeNavigator({})
+    nav._current = {"detail": "descrição"}
+
+    @contextmanager
+    def session():
+        yield nav
+
+    detail_pauses, scroll_pauses = [], []
+    source = BrowserSource(
+        PanelOnlySite(), settings, session, pause=lambda: None,
+        scroll_pause=lambda: scroll_pauses.append(1), detail_pause=lambda: detail_pauses.append(1),
+    )
+    source.enrich([Job(i, f"Vaga {i}", "ACME", f"https://site/job/{i}", "curto", "fake") for i in ("1", "2", "3")])
+    assert len(detail_pauses) == 3
+    assert scroll_pauses == []
+
+
 def test_enrich_entrega_cada_vaga_ao_callback_assim_que_o_detalhe_e_lido(settings):
     um = Job("1", "Vaga 1", "ACME", "https://site/job/1", "curto", "fake")
     dois = Job("2", "Vaga 2", "ACME", "https://site/job/2", "curto", "fake")

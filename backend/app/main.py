@@ -13,7 +13,8 @@ from . import db
 from .config import Settings, load_settings
 from .errors import Conflict, DomainError, NotFound
 from .routes import config as config_routes
-from .routes import browser, conjuntos, health, jobs, keywords, runs, scanners, verificacao
+from .routes import atualizacao, browser, conjuntos, health, jobs, keywords, runs, scanners, verificacao
+from .services import atualizacao as atualizacao_service
 from .services import chrome
 from .services.run_service import spawn_thread
 from .services.scanners import Manifest, load_manifest
@@ -28,7 +29,7 @@ def utc_now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
 
 
-def _setup_logging(settings: Settings) -> None:
+def setup_logging(settings: Settings) -> None:
     settings.geral.log_dir.mkdir(parents=True, exist_ok=True)
     logging.basicConfig(
         level=logging.INFO,
@@ -56,10 +57,12 @@ def create_app(
     chrome_probe: Callable[[], bool] | None = None,
     chrome_launcher: Callable[[list[str]], None] | None = None,
     config_path: Path | None = None,
+    app_version: Callable[[], str | None] | None = None,
+    latest_fetch: Callable[[str, float], str] | None = None,
 ) -> FastAPI:
     if settings is None:
         settings = load_settings(DEFAULT_CONFIG)
-        _setup_logging(settings)
+        setup_logging(settings)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -82,10 +85,12 @@ def create_app(
     app.state.manifest = manifest or load_manifest(DEFAULT_MANIFEST)
     app.state.chrome_probe = chrome_probe or (lambda: chrome.is_open(settings))
     app.state.chrome_launcher = chrome_launcher or chrome.launch_detached
+    app.state.app_version = app_version or (lambda: atualizacao_service.app_version(DEFAULT_CONFIG.parents[1]))
+    app.state.latest_fetch = latest_fetch or atualizacao_service.fetch_latest_tag
 
     for status_code, error in ((422, DomainError), (404, NotFound), (409, Conflict)):
         app.add_exception_handler(error, _handler(status_code))
-    for module in (health, runs, jobs, keywords, conjuntos, scanners, browser, config_routes, verificacao):
+    for module in (health, runs, jobs, keywords, conjuntos, scanners, browser, config_routes, verificacao, atualizacao):
         app.include_router(module.router, prefix="/api")
 
     if (settings.geral.frontend_dist / "index.html").exists():

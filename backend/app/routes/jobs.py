@@ -23,13 +23,15 @@ def list_jobs(
     local: str | None = None,
     modalidade: str | None = None,
     conjunto_id: int | None = None,
+    todos_conjuntos: bool = False,
+    excluidas: bool = False,
     conn: sqlite3.Connection = Depends(get_conn),
     settings: Settings = Depends(get_settings),
     now=Depends(get_now),
 ) -> dict:
     corte = jobs.cutoff_date(now(), max_dias)
     return jobs.list_jobs(
-        conn, visto, fonte, q, limit or settings.api.jobs_page_size, offset, ordenar, direcao, corte, local, modalidade, conjunto_id
+        conn, visto, fonte, q, limit or settings.api.jobs_page_size, offset, ordenar, direcao, corte, local, modalidade, conjunto_id, todos_conjuntos, excluidas
     )
 
 
@@ -41,10 +43,10 @@ def clear_jobs(conjunto_id: int | None = None, conn: sqlite3.Connection = Depend
 @router.post("/jobs/mark-seen", response_model=MarkSeenOut)
 def mark_seen(body: MarkSeenIn, conn: sqlite3.Connection = Depends(get_conn), now=Depends(get_now)) -> MarkSeenOut:
     return MarkSeenOut(
-        atualizadas=jobs.mark_seen(conn, body.fonte, body.q, jobs.cutoff_date(now(), body.max_dias), body.local, body.modalidade, body.conjunto_id)
+        atualizadas=jobs.mark_seen(conn, body.fonte, body.q, jobs.cutoff_date(now(), body.max_dias), body.local, body.modalidade, body.conjunto_id, body.todos_conjuntos)
     )
 
 
 @router.patch("/jobs/{job_id}", response_model=JobOut)
 def set_seen(job_id: int, body: SeenIn, conn: sqlite3.Connection = Depends(get_conn)) -> dict:
-    return jobs.set_seen(conn, job_id, body.visto)
+    return jobs.update_job(conn, job_id, body.visto, body.excluida)

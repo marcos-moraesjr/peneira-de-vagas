@@ -11,12 +11,13 @@ def build_sources(settings: Settings, gate: VerificationGate | None = None) -> l
     ritmo = settings.ritmo
     pause = make_pause(ritmo.pausa_min_s, ritmo.pausa_max_s)
     scroll_pause = make_pause(ritmo.rolagem_min_s, ritmo.rolagem_max_s)
+    detail_pause = make_pause(ritmo.pausa_detalhe_min_s, ritmo.pausa_detalhe_max_s)
 
     def session():
         return playwright_session(settings)
 
     return [
-        BrowserSource(LinkedInSite(settings), settings, session, pause, scroll_pause, gate),
-        BrowserSource(IndeedSite(settings), settings, session, pause, scroll_pause, gate),
+        BrowserSource(LinkedInSite(settings), settings, session, pause, scroll_pause, gate, detail_pause=detail_pause),
+        BrowserSource(IndeedSite(settings), settings, session, pause, scroll_pause, gate, detail_pause=detail_pause),
         GupySource(settings),
     ]

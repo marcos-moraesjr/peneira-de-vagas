@@ -224,12 +224,14 @@ class BrowserSource:
         scroll_pause: Callable[[], None],
         gate: VerificationGate | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
+        detail_pause: Callable[[], None] | None = None,
     ):
         self._site = site
         self._settings = settings
         self._session = session
         self._pause = pause
         self._scroll_pause = scroll_pause
+        self._detail_pause = detail_pause or scroll_pause
         self._gate = gate
         self._clock = clock
         self.name = site.name
@@ -333,7 +335,7 @@ class BrowserSource:
         script = open_detail.replace("__JOB_ID__", json.dumps(job.id))
         for attempt in range(self._settings.navegador.max_tentativas_painel):
             if navigator.open_detail(script):
-                self._scroll_pause()
+                self._detail_pause()
                 return
             if attempt + 1 < self._settings.navegador.max_tentativas_painel:
                 log.warning(

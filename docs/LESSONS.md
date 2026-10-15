@@ -57,6 +57,13 @@ Crie conforme a necessidade; sugestão inicial:
 
 ## Entradas
 
+### LinkedIn: HTTP 429 na página 2 após rajada de cliques de detalhe (2026-10-15)
+- **Contexto**: três execuções seguidas (14:18, 14:30, 15:20) falharam ao abrir `start=25` do termo "Engenheiro Mecânico" com HTTP 429, sempre depois de a página 1 abrir normalmente.
+- **Causa raiz** (inferida do código e dos logs): depois de abrir cada painel de vaga a fonte esperava só a pausa de rolagem (0,25–0,7 s). Cada clique gera requisições internas do site; até 25 cliques em poucos segundos precediam a navegação da página 2, que recebia o 429.
+- **Impacto**: a fonte encerrava com `http_erro` e os demais termos não rodavam.
+- **Correção**: pausa própria `[ritmo] pausa_detalhe_min_s`/`pausa_detalhe_max_s` (3–6 s) depois de cada painel aberto; scanners `linkedin` 1.9.2 e `indeed` 1.11.2.
+- **Risco futuro**: o limite do LinkedIn não é público; se o 429 persistir, aumentar essa pausa ou reduzir `max_paginas_por_termo`. Esperar e repetir após o 429 continua proibido.
+
 ### Indeed: cards-isca invisíveis quebravam a abertura do painel (2026-10-15)
 - **Contexto**: execução real do Indeed falhou com "Não abriu o painel da vaga … após 3 tentativa(s)" (`seletor_nao_encontrado`), em vagas que existiam na listagem.
 - **Causa raiz**: a listagem traz `div.job_seen_beacon` falsos (caixa 0×0, `data-jk` inventado, link `/viewjob`, título copiado de outra vaga; mudam a cada carga). O extrator os coletava; o clique neles navegava para `/viewjob`, os cards reais saíam do DOM e o painel da vaga seguinte nunca abria. Efeito colateral: abrir `/viewjob` é o que já havia gerado bloqueio Cloudflare. Além disso, `#jobDescriptionText` já não existe no painel (a descrição está em `.simple-job-description-html`).
@@ -206,3 +213,8 @@ Crie conforme a necessidade; sugestão inicial:
 - **Como funcionava**: a tela mantinha um rascunho e só enviava `PUT /api/config` ao clicar em **Salvar**; **Descartar** voltava aos valores em vigor.
 - **Depois**: os botões foram removidos. O rascunho é enviado automaticamente quando o campo perde o foco (ou Enter), ao marcar/desmarcar uma opção e ao soltar ou usar o teclado num controle deslizante; nada é enviado se o valor não mudou. A tela mostra "Salvando…" e "Configuração salva. Vale a partir da próxima busca."; erro do backend (422) continua exibido, mantendo o que foi digitado.
 - **Motivo**: pedido do usuário. Não há debounce por tempo (evitaria um parâmetro novo no `config.toml`); sem o botão Descartar, um valor errado já salvo é corrigido editando de novo.
+
+### Regra alterada: vaga pode ser excluída da lista sem apagar o registro (2026-10-15)
+- **Antes:** a única exclusão era "Excluir todas as vagas" (apaga do banco; a vaga que reaparecesse numa busca voltava como nova). Não havia como tirar uma vaga só da lista.
+- **Depois:** cada linha tem o botão **✕**, que marca `jobs.excluida=1` (migração 10, só `ADD COLUMN`; cópia do `.db` em `backups/` antes). A vaga some da lista, de "marcar como vistas" e não volta como nova numa busca (a deduplicação consulta a tabela `jobs`); a aba **Excluídas** lista só elas e o botão **↩** as restaura. "Excluir todas as vagas" continua apagando do banco, **inclusive as excluídas**.
+- **Motivo**: pedido do usuário. **Consequência**: a deduplicação passa a funcionar como "lista de ignoradas" até alguém usar "Excluir todas as vagas".

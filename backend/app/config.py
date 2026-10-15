@@ -1,4 +1,5 @@
 """Carrega e valida config.toml em objetos tipados. Valores vêm só do arquivo."""
+import re
 import tomllib
 from dataclasses import dataclass, fields
 from pathlib import Path
@@ -18,6 +19,14 @@ class Geral:
     frontend_dist: Path
     log_dir: Path
     chrome_profile_dir: Path
+    porta: int
+
+
+@dataclass(frozen=True)
+class Atualizacao:
+    verificar: bool
+    repositorio: str
+    timeout_s: float
 
 
 @dataclass(frozen=True)
@@ -55,6 +64,8 @@ class Ritmo:
     pausa_max_s: float
     rolagem_min_s: float
     rolagem_max_s: float
+    pausa_detalhe_min_s: float
+    pausa_detalhe_max_s: float
 
 
 @dataclass(frozen=True)
@@ -112,6 +123,7 @@ class Settings:
     linkedin: SearchSite
     indeed: SearchSite
     versionamento: Versionamento
+    atualizacao: Atualizacao
 
 
 LOCAL_HOSTS = ("127.0.0.1", "localhost")
@@ -119,7 +131,7 @@ MODALIDADES = ("remoto", "hibrido", "presencial")
 _PATH_KEYS = ("db_path", "backup_dir", "frontend_dist", "log_dir", "chrome_profile_dir")
 
 
-def _section(cls, raw: dict, name: str, root: Path):
+def _section(cls, raw: dict, name: str, root: Path, app_root: Path):
     section = raw.get(name)
     if not isinstance(section, dict):
         raise ConfigError(f"Config inválida: seção [{name}] ausente")
@@ -129,7 +141,8 @@ def _section(cls, raw: dict, name: str, root: Path):
         raise ConfigError(f"Config inválida: [{name}] sem as chaves {sorted(missing)}")
     values = {key: section[key] for key in expected}
     if name == "geral":
-        values = {key: (root / Path(val) if key in _PATH_KEYS else val) for key, val in values.items()}
+        base = {"frontend_dist": app_root}  # o front acompanha o app; o resto são dados do usuário
+        values = {key: (base.get(key, root) / Path(val) if key in _PATH_KEYS else val) for key, val in values.items()}
     return cls(**values)
 
 
@@ -148,6 +161,15 @@ def validate(settings: Settings) -> None:
     if ritmo.rolagem_min_s > ritmo.rolagem_max_s:
         raise ConfigError(
             f"Config inválida: rolagem_min_s={ritmo.rolagem_min_s} (esperado <= rolagem_max_s={ritmo.rolagem_max_s})"
+        )
+    if ritmo.pausa_detalhe_min_s > ritmo.pausa_detalhe_max_s:
+        raise ConfigError(
+            f"Config inválida: pausa_detalhe_min_s={ritmo.pausa_detalhe_min_s} "
+            f"(esperado <= pausa_detalhe_max_s={ritmo.pausa_detalhe_max_s})"
+        )
+    if not re.fullmatch(r"[\w.-]+/[\w.-]+", str(settings.atualizacao.repositorio)):
+        raise ConfigError(
+            f"Config inválida: repositorio={settings.atualizacao.repositorio!r} (esperado 'dono/nome' do GitHub)"
         )
     localidades = settings.busca.localidades
     names = [" ".join(item.split()).casefold() for item in localidades] if isinstance(localidades, list) and all(
@@ -179,6 +201,7 @@ def validate(settings: Settings) -> None:
         "max_tentativas_painel": settings.navegador.max_tentativas_painel,
         "max_falhas_termo_seguidas": settings.navegador.max_falhas_termo_seguidas,
         "max_falhas_detalhe_seguidas": settings.navegador.max_falhas_detalhe_seguidas,
+        "atualizacao.timeout_s": settings.atualizacao.timeout_s,
     }
     for name, value in positives.items():
         if value <= 0:
@@ -189,6 +212,7 @@ def validate(settings: Settings) -> None:
         "min_score": settings.filtro.min_score,
         "pausa_min_s": ritmo.pausa_min_s,
         "rolagem_min_s": ritmo.rolagem_min_s,
+        "pausa_detalhe_min_s": ritmo.pausa_detalhe_min_s,
     }
     for name, value in non_negatives.items():
         if value < 0:
@@ -202,18 +226,31 @@ def validate(settings: Settings) -> None:
         raise ConfigError(f"Config inválida: motivos_de_quebra={invalid} (esperado subconjunto de {MOTIVOS})")
 
 
-def settings_from_dict(raw: dict, root: Path) -> Settings:
+def settings_from_dict(raw: dict, root: Path, app_root: Path | None = None) -> Settings:
     sections = {}
     for field in fields(Settings):
         cls = {"linkedin": SearchSite, "indeed": SearchSite}.get(field.name, field.type)
-        sections[field.name] = _section(cls, raw, field.name, root)
+        sections[field.name] = _section(cls, raw, field.name, root, app_root or root)
     settings = Settings(**sections)
     validate(settings)
     return settings
 
 
-def load_settings(path: Path) -> Settings:
-    """Lê o TOML; caminhos relativos partem da raiz do projeto (pai da pasta backend/)."""
+def _read_toml(path: Path) -> dict:
     with open(path, "rb") as handle:
-        raw = tomllib.load(handle)
-    return settings_from_dict(raw, Path(path).resolve().parents[1])
+        return tomllib.load(handle)
+
+
+def load_settings(
+    path: Path, root: Path | None = None, app_root: Path | None = None, defaults: Path | None = None
+) -> Settings:
+    """Lê o TOML; caminhos relativos partem de `root` (padrão: raiz do projeto, pai da pasta backend/).
+
+    `frontend_dist` parte de `app_root` (padrão: `root`): instalado, o app e os dados do usuário ficam em pastas distintas.
+    `defaults` (o config.toml que vem com o app) completa, em memória, seções e chaves que o arquivo do usuário
+    ainda não tem: assim uma versão nova do app, com chaves novas, não quebra o config copiado na instalação."""
+    raw = _read_toml(path)
+    if defaults is not None:
+        base = _read_toml(defaults)
+        raw = {name: {**base.get(name, {}), **raw.get(name, {})} for name in {**base, **raw}}
+    return settings_from_dict(raw, root or Path(path).resolve().parents[1], app_root)

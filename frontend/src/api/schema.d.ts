@@ -353,10 +353,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/atualizacao": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Update
+         * @description Há Release mais nova no GitHub? Só consulta quando instalado e `[atualizacao] verificar = true`.
+         */
+        get: operations["get_update_api_atualizacao_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AtualizacaoOut */
+        AtualizacaoOut: {
+            /** Estado */
+            estado: string;
+            /** Instalada */
+            instalada?: string | null;
+            /** Disponivel */
+            disponivel?: string | null;
+            /** Comando */
+            comando?: string | null;
+        };
         /** BrowserOpenOut */
         BrowserOpenOut: {
             /** Estado */
@@ -491,6 +522,8 @@ export interface components {
             publicada_em: string | null;
             /** Visto */
             visto: boolean;
+            /** Excluida */
+            excluida: boolean;
         };
         /** JobsCleared */
         JobsCleared: {
@@ -536,6 +569,11 @@ export interface components {
             modalidade?: string | null;
             /** Conjunto Id */
             conjunto_id?: number | null;
+            /**
+             * Todos Conjuntos
+             * @default false
+             */
+            todos_conjuntos: boolean;
         };
         /** MarkSeenOut */
         MarkSeenOut: {
@@ -621,7 +659,9 @@ export interface components {
         /** SeenIn */
         SeenIn: {
             /** Visto */
-            visto: boolean;
+            visto?: boolean | null;
+            /** Excluida */
+            excluida?: boolean | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -830,6 +870,8 @@ export interface operations {
                 local?: string | null;
                 modalidade?: string | null;
                 conjunto_id?: number | null;
+                todos_conjuntos?: boolean;
+                excluidas?: boolean;
             };
             header?: never;
             path?: never;
@@ -1419,6 +1461,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_update_api_atualizacao_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AtualizacaoOut"];
                 };
             };
         };

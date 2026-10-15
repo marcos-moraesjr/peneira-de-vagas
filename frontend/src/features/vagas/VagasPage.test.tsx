@@ -35,7 +35,7 @@ describe("VagasPage", () => {
     const user = userEvent.setup();
     const { calls } = setup({ jobs: [makeJob(1)] });
     await screen.findByRole("link", { name: "Engenheiro Mecânico 1" });
-    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Todas", "Não lidas"]);
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Todas", "Não lidas", "Excluídas"]);
     expect(screen.getByRole("tab", { name: "Todas" })).toHaveAttribute("aria-selected", "true");
     expect(calls.some((c) => c.path.startsWith("/api/jobs") && c.path.includes("visto"))).toBe(false);
     await user.click(screen.getByRole("tab", { name: "Não lidas" }));
@@ -302,6 +302,27 @@ describe("VagasPage", () => {
   });
 });
 
+describe("VagasPage — excluir vaga da lista", () => {
+  it("o botão da linha envia excluida=true", async () => {
+    const user = userEvent.setup();
+    const { calls } = setup({ jobs: [makeJob(1)] });
+    await user.click(await screen.findByRole("button", { name: "Excluir vaga Engenheiro Mecânico 1" }));
+    await waitFor(() => expect(calls.find((c) => c.method === "PATCH" && c.path === "/api/jobs/1")?.body).toEqual({ excluida: true }));
+  });
+
+  it("a aba Excluídas pede excluidas=true e o botão da linha restaura a vaga", async () => {
+    const user = userEvent.setup();
+    const { calls } = setup({ jobs: [makeJob(1, { excluida: true })] });
+    await user.click(await screen.findByRole("tab", { name: "Excluídas" }));
+    await waitFor(() => {
+      const last = [...calls].reverse().find((c) => c.path.startsWith("/api/jobs?"));
+      expect(last?.path).toContain("excluidas=true");
+    });
+    await user.click(await screen.findByRole("button", { name: "Restaurar vaga Engenheiro Mecânico 1" }));
+    await waitFor(() => expect(calls.find((c) => c.method === "PATCH" && c.path === "/api/jobs/1")?.body).toEqual({ excluida: false }));
+  });
+});
+
 describe("VagasPage — seletor de conjunto", () => {
   const conjuntos = [
     { id: 1, nome: "Mecânica", ativo: true },
@@ -331,6 +352,18 @@ describe("VagasPage — seletor de conjunto", () => {
     await waitFor(() => expect(calls.find((c) => c.path === "/api/jobs/mark-seen")?.body).toEqual({ conjunto_id: 2 }));
     await user.click(screen.getByRole("button", { name: "Excluir todas as vagas" }));
     await waitFor(() => expect(calls.some((c) => c.method === "DELETE" && c.path === "/api/jobs?conjunto_id=2")).toBe(true));
+  });
+
+  it("a opção Todos tira o filtro de conjunto da lista e do marcar como vistas, e bloqueia excluir", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const { calls } = setup({ jobs: [makeJob(1)], extra: { "GET /api/conjuntos": conjuntos } });
+    await user.selectOptions(await screen.findByLabelText("Conjunto"), "todos");
+    await waitFor(() => expect(ultimaListagem(calls)).toContain("todos_conjuntos=true"));
+    expect(ultimaListagem(calls)).not.toContain("conjunto_id");
+    await user.click(screen.getByRole("button", { name: "Marcar todas como vistas" }));
+    await waitFor(() => expect(calls.find((c) => c.path === "/api/jobs/mark-seen")?.body).toEqual({ todos_conjuntos: true }));
+    expect(screen.getByRole("button", { name: "Excluir todas as vagas" })).toBeDisabled();
   });
 
   it("a confirmação de excluir nomeia o conjunto", async () => {

@@ -76,6 +76,7 @@ export function makeJob(id: number, overrides: Record<string, unknown> = {}) {
     palavra_chave: "",
     publicada_em: null,
     visto: false,
+    excluida: false,
     ...overrides,
   };
 }

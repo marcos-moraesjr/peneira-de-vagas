@@ -1,6 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiSend } from "./client";
-import type { BrowserStatus, Config, Conjunto, Health, Job, JobsPage, Keyword, KeywordType, Run, Scanner } from "./types";
+import type { Atualizacao, BrowserStatus, Config, Conjunto, Health, Job, JobsPage, Keyword, KeywordType, Run, Scanner } from "./types";
 
 export function useHealth() {
   return useQuery({ queryKey: ["health"], queryFn: () => apiGet<Health>("/api/health") });
@@ -108,6 +108,8 @@ export type JobFilters = {
   q?: string;
   local?: string;
   conjuntoId?: number;
+  todosConjuntos?: boolean;
+  excluidas?: boolean;
   ordenar?: string;
   direcao?: "asc" | "desc";
   maxDias?: number;
@@ -124,6 +126,8 @@ export function useJobs(filters: JobFilters, page: number, live = false) {
   if (filters.q) params.set("q", filters.q);
   if (filters.local) params.set("local", filters.local);
   if (filters.conjuntoId !== undefined) params.set("conjunto_id", String(filters.conjuntoId));
+  if (filters.todosConjuntos) params.set("todos_conjuntos", "true");
+  if (filters.excluidas) params.set("excluidas", "true");
   if (filters.maxDias !== undefined) params.set("max_dias", String(filters.maxDias));
   if (filters.ordenar) params.set("ordenar", filters.ordenar);
   if (filters.ordenar && filters.direcao) params.set("direcao", filters.direcao);
@@ -153,10 +157,18 @@ export function useSetSeen() {
   });
 }
 
+export function useSetExcluida() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, excluida }: { id: number; excluida: boolean }) => apiSend<Job>("PATCH", `/api/jobs/${id}`, { excluida }),
+    onSettled: () => client.invalidateQueries({ queryKey: ["jobs"] }),
+  });
+}
+
 export function useMarkAllSeen() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (filters: { fonte?: string; q?: string; local?: string; max_dias?: number; conjunto_id?: number }) =>
+    mutationFn: (filters: { fonte?: string; q?: string; local?: string; max_dias?: number; conjunto_id?: number; todos_conjuntos?: boolean }) =>
       apiSend<{ atualizadas: number }>("POST", "/api/jobs/mark-seen", filters),
     onSuccess: () => client.invalidateQueries({ queryKey: ["jobs"] }),
   });
@@ -168,6 +180,16 @@ export function useClearJobs() {
     mutationFn: (conjuntoId?: number) =>
       apiSend<{ removidas: number }>("DELETE", conjuntoId === undefined ? "/api/jobs" : `/api/jobs?conjunto_id=${conjuntoId}`),
     onSuccess: () => client.invalidateQueries({ queryKey: ["jobs"] }),
+  });
+}
+
+/** Há versão nova do app? Consulta uma vez por sessão (a API fala com o GitHub); falha vira "sem aviso". */
+export function useAtualizacao() {
+  return useQuery({
+    queryKey: ["atualizacao"],
+    queryFn: () => apiGet<Atualizacao>("/api/atualizacao"),
+    staleTime: Infinity,
+    retry: false,
   });
 }
 

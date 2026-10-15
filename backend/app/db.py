@@ -162,10 +162,13 @@ DROP TABLE jobs;
 ALTER TABLE jobs_novo RENAME TO jobs;
 """
 
+_MIGRATION_V10 = "ALTER TABLE jobs ADD COLUMN excluida INTEGER NOT NULL DEFAULT 0;"
+
 # Versão do esquema → script. Banco existente é copiado para backup_dir antes de qualquer migração.
 MIGRATIONS = {
     1: _SCHEMA_V1, 2: _MIGRATION_V2, 3: _MIGRATION_V3, 4: _MIGRATION_V4,
     5: _MIGRATION_V5, 6: _MIGRATION_V6, 7: _MIGRATION_V7, 8: _MIGRATION_V8, 9: _MIGRATION_V9,
+    10: _MIGRATION_V10,
 }
 SCHEMA_VERSION = max(MIGRATIONS)
 

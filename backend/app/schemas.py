@@ -76,6 +76,7 @@ class JobOut(BaseModel):
     palavra_chave: str
     publicada_em: str | None
     visto: bool
+    excluida: bool
 
 
 class JobsPage(BaseModel):
@@ -84,7 +85,8 @@ class JobsPage(BaseModel):
 
 
 class SeenIn(BaseModel):
-    visto: bool
+    visto: bool | None = None
+    excluida: bool | None = None
 
 
 class MarkSeenIn(BaseModel):
@@ -94,6 +96,7 @@ class MarkSeenIn(BaseModel):
     local: str | None = None
     modalidade: str | None = None
     conjunto_id: int | None = None
+    todos_conjuntos: bool = False
 
 
 class MarkSeenOut(BaseModel):
@@ -178,5 +181,12 @@ class BrowserOpenOut(BaseModel):
 
 class InstructionOut(BaseModel):
     instrucao: str
+
+
+class AtualizacaoOut(BaseModel):
+    estado: str  # desligado | desenvolvimento | indisponivel | atualizado | disponivel
+    instalada: str | None = None
+    disponivel: str | None = None
+    comando: str | None = None
 
 

@@ -27,12 +27,14 @@ def resolve_conjunto(conn: sqlite3.Connection, conjunto_id: int | None) -> int:
 
 
 def _where(
-    conjunto_id: int, visto: bool | None, fonte: str | None, q: str | None, corte: str | None = None,
-    local: str | None = None, modalidade: str | None = None,
+    conjunto_id: int | None, visto: bool | None, fonte: str | None, q: str | None, corte: str | None = None,
+    local: str | None = None, modalidade: str | None = None, excluidas: bool = False,
 ) -> tuple[str, list]:
     if modalidade and modalidade not in MODALIDADES:
         raise DomainError(f"modalidade={modalidade!r}: esperado um de {list(MODALIDADES)}")
-    clauses, params = ["conjunto_id=?"], [conjunto_id]
+    clauses, params = ([], []) if conjunto_id is None else (["conjunto_id=?"], [conjunto_id])  # None: todos os conjuntos
+    clauses.append("excluida=?")  # a lista comum esconde as excluídas; `excluidas` mostra só elas
+    params.append(int(excluidas))
     if visto is not None:
         clauses.append("visto=?")
         params.append(int(visto))
@@ -58,7 +60,7 @@ def _where(
 
 def _to_dict(row: sqlite3.Row) -> dict:
     cidade, estado = split_localidade(row["localidade"])
-    return {**dict(row), "cidade": cidade, "estado": estado, "visto": bool(row["visto"])}
+    return {**dict(row), "cidade": cidade, "estado": estado, "visto": bool(row["visto"]), "excluida": bool(row["excluida"])}
 
 
 MODALIDADES = ("remoto", "hibrido", "presencial")
@@ -96,11 +98,11 @@ def list_jobs(
     conn, visto: bool | None, fonte: str | None, q: str | None, limit: int, offset: int,
     ordenar: str | None = None, direcao: str | None = None, corte: str | None = None,
     local: str | None = None, modalidade: str | None = None,
-    conjunto_id: int | None = None,
+    conjunto_id: int | None = None, todos_conjuntos: bool = False, excluidas: bool = False,
 ) -> dict:
-    """Vagas do conjunto pedido (padrão: o ativo)."""
+    """Vagas do conjunto pedido (padrão: o ativo); `todos_conjuntos` tira o filtro de conjunto."""
     order = _order_by(ordenar, direcao)
-    where, params = _where(resolve_conjunto(conn, conjunto_id), visto, fonte, q, corte, local, modalidade)
+    where, params = _where(None if todos_conjuntos else resolve_conjunto(conn, conjunto_id), visto, fonte, q, corte, local, modalidade, excluidas)
     total = conn.execute(f"SELECT COUNT(*) FROM jobs{where}", params).fetchone()[0]
     rows = conn.execute(
         f"SELECT * FROM jobs{where} ORDER BY {order} LIMIT ? OFFSET ?",
@@ -109,8 +111,14 @@ def list_jobs(
     return {"items": [_to_dict(row) for row in rows], "total": total}
 
 
-def set_seen(conn, job_id: int, visto: bool) -> dict:
-    cursor = conn.execute("UPDATE jobs SET visto=? WHERE id=?", (int(visto), job_id))
+def update_job(conn, job_id: int, visto: bool | None, excluida: bool | None) -> dict:
+    """Muda `visto` e/ou `excluida` (exclusão lógica: a vaga fica no banco e a deduplicação a reconhece)."""
+    campos = {"visto": visto, "excluida": excluida}
+    campos = {nome: int(valor) for nome, valor in campos.items() if valor is not None}
+    if not campos:
+        raise DomainError("Informe visto e/ou excluida")
+    atribuicoes = ", ".join(f"{nome}=?" for nome in campos)
+    cursor = conn.execute(f"UPDATE jobs SET {atribuicoes} WHERE id=?", [*campos.values(), job_id])
     conn.commit()
     if cursor.rowcount == 0:
         raise NotFound(f"Vaga inexistente: id={job_id}")
@@ -128,10 +136,10 @@ def clear_all(conn, conjunto_id: int | None = None) -> int:
 def mark_seen(
     conn, fonte: str | None, q: str | None, corte: str | None = None,
     local: str | None = None, modalidade: str | None = None,
-    conjunto_id: int | None = None,
+    conjunto_id: int | None = None, todos_conjuntos: bool = False,
 ) -> int:
-    """Marca como vistas as ainda não vistas do conjunto pedido (padrão: o ativo) que casam com os filtros."""
-    where, params = _where(resolve_conjunto(conn, conjunto_id), False, fonte, q, corte, local, modalidade)
+    """Marca como vistas as ainda não vistas do conjunto pedido (padrão: o ativo; `todos_conjuntos`: de todos) que casam com os filtros."""
+    where, params = _where(None if todos_conjuntos else resolve_conjunto(conn, conjunto_id), False, fonte, q, corte, local, modalidade)
     cursor = conn.execute(f"UPDATE jobs SET visto=1{where}", params)
     conn.commit()
     return cursor.rowcount

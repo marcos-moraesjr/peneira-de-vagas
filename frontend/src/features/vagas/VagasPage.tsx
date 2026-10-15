@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { useClearJobs, useConfig, useConjuntos, useJobs, useKeywords, useMarkAllSeen, useRuns, useSetSeen, useStartRun } from "../../api/hooks";
+import { useClearJobs, useConfig, useConjuntos, useJobs, useKeywords, useMarkAllSeen, useRuns, useSetExcluida, useSetSeen, useStartRun } from "../../api/hooks";
 import type { SeenFilter } from "../../api/types";
 import { buttonSecondary, inputClass } from "../../components/ui";
 import { SOURCES, sourceLabel } from "../../lib/failures";
@@ -9,6 +9,7 @@ import { ChromeStatus } from "./ChromeStatus";
 import { FailureBanner } from "./FailureBanner";
 import { RunBar, RunStatus } from "./RunBar";
 import { ScannerBanner } from "./ScannerBanner";
+import { UpdateNotice } from "./UpdateNotice";
 import { VerificationPrompt } from "./VerificationPrompt";
 import { Pagination } from "./Pagination";
 import { JobsList, type Sort, type SortColumn } from "./JobsList";
@@ -16,6 +17,7 @@ import { JobsList, type Sort, type SortColumn } from "./JobsList";
 const TABS: { id: SeenFilter; label: string }[] = [
   { id: "todas", label: "Todas" },
   { id: "novas", label: "Não lidas" },
+  { id: "excluidas", label: "Excluídas" },
 ];
 
 /** Quando a execução mais recente passa de 'executando' para 'concluida', recarrega as vagas. */
@@ -52,6 +54,8 @@ function nextSort(current: Sort, column: SortColumn): Sort {
   return current.direction === first ? { column, direction: first === "asc" ? "desc" : "asc" } : null;
 }
 
+const TODOS = "todos";
+
 export function VagasPage() {
   const [seen, setSeen] = useState<SeenFilter>("todas");
   const [fonte, setFonte] = useState("");
@@ -60,22 +64,24 @@ export function VagasPage() {
   const [maxDias, setMaxDias] = useState("");
   const [page, setPage] = useState(1);
   const [sort, setSort] = useState<Sort>(null);
-  const [conjuntoEscolhido, setConjuntoEscolhido] = useState<number | null>(null);
+  const [conjuntoEscolhido, setConjuntoEscolhido] = useState<number | typeof TODOS | null>(null);
   const [localidade, setLocalidade] = useState("");
   const [modalidadeBusca, setModalidadeBusca] = useState("");
   const [janelaDias, setJanelaDias] = useState<string | undefined>();
 
   const conjuntos = useConjuntos().data ?? [];
   // Sem escolha (ou com o conjunto escolhido já excluído), a lista acompanha o conjunto ativo (o servidor decide).
-  const conjuntoId = conjuntos.some((item) => item.id === conjuntoEscolhido) ? (conjuntoEscolhido ?? undefined) : undefined;
-  const conjuntoMostrado = conjuntos.find((item) => item.id === (conjuntoId ?? conjuntos.find((c) => c.ativo)?.id));
+  const todosConjuntos = conjuntoEscolhido === TODOS;
+  const conjuntoId = todosConjuntos ? undefined : conjuntos.some((item) => item.id === conjuntoEscolhido) ? (conjuntoEscolhido ?? undefined) : undefined;
+  const conjuntoMostrado = todosConjuntos ? undefined : conjuntos.find((item) => item.id === (conjuntoId ?? conjuntos.find((c) => c.ativo)?.id));
   const maxDiasValue = maxDias === "" ? undefined : Number(maxDias);
   const runs = useRuns();
   const latest = runs.data?.[0];
   const keywords = useKeywords("busca");
   const startRun = useStartRun();
-  const jobs = useJobs({ visto: seen === "novas" ? false : undefined, fonte, q, local, conjuntoId, ordenar: sort?.column, direcao: sort?.direction, maxDias: maxDiasValue }, page, latest?.status === "executando");
+  const jobs = useJobs({ visto: seen === "novas" ? false : undefined, fonte, q, local, conjuntoId, todosConjuntos, excluidas: seen === "excluidas", ordenar: sort?.column, direcao: sort?.direction, maxDias: maxDiasValue }, page, latest?.status === "executando");
   const setSeenMutation = useSetSeen();
+  const setExcluida = useSetExcluida();
   const markAll = useMarkAllSeen();
   const clearJobs = useClearJobs();
   useReloadJobsWhenRunFinishes(latest?.status);
@@ -92,7 +98,7 @@ export function VagasPage() {
 
   function markAllSeen() {
     if (window.confirm("Marcar todas as vagas filtradas como vistas?")) {
-      markAll.mutate({ fonte: fonte || undefined, q: q || undefined, local: local || undefined, max_dias: maxDiasValue, conjunto_id: conjuntoId });
+      markAll.mutate({ fonte: fonte || undefined, q: q || undefined, local: local || undefined, max_dias: maxDiasValue, conjunto_id: conjuntoId, ...(todosConjuntos ? { todos_conjuntos: true } : {}) });
     }
   }
 
@@ -135,6 +141,7 @@ export function VagasPage() {
       </ChromeStatus>
       <FailureBanner run={latest} onRestart={runSearch} restarting={startRun.isPending} />
       <ScannerBanner />
+      <UpdateNotice />
       <section aria-label="Filtros da lista" className="space-y-2 rounded-painel border border-linha bg-painel px-4 py-3">
       <div className="flex flex-wrap items-baseline gap-x-3">
         <h2 className="text-sm font-semibold text-grafite-900">Filtrar vagas encontradas</h2>
@@ -145,13 +152,14 @@ export function VagasPage() {
           <label className="flex items-center gap-2 text-sm text-grafite-700">
             Conjunto
             <select
-              value={conjuntoMostrado?.id ?? ""}
+              value={todosConjuntos ? TODOS : (conjuntoMostrado?.id ?? "")}
               onChange={(event) => {
-                setConjuntoEscolhido(Number(event.target.value));
+                setConjuntoEscolhido(event.target.value === TODOS ? TODOS : Number(event.target.value));
                 setPage(1);
               }}
               className={inputClass}
             >
+              <option value={TODOS}>Todos</option>
               {conjuntos.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.ativo ? `${item.nome} (ativo)` : item.nome}
@@ -228,7 +236,7 @@ export function VagasPage() {
           <button type="button" className={buttonSecondary} onClick={markAllSeen}>
             Marcar todas como vistas
           </button>
-          <button type="button" className={buttonSecondary} disabled={clearJobs.isPending} onClick={deleteAll}>
+          <button type="button" className={buttonSecondary} disabled={clearJobs.isPending || todosConjuntos} title={todosConjuntos ? "Escolha um conjunto para excluir as vagas dele" : undefined} onClick={deleteAll}>
             Excluir todas as vagas
           </button>
         </div>
@@ -243,13 +251,16 @@ export function VagasPage() {
             ? "Nenhuma busca feita ainda. Use os controles acima ou a aba Parâmetros de busca."
             : seen === "novas"
               ? "Nenhuma vaga nova."
-              : "Nenhuma vaga encontrada."}
+              : seen === "excluidas"
+                ? "Nenhuma vaga excluída."
+                : "Nenhuma vaga encontrada."}
         </p>
       )}
       {items.length > 0 && (
         <JobsList
           jobs={items}
           onSeen={(job, visto) => setSeenMutation.mutate({ id: job.id, visto })}
+          onExcluir={(job, excluida) => setExcluida.mutate({ id: job.id, excluida })}
           sort={sort}
           onSort={(column) => setSort((current) => nextSort(current, column))}
         />

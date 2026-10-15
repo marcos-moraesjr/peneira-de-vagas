@@ -382,6 +382,26 @@
               ],
               "title": "Conjunto Id"
             }
+          },
+          {
+            "name": "todos_conjuntos",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Todos Conjuntos"
+            }
+          },
+          {
+            "name": "excluidas",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Excluidas"
+            }
           }
         ],
         "responses": {
@@ -1088,10 +1108,75 @@
           }
         }
       }
+    },
+    "/api/atualizacao": {
+      "get": {
+        "summary": "Get Update",
+        "description": "Há Release mais nova no GitHub? Só consulta quando instalado e `[atualizacao] verificar = true`.",
+        "operationId": "get_update_api_atualizacao_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AtualizacaoOut"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "AtualizacaoOut": {
+        "properties": {
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "instalada": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instalada"
+          },
+          "disponivel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disponivel"
+          },
+          "comando": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comando"
+          }
+        },
+        "type": "object",
+        "required": [
+          "estado"
+        ],
+        "title": "AtualizacaoOut"
+      },
       "BrowserOpenOut": {
         "properties": {
           "estado": {
@@ -1442,6 +1527,10 @@
           "visto": {
             "type": "boolean",
             "title": "Visto"
+          },
+          "excluida": {
+            "type": "boolean",
+            "title": "Excluida"
           }
         },
         "type": "object",
@@ -1462,7 +1551,8 @@
           "modalidade",
           "palavra_chave",
           "publicada_em",
-          "visto"
+          "visto",
+          "excluida"
         ],
         "title": "JobOut"
       },
@@ -1613,6 +1703,11 @@
               }
             ],
             "title": "Conjunto Id"
+          },
+          "todos_conjuntos": {
+            "type": "boolean",
+            "title": "Todos Conjuntos",
+            "default": false
           }
         },
         "type": "object",
@@ -1890,14 +1985,29 @@
       "SeenIn": {
         "properties": {
           "visto": {
-            "type": "boolean",
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Visto"
+          },
+          "excluida": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Excluida"
           }
         },
         "type": "object",
-        "required": [
-          "visto"
-        ],
         "title": "SeenIn"
       },
       "ValidationError": {
