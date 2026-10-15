@@ -9,13 +9,14 @@ type Props = {
   jobs: Job[];
   onSeen: (job: Job, visto: boolean) => void;
   onExcluir: (job: Job, excluida: boolean) => void;
+  onCandidatar: (job: Job, candidatada: boolean) => void;
   sort: Sort;
   onSort: (column: SortColumn) => void;
 };
 
 // `width`: largura da coluna na tabela de layout fixo (soma 100%), para a tabela caber sem rolagem lateral.
 const COLUMNS: { label: string; column: SortColumn; width: string }[] = [
-  { label: "Vaga", column: "titulo", width: "w-[20%]" },
+  { label: "Vaga", column: "titulo", width: "w-[18%]" },
   { label: "Empresa", column: "empresa", width: "w-[12%]" },
   { label: "Palavra-chave", column: "palavra_chave", width: "w-[10%]" },
   { label: "Cidade", column: "cidade", width: "w-[8%]" },
@@ -26,11 +27,14 @@ const COLUMNS: { label: string; column: SortColumn; width: string }[] = [
   { label: "Plataforma", column: "fonte", width: "w-[8%]" },
   { label: "Pontos", column: "pontos", width: "w-[6%]" },
 ];
-const ACTION_WIDTH = "w-[5%]";
+const ACTION_WIDTH = "w-[7%]";
 const MAX_POINTS = 10;
 const cell = "px-3 py-2 align-middle break-words";
 
-export function JobsList({ jobs, onSeen, onExcluir, sort, onSort }: Props) {
+const actionButton = "rounded-botao px-2 py-1 text-grafite-500 hover:bg-linha-2 hover:text-grafite-900";
+
+export function JobsList({ jobs, onSeen, onExcluir, onCandidatar, sort, onSort }: Props) {
+  const mostrarCandidatura = jobs.some((job) => job.candidatada); // só na aba Candidaturas
   return (
     <div className="max-h-[65vh] overflow-y-auto rounded-painel border border-linha bg-painel">
       <table className="w-full table-fixed text-left text-sm">
@@ -57,21 +61,39 @@ export function JobsList({ jobs, onSeen, onExcluir, sort, onSort }: Props) {
                 </th>
               );
             })}
+            {mostrarCandidatura && (
+              <th scope="col" className="w-[8%] px-3 py-3 font-semibold">
+                Candidatura
+              </th>
+            )}
           </tr>
         </thead>
         <tbody className="divide-y divide-linha-2">
           {jobs.map((job) => (
             <tr key={job.id} className={`text-[13px] ${job.visto ? "text-grafite-500" : "bg-sinal-ponto/10 text-grafite-700"}`}>
               <td className={`${cell} text-center`}>
-                <button
-                  type="button"
-                  onClick={() => onExcluir(job, !job.excluida)}
-                  aria-label={`${job.excluida ? "Restaurar" : "Excluir"} vaga ${job.titulo}`}
-                  title={job.excluida ? "Restaurar na lista" : "Remover da lista"}
-                  className="rounded-botao px-2 py-1 text-grafite-500 hover:bg-linha-2 hover:text-grafite-900"
-                >
-                  {job.excluida ? "↩" : "✕"}
-                </button>
+                {!job.candidatada && (
+                  <button
+                    type="button"
+                    onClick={() => onExcluir(job, !job.excluida)}
+                    aria-label={`${job.excluida ? "Restaurar" : "Excluir"} vaga ${job.titulo}`}
+                    title={job.excluida ? "Restaurar na lista" : "Remover da lista"}
+                    className={actionButton}
+                  >
+                    {job.excluida ? "↩" : "✕"}
+                  </button>
+                )}
+                {!job.excluida && (
+                  <button
+                    type="button"
+                    onClick={() => onCandidatar(job, !job.candidatada)}
+                    aria-label={`${job.candidatada ? "Desfazer candidatura na" : "Marcar candidatura na"} vaga ${job.titulo}`}
+                    title={job.candidatada ? "Voltar para a lista" : "Candidatei-me a esta vaga"}
+                    className={actionButton}
+                  >
+                    {job.candidatada ? "↩" : "✓"}
+                  </button>
+                )}
               </td>
               <td className={cell}>
                 <div className="flex items-center gap-2">
@@ -107,6 +129,7 @@ export function JobsList({ jobs, onSeen, onExcluir, sort, onSort }: Props) {
                   <span className="w-4 text-right text-dado text-grafite-900">{job.pontos}</span>
                 </div>
               </td>
+              {mostrarCandidatura && <td className={`${cell} whitespace-nowrap text-legenda`}>{job.candidatada_em ? formatDay(job.candidatada_em) : "—"}</td>}
             </tr>
           ))}
         </tbody>

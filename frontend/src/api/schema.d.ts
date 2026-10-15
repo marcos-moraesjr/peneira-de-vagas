@@ -524,6 +524,10 @@ export interface components {
             visto: boolean;
             /** Excluida */
             excluida: boolean;
+            /** Candidatada */
+            candidatada: boolean;
+            /** Candidatada Em */
+            candidatada_em: string | null;
         };
         /** JobsCleared */
         JobsCleared: {
@@ -662,6 +666,8 @@ export interface components {
             visto?: boolean | null;
             /** Excluida */
             excluida?: boolean | null;
+            /** Candidatada */
+            candidatada?: boolean | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -872,6 +878,7 @@ export interface operations {
                 conjunto_id?: number | null;
                 todos_conjuntos?: boolean;
                 excluidas?: boolean;
+                candidatadas?: boolean;
             };
             header?: never;
             path?: never;

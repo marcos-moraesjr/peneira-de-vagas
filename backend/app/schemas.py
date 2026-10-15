@@ -77,6 +77,8 @@ class JobOut(BaseModel):
     publicada_em: str | None
     visto: bool
     excluida: bool
+    candidatada: bool
+    candidatada_em: str | None
 
 
 class JobsPage(BaseModel):
@@ -87,6 +89,7 @@ class JobsPage(BaseModel):
 class SeenIn(BaseModel):
     visto: bool | None = None
     excluida: bool | None = None
+    candidatada: bool | None = None
 
 
 class MarkSeenIn(BaseModel):

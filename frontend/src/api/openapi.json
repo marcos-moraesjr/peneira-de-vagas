@@ -402,6 +402,16 @@
               "default": false,
               "title": "Excluidas"
             }
+          },
+          {
+            "name": "candidatadas",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Candidatadas"
+            }
           }
         ],
         "responses": {
@@ -1531,6 +1541,21 @@
           "excluida": {
             "type": "boolean",
             "title": "Excluida"
+          },
+          "candidatada": {
+            "type": "boolean",
+            "title": "Candidatada"
+          },
+          "candidatada_em": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidatada Em"
           }
         },
         "type": "object",
@@ -1552,7 +1577,9 @@
           "palavra_chave",
           "publicada_em",
           "visto",
-          "excluida"
+          "excluida",
+          "candidatada",
+          "candidatada_em"
         ],
         "title": "JobOut"
       },
@@ -2005,6 +2032,17 @@
               }
             ],
             "title": "Excluida"
+          },
+          "candidatada": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidatada"
           }
         },
         "type": "object",

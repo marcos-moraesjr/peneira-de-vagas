@@ -12,7 +12,7 @@ export type Config = Schemas["ConfigOut"];
 export type Health = Schemas["HealthOut"];
 
 export type KeywordType = "busca" | "ranking" | "exclusao";
-export type SeenFilter = "novas" | "todas" | "excluidas";
+export type SeenFilter = "novas" | "todas" | "excluidas" | "candidatadas";
 export type Scanner = Schemas["ScannerOut"];
 export type Atualizacao = Schemas["AtualizacaoOut"];
 export type BrowserStatus = Schemas["BrowserOut"];

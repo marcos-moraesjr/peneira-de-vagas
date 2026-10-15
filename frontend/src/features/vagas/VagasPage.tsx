@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { useClearJobs, useConfig, useConjuntos, useJobs, useKeywords, useMarkAllSeen, useRuns, useSetExcluida, useSetSeen, useStartRun } from "../../api/hooks";
+import { useClearJobs, useConfig, useConjuntos, useJobs, useKeywords, useMarkAllSeen, useRuns, useSetCandidatada, useSetExcluida, useSetSeen, useStartRun } from "../../api/hooks";
 import type { SeenFilter } from "../../api/types";
 import { buttonSecondary, inputClass } from "../../components/ui";
 import { SOURCES, sourceLabel } from "../../lib/failures";
@@ -17,6 +17,7 @@ import { JobsList, type Sort, type SortColumn } from "./JobsList";
 const TABS: { id: SeenFilter; label: string }[] = [
   { id: "todas", label: "Todas" },
   { id: "novas", label: "Não lidas" },
+  { id: "candidatadas", label: "Candidaturas" },
   { id: "excluidas", label: "Excluídas" },
 ];
 
@@ -79,9 +80,10 @@ export function VagasPage() {
   const latest = runs.data?.[0];
   const keywords = useKeywords("busca");
   const startRun = useStartRun();
-  const jobs = useJobs({ visto: seen === "novas" ? false : undefined, fonte, q, local, conjuntoId, todosConjuntos, excluidas: seen === "excluidas", ordenar: sort?.column, direcao: sort?.direction, maxDias: maxDiasValue }, page, latest?.status === "executando");
+  const jobs = useJobs({ visto: seen === "novas" ? false : undefined, fonte, q, local, conjuntoId, todosConjuntos, excluidas: seen === "excluidas", candidatadas: seen === "candidatadas", ordenar: sort?.column, direcao: sort?.direction, maxDias: maxDiasValue }, page, latest?.status === "executando");
   const setSeenMutation = useSetSeen();
   const setExcluida = useSetExcluida();
+  const setCandidatada = useSetCandidatada();
   const markAll = useMarkAllSeen();
   const clearJobs = useClearJobs();
   useReloadJobsWhenRunFinishes(latest?.status);
@@ -253,7 +255,9 @@ export function VagasPage() {
               ? "Nenhuma vaga nova."
               : seen === "excluidas"
                 ? "Nenhuma vaga excluída."
-                : "Nenhuma vaga encontrada."}
+                : seen === "candidatadas"
+                  ? "Nenhuma candidatura marcada."
+                  : "Nenhuma vaga encontrada."}
         </p>
       )}
       {items.length > 0 && (
@@ -261,6 +265,7 @@ export function VagasPage() {
           jobs={items}
           onSeen={(job, visto) => setSeenMutation.mutate({ id: job.id, visto })}
           onExcluir={(job, excluida) => setExcluida.mutate({ id: job.id, excluida })}
+          onCandidatar={(job, candidatada) => setCandidatada.mutate({ id: job.id, candidatada })}
           sort={sort}
           onSort={(column) => setSort((current) => nextSort(current, column))}
         />

@@ -28,13 +28,15 @@ def resolve_conjunto(conn: sqlite3.Connection, conjunto_id: int | None) -> int:
 
 def _where(
     conjunto_id: int | None, visto: bool | None, fonte: str | None, q: str | None, corte: str | None = None,
-    local: str | None = None, modalidade: str | None = None, excluidas: bool = False,
+    local: str | None = None, modalidade: str | None = None, excluidas: bool = False, candidatadas: bool = False,
 ) -> tuple[str, list]:
     if modalidade and modalidade not in MODALIDADES:
         raise DomainError(f"modalidade={modalidade!r}: esperado um de {list(MODALIDADES)}")
     clauses, params = ([], []) if conjunto_id is None else (["conjunto_id=?"], [conjunto_id])  # None: todos os conjuntos
     clauses.append("excluida=?")  # a lista comum esconde as excluídas; `excluidas` mostra só elas
     params.append(int(excluidas))
+    clauses.append("candidatada=?")  # idem para as candidaturas (categoria própria)
+    params.append(int(candidatadas))
     if visto is not None:
         clauses.append("visto=?")
         params.append(int(visto))
@@ -60,7 +62,7 @@ def _where(
 
 def _to_dict(row: sqlite3.Row) -> dict:
     cidade, estado = split_localidade(row["localidade"])
-    return {**dict(row), "cidade": cidade, "estado": estado, "visto": bool(row["visto"]), "excluida": bool(row["excluida"])}
+    return {**dict(row), "cidade": cidade, "estado": estado, "visto": bool(row["visto"]), "excluida": bool(row["excluida"]), "candidatada": bool(row["candidatada"])}
 
 
 MODALIDADES = ("remoto", "hibrido", "presencial")
@@ -98,11 +100,11 @@ def list_jobs(
     conn, visto: bool | None, fonte: str | None, q: str | None, limit: int, offset: int,
     ordenar: str | None = None, direcao: str | None = None, corte: str | None = None,
     local: str | None = None, modalidade: str | None = None,
-    conjunto_id: int | None = None, todos_conjuntos: bool = False, excluidas: bool = False,
+    conjunto_id: int | None = None, todos_conjuntos: bool = False, excluidas: bool = False, candidatadas: bool = False,
 ) -> dict:
     """Vagas do conjunto pedido (padrão: o ativo); `todos_conjuntos` tira o filtro de conjunto."""
-    order = _order_by(ordenar, direcao)
-    where, params = _where(None if todos_conjuntos else resolve_conjunto(conn, conjunto_id), visto, fonte, q, corte, local, modalidade, excluidas)
+    order = "candidatada_em DESC, id DESC" if candidatadas and ordenar is None else _order_by(ordenar, direcao)  # candidaturas: a mais recente primeiro
+    where, params = _where(None if todos_conjuntos else resolve_conjunto(conn, conjunto_id), visto, fonte, q, corte, local, modalidade, excluidas, candidatadas)
     total = conn.execute(f"SELECT COUNT(*) FROM jobs{where}", params).fetchone()[0]
     rows = conn.execute(
         f"SELECT * FROM jobs{where} ORDER BY {order} LIMIT ? OFFSET ?",
@@ -111,12 +113,19 @@ def list_jobs(
     return {"items": [_to_dict(row) for row in rows], "total": total}
 
 
-def update_job(conn, job_id: int, visto: bool | None, excluida: bool | None) -> dict:
-    """Muda `visto` e/ou `excluida` (exclusão lógica: a vaga fica no banco e a deduplicação a reconhece)."""
-    campos = {"visto": visto, "excluida": excluida}
+def update_job(conn, job_id: int, visto: bool | None, excluida: bool | None, candidatada: bool | None = None, agora: str | None = None) -> dict:
+    """Muda `visto`, `excluida` e/ou `candidatada` (lógico: a vaga fica no banco e a deduplicação a reconhece).
+    Marcar uma de `excluida`/`candidatada` desmarca a outra: a vaga está numa categoria só."""
+    campos = {"visto": visto, "excluida": excluida, "candidatada": candidatada}
     campos = {nome: int(valor) for nome, valor in campos.items() if valor is not None}
     if not campos:
-        raise DomainError("Informe visto e/ou excluida")
+        raise DomainError("Informe visto, excluida e/ou candidatada")
+    if campos.get("excluida") and "candidatada" not in campos:
+        campos["candidatada"] = 0
+    if campos.get("candidatada") and "excluida" not in campos:
+        campos["excluida"] = 0
+    if "candidatada" in campos:  # a data registra quando a candidatura foi marcada; desfazer a limpa
+        campos["candidatada_em"] = agora if campos["candidatada"] else None
     atribuicoes = ", ".join(f"{nome}=?" for nome in campos)
     cursor = conn.execute(f"UPDATE jobs SET {atribuicoes} WHERE id=?", [*campos.values(), job_id])
     conn.commit()

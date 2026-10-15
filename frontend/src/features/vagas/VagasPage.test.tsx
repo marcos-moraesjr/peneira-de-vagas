@@ -35,7 +35,7 @@ describe("VagasPage", () => {
     const user = userEvent.setup();
     const { calls } = setup({ jobs: [makeJob(1)] });
     await screen.findByRole("link", { name: "Engenheiro Mecânico 1" });
-    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Todas", "Não lidas", "Excluídas"]);
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Todas", "Não lidas", "Candidaturas", "Excluídas"]);
     expect(screen.getByRole("tab", { name: "Todas" })).toHaveAttribute("aria-selected", "true");
     expect(calls.some((c) => c.path.startsWith("/api/jobs") && c.path.includes("visto"))).toBe(false);
     await user.click(screen.getByRole("tab", { name: "Não lidas" }));
@@ -320,6 +320,35 @@ describe("VagasPage — excluir vaga da lista", () => {
     });
     await user.click(await screen.findByRole("button", { name: "Restaurar vaga Engenheiro Mecânico 1" }));
     await waitFor(() => expect(calls.find((c) => c.method === "PATCH" && c.path === "/api/jobs/1")?.body).toEqual({ excluida: false }));
+  });
+});
+
+describe("VagasPage — vagas candidatadas", () => {
+  it("o botão da linha, ao lado do ✕, envia candidatada=true", async () => {
+    const user = userEvent.setup();
+    const { calls } = setup({ jobs: [makeJob(1)] });
+    await user.click(await screen.findByRole("button", { name: "Marcar candidatura na vaga Engenheiro Mecânico 1" }));
+    await waitFor(() => expect(calls.find((c) => c.method === "PATCH" && c.path === "/api/jobs/1")?.body).toEqual({ candidatada: true }));
+  });
+
+  it("a aba Candidaturas pede candidatadas=true e o botão da linha desfaz a candidatura", async () => {
+    const user = userEvent.setup();
+    const { calls } = setup({ jobs: [makeJob(1, { candidatada: true })] });
+    await user.click(await screen.findByRole("tab", { name: "Candidaturas" }));
+    await waitFor(() => {
+      const last = [...calls].reverse().find((c) => c.path.startsWith("/api/jobs?"));
+      expect(last?.path).toContain("candidatadas=true");
+    });
+    await user.click(await screen.findByRole("button", { name: "Desfazer candidatura na vaga Engenheiro Mecânico 1" }));
+    await waitFor(() => expect(calls.find((c) => c.method === "PATCH" && c.path === "/api/jobs/1")?.body).toEqual({ candidatada: false }));
+  });
+
+  it("na aba Candidaturas não há botão de excluir", async () => {
+    const user = userEvent.setup();
+    setup({ jobs: [makeJob(1, { candidatada: true })] });
+    await user.click(await screen.findByRole("tab", { name: "Candidaturas" }));
+    await screen.findByRole("button", { name: "Desfazer candidatura na vaga Engenheiro Mecânico 1" });
+    expect(screen.queryByRole("button", { name: /^Excluir vaga/ })).not.toBeInTheDocument();
   });
 });
 

@@ -110,6 +110,7 @@ export type JobFilters = {
   conjuntoId?: number;
   todosConjuntos?: boolean;
   excluidas?: boolean;
+  candidatadas?: boolean;
   ordenar?: string;
   direcao?: "asc" | "desc";
   maxDias?: number;
@@ -128,6 +129,7 @@ export function useJobs(filters: JobFilters, page: number, live = false) {
   if (filters.conjuntoId !== undefined) params.set("conjunto_id", String(filters.conjuntoId));
   if (filters.todosConjuntos) params.set("todos_conjuntos", "true");
   if (filters.excluidas) params.set("excluidas", "true");
+  if (filters.candidatadas) params.set("candidatadas", "true");
   if (filters.maxDias !== undefined) params.set("max_dias", String(filters.maxDias));
   if (filters.ordenar) params.set("ordenar", filters.ordenar);
   if (filters.ordenar && filters.direcao) params.set("direcao", filters.direcao);
@@ -161,6 +163,14 @@ export function useSetExcluida() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: ({ id, excluida }: { id: number; excluida: boolean }) => apiSend<Job>("PATCH", `/api/jobs/${id}`, { excluida }),
+    onSettled: () => client.invalidateQueries({ queryKey: ["jobs"] }),
+  });
+}
+
+export function useSetCandidatada() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, candidatada }: { id: number; candidatada: boolean }) => apiSend<Job>("PATCH", `/api/jobs/${id}`, { candidatada }),
     onSettled: () => client.invalidateQueries({ queryKey: ["jobs"] }),
   });
 }

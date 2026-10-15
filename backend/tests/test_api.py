@@ -201,6 +201,63 @@ def test_vaga_excluida_nao_volta_como_nova_numa_busca_e_nao_entra_em_marcar_como
     assert client.get("/api/jobs?excluidas=true").json()["items"][0]["visto"] is False
 
 
+def test_candidatar_uma_vaga_tira_da_lista_e_leva_para_candidaturas(client):
+    client.post("/api/runs")
+    vaga = client.get("/api/jobs").json()["items"][0]
+    assert client.patch(f"/api/jobs/{vaga['id']}", json={"candidatada": True}).json()["candidatada"] is True
+    assert client.get("/api/jobs").json()["total"] == 1
+    assert client.get("/api/jobs?excluidas=true").json()["total"] == 0
+    candidatadas = client.get("/api/jobs?candidatadas=true").json()
+    assert candidatadas["total"] == 1 and candidatadas["items"][0]["id"] == vaga["id"]
+    assert client.patch(f"/api/jobs/{vaga['id']}", json={"candidatada": False}).json()["candidatada"] is False
+    assert client.get("/api/jobs").json()["total"] == 2
+    assert client.get("/api/jobs?candidatadas=true").json()["total"] == 0
+
+
+def test_candidatada_e_excluida_sao_excludentes(client):
+    client.post("/api/runs")
+    vaga = client.get("/api/jobs").json()["items"][0]
+    client.patch(f"/api/jobs/{vaga['id']}", json={"excluida": True})
+    marcada = client.patch(f"/api/jobs/{vaga['id']}", json={"candidatada": True}).json()
+    assert (marcada["candidatada"], marcada["excluida"]) == (True, False)
+    marcada = client.patch(f"/api/jobs/{vaga['id']}", json={"excluida": True}).json()
+    assert (marcada["candidatada"], marcada["excluida"]) == (False, True)
+
+
+def test_vaga_candidatada_nao_volta_como_nova_nem_entra_em_marcar_como_vistas(client):
+    client.post("/api/runs")
+    vaga = client.get("/api/jobs").json()["items"][0]
+    client.patch(f"/api/jobs/{vaga['id']}", json={"candidatada": True})
+    client.post("/api/runs")
+    assert client.get("/api/jobs").json()["total"] == 1
+    assert client.post("/api/jobs/mark-seen", json={}).json() == {"atualizadas": 1}
+    assert client.get("/api/jobs?candidatadas=true").json()["items"][0]["visto"] is False
+
+
+def test_candidatura_registra_a_data_e_desfazer_limpa(client):
+    client.post("/api/runs")
+    vaga = client.get("/api/jobs").json()["items"][0]
+    assert client.get("/api/jobs").json()["items"][0]["candidatada_em"] is None
+    marcada = client.patch(f"/api/jobs/{vaga['id']}", json={"candidatada": True}).json()
+    assert marcada["candidatada_em"] == NOW
+    assert client.get("/api/jobs?candidatadas=true").json()["items"][0]["candidatada_em"] == NOW
+    assert client.patch(f"/api/jobs/{vaga['id']}", json={"candidatada": False}).json()["candidatada_em"] is None
+
+
+def test_candidaturas_vem_da_mais_recente_para_a_mais_antiga(settings):
+    relogio = [NOW]
+    sources = [StubSource(jobs=[job("1"), job("2")])]
+    app = create_app(settings, sources_factory=lambda: sources, spawn=lambda fn: fn(), now=lambda: relogio[0])
+    with TestClient(app) as c:
+        c.post("/api/runs")
+        ids = [v["id"] for v in c.get("/api/jobs").json()["items"]]
+        for id_, data in zip(ids, ["2026-10-15T10:00:00+00:00", "2026-10-16T10:00:00+00:00"]):
+            relogio[0] = data
+            c.patch(f"/api/jobs/{id_}", json={"candidatada": True})
+        itens = c.get("/api/jobs?candidatadas=true").json()["items"]
+    assert [i["id"] for i in itens] == ids[::-1]
+
+
 def test_marcar_vaga_inexistente_devolve_404(client):
     assert client.patch("/api/jobs/999", json={"visto": True}).status_code == 404
 

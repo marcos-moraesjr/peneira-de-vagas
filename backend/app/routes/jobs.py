@@ -25,13 +25,14 @@ def list_jobs(
     conjunto_id: int | None = None,
     todos_conjuntos: bool = False,
     excluidas: bool = False,
+    candidatadas: bool = False,
     conn: sqlite3.Connection = Depends(get_conn),
     settings: Settings = Depends(get_settings),
     now=Depends(get_now),
 ) -> dict:
     corte = jobs.cutoff_date(now(), max_dias)
     return jobs.list_jobs(
-        conn, visto, fonte, q, limit or settings.api.jobs_page_size, offset, ordenar, direcao, corte, local, modalidade, conjunto_id, todos_conjuntos, excluidas
+        conn, visto, fonte, q, limit or settings.api.jobs_page_size, offset, ordenar, direcao, corte, local, modalidade, conjunto_id, todos_conjuntos, excluidas, candidatadas
     )
 
 
@@ -48,5 +49,5 @@ def mark_seen(body: MarkSeenIn, conn: sqlite3.Connection = Depends(get_conn), no
 
 
 @router.patch("/jobs/{job_id}", response_model=JobOut)
-def set_seen(job_id: int, body: SeenIn, conn: sqlite3.Connection = Depends(get_conn)) -> dict:
-    return jobs.update_job(conn, job_id, body.visto, body.excluida)
+def set_seen(job_id: int, body: SeenIn, conn: sqlite3.Connection = Depends(get_conn), now=Depends(get_now)) -> dict:
+    return jobs.update_job(conn, job_id, body.visto, body.excluida, body.candidatada, now())

@@ -304,6 +304,19 @@ def test_apagar_o_conjunto_apaga_as_vagas_dele(conn):
     assert [row["conjunto_id"] for row in conn.execute("SELECT conjunto_id FROM jobs")] == [1]
 
 
+def test_migracao_11_adiciona_candidatada_zerada(conn):
+    assert conn.execute("SELECT candidatada FROM jobs LIMIT 1").fetchall() == []
+    run_id = db.create_run(conn, ["gupy"], NOW)
+    db.insert_new_jobs(conn, [make_job()], {}, run_id, NOW, 1)
+    assert conn.execute("SELECT candidatada FROM jobs").fetchone()["candidatada"] == 0
+
+
+def test_migracao_12_adiciona_candidatada_em_nula(conn):
+    run_id = db.create_run(conn, ["gupy"], NOW)
+    db.insert_new_jobs(conn, [make_job()], {}, run_id, NOW, 1)
+    assert conn.execute("SELECT candidatada_em FROM jobs").fetchone()["candidatada_em"] is None
+
+
 def test_migracao_10_adiciona_excluida_mantendo_as_vagas(conn):
     assert conn.execute("SELECT excluida FROM jobs LIMIT 1").fetchall() == []
     run_id = db.create_run(conn, ["gupy"], NOW)
