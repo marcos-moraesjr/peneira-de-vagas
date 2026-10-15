@@ -44,6 +44,16 @@ O estado de cada scanner (`GET /api/scanners`, tela Vagas e tela Execuções) é
 - Subir a versão no manifesto zera a contagem (só contam falhas da versão atual).
 - O app **não chama o Claude sozinho**: o aviso é a instrução, e quem dispara a refação é o usuário.
 
+## Como o usuário comum recebe um scanner corrigido
+
+O usuário instalado pelo `install.ps1` não tem o repositório nem o Claude Code: o scanner corrigido chega **dentro de uma versão nova do app**.
+
+1. Quem mantém o projeto refaz o scanner (seção abaixo), sobe a versão em `scanners.toml` e gera o pacote com `scripts/build-release.ps1 -Versao X.Y.Z` (grava `versao.txt`).
+2. Publica com `gh release create vX.Y.Z release/peneira.zip`.
+3. Na tela Vagas do usuário aparece o aviso **Há uma versão nova** (consulta à última Release do GitHub, só a versão; desligável em `[atualizacao] verificar`). Ele fecha o programa e roda `peneira atualizar`, que reinstala só o app; banco, config, logs e perfil do Chrome ficam.
+
+O alerta **Refazer** (instrução para o Claude) continua sendo para quem mantém o projeto; o usuário comum só precisa atualizar. A versão do app (`versao.txt`) é distinta da versão de cada scanner (`scanners.toml`).
+
 ## Como refazer um scanner
 
 1. Na tela Vagas, clique em **Copiar instrução para o Claude** (ou use o modelo abaixo) e cole numa sessão do
@@ -125,6 +135,8 @@ Faça, seguindo TDD (teste vermelho antes do código):
 | indeed | 1.11.0 | 2026-10-15 | Idem LinkedIn: termos com falha transitória são pulados; HTTP 401/403/429 encerra a fonte preservando o parcial. |
 | linkedin | 1.9.1 | 2026-10-15 | Vaga cujo painel/detalhe não abre é pulada (não gravada, tentada de novo na próxima execução); `[navegador] max_falhas_detalhe_seguidas` falhas seguidas, ou nenhuma vaga detalhada, encerram a fonte como `seletor_nao_encontrado`. |
 | indeed | 1.11.1 | 2026-10-15 | Idem LinkedIn: um painel que não abre (`Não abriu o painel da vaga … após 3 tentativa(s)`) não derruba mais a fonte inteira. |
+| linkedin | 1.9.2 | 2026-10-15 | Depois de abrir o painel de cada vaga a fonte espera `[ritmo] pausa_detalhe_min_s`–`pausa_detalhe_max_s` (3–6 s), em vez da pausa de rolagem (0,25–0,7 s): a rajada de cliques de detalhe antecedia o HTTP 429 na abertura da página 2. |
+| indeed | 1.11.2 | 2026-10-15 | Idem LinkedIn: pausa de detalhe configurável depois de abrir cada painel (código de espera compartilhado). |
 
 ## Refazer só a documentação das plataformas
 

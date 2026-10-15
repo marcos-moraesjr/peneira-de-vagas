@@ -109,7 +109,8 @@ Todas as fontes devolvem o mesmo formato: `id`, `título`, `empresa`, `link`, `t
 ## Ferramentas
 
 - **venv** local (`.venv`) + `pip install -r requirements.txt`; `npm` para o frontend.
-- **Git** — `.gitignore` cobre `__pycache__`, `.venv`, `*.db`, `data/` (inclui `data/chrome-profile/`), `node_modules`, `frontend/dist`, `logs/`.
+- **Distribuição (usuário comum, sem instalador `.exe`):** `scripts/build-release.ps1` empacota o **Python embeddable** oficial (artefato de build, não biblioteca do projeto) com as dependências de `requirements.txt` (menos `pytest`) num `.zip` publicado em GitHub Release; `scripts/install.ps1` instala e `peneira.cmd` é o comando. PyInstaller e Inno Setup **não** entram (antivírus e instalador fora do desejado). Não há `playwright install`: o projeto só conecta ao Chrome do usuário por CDP.
+- **Git** — `.gitignore` cobre `__pycache__`, `.venv`, `*.db`, `data/` (inclui `data/chrome-profile/`), `node_modules`, `frontend/dist`, `logs/`, `/release/`.
 
 Sem formatador/linter/CI configurados hoje. Adotar um (ex.: ruff, ESLint) é uma decisão a registrar aqui antes de entrar.
 

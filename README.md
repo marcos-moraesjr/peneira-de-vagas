@@ -28,7 +28,19 @@ agora**, e a API consulta as três fontes, filtra, remove duplicadas e mostra as
 | [`docs/LESSONS.md`](docs/LESSONS.md) | erros e lições registrados |
 | [`docs/AI_GUIDELINES.md`](docs/AI_GUIDELINES.md) | regras para agentes de IA |
 
-## Requisitos
+## Instalar (usuário comum, sem Python)
+
+No PowerShell, uma única vez:
+
+```powershell
+irm https://raw.githubusercontent.com/marcos-moraesjr/peneira-de-vagas/main/scripts/install.ps1 | iex
+```
+
+Depois, em um terminal novo, digite `peneira`: a interface abre no navegador (Ctrl+C no terminal encerra). Para atualizar, feche o programa e rode `peneira atualizar` (a tela Vagas avisa quando há versão nova; as versões novas trazem os scanners corrigidos); para remover, `peneira desinstalar`. Seus dados (banco, `config.toml`, logs, perfil do Chrome) ficam em `%LOCALAPPDATA%\PeneiraDeVagas` e nunca são apagados pelo instalador nem pelo desinstalador. Requer o Google Chrome para LinkedIn e Indeed.
+
+Para gerar o pacote (quem desenvolve): `powershell -File scripts\build-release.ps1 -Versao X.Y.Z` cria `release\peneira.zip`; publique com `gh release create vX.Y.Z release\peneira.zip`.
+
+## Requisitos (desenvolvimento)
 
 - Windows, macOS ou Linux (sistema da máquina de execução ainda em decisão: `docs/MVP.md` §11)
 - **Python 3.12+**
@@ -121,7 +133,7 @@ manualmente, nunca em rotina. O agente de IA só executa o navegador no LinkedIn
 ## Dados e privacidade
 
 Tudo fica na sua máquina: banco em `data/peneira-de-vagas.db`, perfil do Chrome em `data/chrome-profile/`, logs em
-`logs/` (nenhum é versionado). A única comunicação externa são as requisições às três fontes de vagas.
+`logs/` (nenhum é versionado). A comunicação externa são as requisições às três fontes de vagas e, na versão instalada, a consulta da última Release no GitHub para avisar de atualização (só a versão, nenhum dado seu; desligue com `verificar = false` em `[atualizacao]` do `config.toml`).
 
 ## Quando um scanner quebra
 

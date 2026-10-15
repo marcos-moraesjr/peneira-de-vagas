@@ -9,3 +9,4 @@ backups/
 logs/
 node_modules/
 frontend/dist/
+/release/
