@@ -91,8 +91,7 @@ class MarkSeenIn(BaseModel):
     fonte: str | None = None
     q: str | None = None
     max_dias: int | None = None
-    cidade: str | None = None
-    estado: str | None = None
+    local: str | None = None
     modalidade: str | None = None
     conjunto_id: int | None = None
 

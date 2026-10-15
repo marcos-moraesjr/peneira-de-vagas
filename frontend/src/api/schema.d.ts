@@ -530,10 +530,8 @@ export interface components {
             q?: string | null;
             /** Max Dias */
             max_dias?: number | null;
-            /** Cidade */
-            cidade?: string | null;
-            /** Estado */
-            estado?: string | null;
+            /** Local */
+            local?: string | null;
             /** Modalidade */
             modalidade?: string | null;
             /** Conjunto Id */
@@ -829,8 +827,7 @@ export interface operations {
                 ordenar?: string | null;
                 direcao?: string | null;
                 max_dias?: number | null;
-                cidade?: string | null;
-                estado?: string | null;
+                local?: string | null;
                 modalidade?: string | null;
                 conjunto_id?: number | null;
             };

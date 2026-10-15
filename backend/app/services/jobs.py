@@ -5,7 +5,7 @@ from datetime import date, timedelta
 from ..errors import DomainError, NotFound
 from . import conjuntos, runs
 from .filters import normalize
-from .localizacao import split_localidade
+from .localizacao import UF_NOMES, split_localidade
 
 
 def cutoff_date(now: str, max_dias: int | None) -> str | None:
@@ -28,7 +28,7 @@ def resolve_conjunto(conn: sqlite3.Connection, conjunto_id: int | None) -> int:
 
 def _where(
     conjunto_id: int, visto: bool | None, fonte: str | None, q: str | None, corte: str | None = None,
-    cidade: str | None = None, estado: str | None = None, modalidade: str | None = None,
+    local: str | None = None, modalidade: str | None = None,
 ) -> tuple[str, list]:
     if modalidade and modalidade not in MODALIDADES:
         raise DomainError(f"modalidade={modalidade!r}: esperado um de {list(MODALIDADES)}")
@@ -42,12 +42,11 @@ def _where(
     if q and normalize(q):
         clauses.append("(norm(titulo) LIKE ? OR norm(empresa) LIKE ?)")
         params += [f"%{normalize(q)}%"] * 2
-    if cidade and normalize(cidade):
-        clauses.append("cidade_de(localidade) LIKE ?")
-        params.append(f"%{normalize(cidade)}%")
-    if estado and normalize(estado):
-        clauses.append("lower(estado_de(localidade)) LIKE ?")
-        params.append(f"%{normalize(estado)}%")
+    if local and normalize(local):
+        termo = normalize(local)
+        uf = next((sigla for sigla, nome in UF_NOMES.items() if nome == termo), None)  # "Pernambuco" casa a UF PE
+        clauses.append("(cidade_de(localidade) LIKE ? OR lower(estado_de(localidade)) LIKE ? OR modalidade LIKE ?)")
+        params += [f"%{termo}%", f"%{uf or termo}%", f"%{termo}%"]
     if modalidade:
         clauses.append("modalidade=?")
         params.append(modalidade)
@@ -96,12 +95,12 @@ def _order_by(ordenar: str | None, direcao: str | None) -> str:
 def list_jobs(
     conn, visto: bool | None, fonte: str | None, q: str | None, limit: int, offset: int,
     ordenar: str | None = None, direcao: str | None = None, corte: str | None = None,
-    cidade: str | None = None, estado: str | None = None, modalidade: str | None = None,
+    local: str | None = None, modalidade: str | None = None,
     conjunto_id: int | None = None,
 ) -> dict:
     """Vagas do conjunto pedido (padrão: o ativo)."""
     order = _order_by(ordenar, direcao)
-    where, params = _where(resolve_conjunto(conn, conjunto_id), visto, fonte, q, corte, cidade, estado, modalidade)
+    where, params = _where(resolve_conjunto(conn, conjunto_id), visto, fonte, q, corte, local, modalidade)
     total = conn.execute(f"SELECT COUNT(*) FROM jobs{where}", params).fetchone()[0]
     rows = conn.execute(
         f"SELECT * FROM jobs{where} ORDER BY {order} LIMIT ? OFFSET ?",
@@ -128,11 +127,11 @@ def clear_all(conn, conjunto_id: int | None = None) -> int:
 
 def mark_seen(
     conn, fonte: str | None, q: str | None, corte: str | None = None,
-    cidade: str | None = None, estado: str | None = None, modalidade: str | None = None,
+    local: str | None = None, modalidade: str | None = None,
     conjunto_id: int | None = None,
 ) -> int:
     """Marca como vistas as ainda não vistas do conjunto pedido (padrão: o ativo) que casam com os filtros."""
-    where, params = _where(resolve_conjunto(conn, conjunto_id), False, fonte, q, corte, cidade, estado, modalidade)
+    where, params = _where(resolve_conjunto(conn, conjunto_id), False, fonte, q, corte, local, modalidade)
     cursor = conn.execute(f"UPDATE jobs SET visto=1{where}", params)
     conn.commit()
     return cursor.rowcount

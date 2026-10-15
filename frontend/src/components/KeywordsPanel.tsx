@@ -52,17 +52,17 @@ export function KeywordsPanel({ tipo, titulo }: { tipo: KeywordType; titulo?: st
   }
 
   return (
-    <section className={card} aria-label={titulo ?? texts.titulo}>
-      <h2 className="mb-3 text-base font-semibold text-grafite-900">{titulo ?? texts.titulo}</h2>
+    <section className={`${card} p-3!`} aria-label={titulo ?? texts.titulo}>
+      <h2 className="mb-2 text-sm font-semibold text-grafite-900">{titulo ?? texts.titulo}</h2>
       <form onSubmit={submit} className="flex gap-2">
         <input
           ref={input}
           aria-label={texts.campo}
           value={termo}
           onChange={(event) => setTermo(event.target.value)}
-          className={`${inputClass} min-w-0 flex-1`}
+          className={`${inputClass} min-w-0 flex-1 py-1!`}
         />
-        <button type="submit" className={tipo === "exclusao" ? buttonSecondary : buttonDark}>
+        <button type="submit" className={`${tipo === "exclusao" ? buttonSecondary : buttonDark} py-1!`}>
           Adicionar
         </button>
       </form>
@@ -72,9 +72,9 @@ export function KeywordsPanel({ tipo, titulo }: { tipo: KeywordType; titulo?: st
         </p>
       )}
       {keywords.data?.length === 0 && <p className="mt-2 text-sm text-grafite-500">{texts.vazio}</p>}
-      <ul className="mt-2 flex flex-wrap gap-2">
+      <ul className="mt-2 flex flex-wrap gap-1.5">
         {keywords.data?.map((keyword) => (
-          <li key={keyword.id} className={`flex items-center gap-2 rounded-selo border py-1 pl-2.5 pr-1.5 text-dado ${CHIP_COLORS[tipo]}`}>
+          <li key={keyword.id} className={`flex items-center gap-2 rounded-selo border py-0.5 pl-2 pr-1 text-dado ${CHIP_COLORS[tipo]}`}>
             <span>{keyword.termo}</span>
             <button
               type="button"
@@ -87,7 +87,7 @@ export function KeywordsPanel({ tipo, titulo }: { tipo: KeywordType; titulo?: st
           </li>
         ))}
       </ul>
-      <p className="mt-2 text-xs text-grafite-500">{texts.dica}</p>
+      <p className="mt-1.5 text-xs text-grafite-500">{texts.dica}</p>
     </section>
   );
 }

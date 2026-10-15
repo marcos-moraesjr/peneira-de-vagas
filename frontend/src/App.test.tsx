@@ -12,11 +12,11 @@ const routes = {
 };
 
 describe("App", () => {
-  it("abre na tela Vagas e alterna para Execuções", async () => {
+  it("abre na tela Buscar vagas e alterna para Execuções", async () => {
     const user = userEvent.setup();
     mockApi(routes);
     renderWithClient(<App />);
-    expect(await screen.findByRole("tab", { name: "Vagas", selected: true })).toBeInTheDocument();
+    expect(await screen.findByRole("tab", { name: "Buscar vagas", selected: true })).toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: "Execuções" }));
     expect(await screen.findByText(/nenhuma execução ainda/i)).toBeInTheDocument();
   });
@@ -29,7 +29,7 @@ describe("App", () => {
     expect(screen.getByLabelText("Nova palavra-chave")).toBeInTheDocument();
   });
 
-  it("mostra os controles da busca na aba Vagas", async () => {
+  it("mostra os controles da busca na aba Buscar vagas", async () => {
     mockApi(routes);
     renderWithClient(<App />);
     expect(await screen.findByRole("button", { name: "Buscar agora" })).toBeInTheDocument();
@@ -49,12 +49,12 @@ describe("App", () => {
   });
 });
 
-describe("App — tutorial", () => {
-  it("tem a aba Tutorial", async () => {
+describe("App — como usar", () => {
+  it("tem a aba Como usar", async () => {
     const user = userEvent.setup();
     mockApi(routes);
     renderWithClient(<App />);
-    await user.click(await screen.findByRole("tab", { name: "Tutorial" }));
+    await user.click(await screen.findByRole("tab", { name: "Como usar" }));
     expect(await screen.findByRole("heading", { name: "Como usar o Peneira de Vagas" })).toBeInTheDocument();
   });
 });

@@ -41,3 +41,7 @@ class SourceEmpty(SourceError):
 
 class SourceUnavailable(SourceError):
     motivo = "http_erro"
+
+
+class SourceRateLimited(SourceUnavailable):
+    """HTTP 401/403/429: limitação de taxa ou bloqueio. Encerra a fonte; nunca é repetido nem contornado."""

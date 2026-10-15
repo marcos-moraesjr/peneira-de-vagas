@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useConfig, useSaveConfig } from "../../api/hooks";
 import type { Config } from "../../api/types";
 import { ErrorBox } from "../../components/ErrorBox";
-import { buttonPrimary, buttonSecondary, card, inputClass } from "../../components/ui";
+import { card, inputClass } from "../../components/ui";
 
 type Section = keyof Config;
 type Field = {
@@ -165,32 +165,39 @@ function ConfigForm({ config }: { config: Config }) {
   const [draft, setDraft] = useState<Draft>(() => toDraft(config));
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
-  const dirty = FIELDS.some((field) => draft[id(field)] !== valueOf(config, field));
 
   function change(field: Field, value: string) {
     setDraft({ ...draft, [id(field)]: value });
     setSaved(false);
   }
 
-  function submit(event: FormEvent) {
-    event.preventDefault();
+  /** Salva o rascunho (ou `next`, quando o estado ainda não renderizou) se difere do que está em vigor. */
+  function commit(next: Draft = draft) {
+    if (!FIELDS.some((field) => next[id(field)] !== valueOf(config, field))) return;
     setError(null);
-    save.mutate(toConfig(draft, config), {
+    setSaved(false);
+    save.mutate(toConfig(next, config), {
       onSuccess: (result) => {
-        setDraft(toDraft(result));
+        setDraft((current) => (current === next ? toDraft(result) : current));
         setSaved(true);
       },
       onError: (failure) => setError(failure.message),
     });
   }
 
-  function discard() {
-    setDraft(toDraft(config));
-    setError(null);
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    commit();
+  }
+
+  function toggle(field: Field, checked: boolean) {
+    const next = { ...draft, [id(field)]: String(checked) };
+    setDraft(next);
+    commit(next);
   }
 
   return (
-    <form onSubmit={submit} className="space-y-4">
+    <form onSubmit={submit} onBlur={() => commit()} className="space-y-4">
       {GROUPS.map((group) => (
         <section key={group.titulo} className={card} aria-label={group.titulo}>
           <h2 className={`${group.intro ? "mb-1" : "mb-3"} text-sm font-semibold text-grafite-900`}>{group.titulo}</h2>
@@ -203,7 +210,7 @@ function ConfigForm({ config }: { config: Config }) {
                     <input
                       type="checkbox"
                       checked={draft[id(field)] === "true"}
-                      onChange={(e) => change(field, String(e.target.checked))}
+                      onChange={(e) => toggle(field, e.target.checked)}
                     />
                     {field.label}
                   </label>
@@ -222,6 +229,8 @@ function ConfigForm({ config }: { config: Config }) {
                         className="w-full accent-[var(--pn-grafite-900)]"
                         value={draft[id(field)]}
                         onChange={(e) => change(field, e.target.value)}
+                        onPointerUp={() => commit()}
+                        onKeyUp={() => commit()}
                       />
                       <output
                         data-testid={`valor-${id(field)}`}
@@ -250,15 +259,9 @@ function ConfigForm({ config }: { config: Config }) {
         </section>
       ))}
       {error && <ErrorBox message={error} />}
-      <div className="flex items-center gap-3">
-        <button type="submit" className={buttonPrimary} disabled={!dirty || save.isPending}>
-          Salvar
-        </button>
-        <button type="button" className={buttonSecondary} disabled={!dirty} onClick={discard}>
-          Descartar
-        </button>
-        {saved && <span className="text-sm text-sinal-fg">Configuração salva. Vale a partir da próxima busca.</span>}
-      </div>
+      <p role="status" className="min-h-5 text-sm text-sinal-fg">
+        {save.isPending ? <span className="text-grafite-500">Salvando…</span> : saved ? "Configuração salva. Vale a partir da próxima busca." : null}
+      </p>
     </form>
   );
 }

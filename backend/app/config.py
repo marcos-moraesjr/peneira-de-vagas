@@ -67,6 +67,8 @@ class Navegador:
     espera_verificacao_s: int
     max_tentativas_abertura: int
     max_tentativas_painel: int
+    max_falhas_termo_seguidas: int
+    max_falhas_detalhe_seguidas: int
 
 
 @dataclass(frozen=True)
@@ -175,6 +177,8 @@ def validate(settings: Settings) -> None:
         "gupy.page_size": settings.gupy.page_size,
         "max_tentativas_abertura": settings.navegador.max_tentativas_abertura,
         "max_tentativas_painel": settings.navegador.max_tentativas_painel,
+        "max_falhas_termo_seguidas": settings.navegador.max_falhas_termo_seguidas,
+        "max_falhas_detalhe_seguidas": settings.navegador.max_falhas_detalhe_seguidas,
     }
     for name, value in positives.items():
         if value <= 0:

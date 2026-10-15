@@ -3,14 +3,14 @@ import { ThemeToggle } from "./components/ThemeToggle";
 import { useHealth } from "./api/hooks";
 import { ConfigPage } from "./features/configuracoes/ConfigPage";
 import { ExecucoesPage } from "./features/execucoes/ExecucoesPage";
-import { TutorialPage } from "./features/tutorial/TutorialPage";
+import { ComoUsarPage } from "./features/como-usar/ComoUsarPage";
 import { BuscaPage } from "./features/vagas/BuscaPage";
 import { VagasPage } from "./features/vagas/VagasPage";
 
 const TABS = [
-  { id: "tutorial", label: "Tutorial" },
+  { id: "como-usar", label: "Como usar" },
   { id: "busca", label: "Parâmetros de busca" },
-  { id: "vagas", label: "Vagas" },
+  { id: "vagas", label: "Buscar vagas" },
   { id: "execucoes", label: "Execuções" },
   { id: "config", label: "Configurações" },
 ] as const;
@@ -70,7 +70,7 @@ export default function App() {
           {tab === "busca" && <BuscaPage />}
           {tab === "execucoes" && <ExecucoesPage />}
           {tab === "config" && <ConfigPage />}
-          {tab === "tutorial" && <TutorialPage />}
+          {tab === "como-usar" && <ComoUsarPage />}
         </div>
       </main>
     </div>

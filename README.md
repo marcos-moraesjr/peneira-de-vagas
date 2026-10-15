@@ -53,7 +53,7 @@ npm install
 
 Usa um perfil próprio (`data/chrome-profile/`), nunca o seu pessoal; a porta de depuração fica só em `localhost`.
 
-**Pelo app (recomendado):** na aba Vagas, clique em **Abrir Chrome dedicado**. O indicador muda para "Chrome
+**Pelo app (recomendado):** na aba Buscar vagas, clique em **Abrir Chrome dedicado**. O indicador muda para "Chrome
 dedicado aberto" quando ele estiver pronto. Se o Chrome não for achado, ajuste `chrome_paths` em
 `backend/config.toml`.
 
@@ -99,7 +99,7 @@ Não exponha a API além de `127.0.0.1`: ela não tem autenticação.
 2. Clique em **Buscar agora** e acompanhe o andamento por fonte.
 3. Veja as vagas **novas**, abra a original pelo link e marque como vistas.
 4. A tela **Execuções** mostra o histórico e o motivo de qualquer fonte que tenha falhado.
-5. A aba **Tutorial** do app traz esses passos (Chrome dedicado, login, palavras-chave, busca) e a tabela de problemas comuns.
+5. A aba **Como usar** do app traz esses passos (Chrome dedicado, login, palavras-chave, busca) e a tabela de problemas comuns.
 
 Pesos, limites e pausas ficam em `backend/config.toml`; o estado pode ser selecionado na página **Busca** e é adaptado por plataforma (LinkedIn/Indeed) ou filtrado localmente (Gupy). Referência completa em
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#configuração).
@@ -115,8 +115,8 @@ cd frontend && npm run typecheck     # tipos
 Os testes marcados `browser` usam o Chrome local em modo headless sobre HTML salvo (sem rede) e são
 pulados se o Chrome não estiver instalado.
 
-Os testes de integração contra os sites reais (`pytest -m integration`) são rodados **só por você**,
-manualmente, nunca em rotina.
+Os testes de integração contra os sites reais (`pytest -m integration`) são rodados por você,
+manualmente, nunca em rotina. O agente de IA só executa o navegador no LinkedIn e no Indeed se você autorizar antes.
 
 ## Dados e privacidade
 

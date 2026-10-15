@@ -3,10 +3,10 @@ import { KeywordsPanel } from "../../components/KeywordsPanel";
 
 export function BuscaPage() {
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       <ConjuntosPanel />
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className="space-y-2">
+      <div className="grid items-start gap-2 md:grid-cols-2">
+        <div className="space-y-1">
           <KeywordsPanel tipo="busca" />
           <p className="text-xs text-grafite-500">Máximo de 6 palavras-chave de busca por conjunto.</p>
         </div>

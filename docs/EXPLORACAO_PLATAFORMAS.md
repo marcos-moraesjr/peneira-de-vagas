@@ -94,7 +94,7 @@ Ao carregar, o Indeed acrescenta `vjk=<jk>` sozinho. A ordenação padrão é
 
 **Cards**
 
-- `div.job_seen_beacon`: 16 no DOM, 15 no texto da página.
+- `div.job_seen_beacon`: 16 no DOM, 15 no texto da página. O card a mais é uma **isca invisível** (caixa 0×0, `data-jk` falso como `f1e2d3c4b5a67890`, link `/viewjob?jk=…`, título copiado de outra vaga; muda a cada carga). Só cards com área visível são vagas; clicar na isca tira a página da listagem (observado em 15/10/2026).
 - `a.jcs-JobTitle[data-jk]`: `data-jk` com 16 caracteres hexadecimais, único por card.
 - Seletores:
 
@@ -106,7 +106,7 @@ Ao carregar, o Indeed acrescenta `vjk=<jk>` sozinho. A ordenação padrão é
 | Local | `[data-testid="text-location"]` |
 | Atributos e trecho | itens `li` dentro do card ("Tempo integral", salário, trecho da descrição) |
 
-- **Painel de detalhe:** a captura real de 15/10/2026 usa `DESKTOP_EMBEDDED`; cada título é `a.jcs-JobTitle[data-jk]` com `role="button"` e o clique carrega `autoOpenTwoPaneViewjobResponse`, que contém `sanitizedJobDescription`. A descrição é lida no painel por `#jobDescriptionText` ou `.jobsearch-JobComponent-description`, sem abrir `/viewjob`.
+- **Painel de detalhe:** a captura real de 15/10/2026 usa `DESKTOP_EMBEDDED`; cada título é `a.jcs-JobTitle[data-jk]` com `role="button"` e o clique carrega `autoOpenTwoPaneViewjobResponse`, que contém `sanitizedJobDescription`. A descrição é lida no painel (`.jobsearch-RightPane`, `[data-testid="viewjob-job-content"]`) por `.simple-job-description-html`, sem abrir `/viewjob`; `#jobDescriptionText` e `.jobsearch-JobComponent-description` não existem mais nesse painel (verificado em 15/10/2026) e ficam só como reserva.
 - **Não há data de publicação confiável no painel:** a resposta capturada tem `datePublished: null`. `fromage=1` e a deduplicação são o filtro de recência; o scanner não abre a URL individual só para preencher data.
 
 **Paginação:** `nav[role="navigation"]` com `a[data-testid="pagination-page-current"]`, `pagination-page-2` até `pagination-page-5` e `pagination-page-next`.
@@ -722,7 +722,7 @@ schtasks /Create /TN "Peneira de Vagas" /SC DAILY /ST 08:00 /RI 120 /DU 10:01 ^
 - `gupy.py`: parse de uma resposta salva em `tests/fixtures/gupy.json` (salve uma resposta real).
 - Seletores: salve o HTML de um card de cada fonte em `tests/fixtures/` e teste a extração com `page.set_content`.
 
-**Integração (marker `integration`, só manual):** execução real contra os sites.
+**Integração (marker `integration`, manual; agente só com autorização prévia do usuário em LinkedIn/Indeed):** execução real contra os sites.
 
 ## 7. Ordem de implementação e critérios de aceite
 

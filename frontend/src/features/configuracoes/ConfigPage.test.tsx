@@ -45,7 +45,6 @@ describe("ConfigPage", () => {
   });
 
   it("deixa apenas o limite de páginas por palavra-chave ajustável", async () => {
-    const user = userEvent.setup();
     const { calls } = setup();
     await screen.findByRole("slider", { name: "Páginas abertas por palavra-chave (em cada fonte)" });
     expect(screen.queryByLabelText("Tamanho máximo da palavra-chave")).not.toBeInTheDocument();
@@ -55,7 +54,7 @@ describe("ConfigPage", () => {
     expect(paginas).toHaveAttribute("min", "1");
     fireEvent.change(paginas, { target: { value: "5" } });
     expect(screen.getByTestId("valor-limites.max_paginas_por_termo")).toHaveTextContent("5");
-    await user.click(screen.getByRole("button", { name: "Salvar" }));
+    fireEvent.pointerUp(paginas);
     await screen.findByText(/configuração salva/i);
     const put = calls.find((c) => c.method === "PUT");
     expect(put?.body).toEqual({
@@ -64,25 +63,43 @@ describe("ConfigPage", () => {
     });
   });
 
-  it("só habilita Salvar depois de alterar algo", async () => {
+  it("não tem botões Salvar nem Descartar: o salvamento é automático", async () => {
     setup();
-    const salvar = await screen.findByRole("button", { name: "Salvar" });
-    expect(salvar).toBeDisabled();
-    fireEvent.change(screen.getByRole("slider", { name: "Pontuação mínima para aparecer" }), { target: { value: "4" } });
-    expect(salvar).toBeEnabled();
+    await screen.findByRole("slider", { name: "Pontuação mínima para aparecer" });
+    expect(screen.queryByRole("button", { name: "Salvar" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Descartar" })).not.toBeInTheDocument();
+  });
+
+  it("sair de um campo sem alterar nada não envia nada", async () => {
+    const user = userEvent.setup();
+    const { calls } = setup();
+    await user.click(await screen.findByLabelText("Pausa mínima (s)"));
+    await user.tab();
+    expect(calls.find((c) => c.method === "PUT")).toBeUndefined();
   });
 
   it("envia a configuração completa, com números, e confirma", async () => {
-    const user = userEvent.setup();
     const { calls } = setup();
     fireEvent.change(await screen.findByRole("slider", { name: "Pontuação mínima para aparecer" }), { target: { value: "5" } });
     expect(screen.getByTestId("valor-filtro.min_score")).toHaveTextContent("5");
-    await user.click(screen.getByRole("button", { name: "Salvar" }));
+    expect(calls.find((c) => c.method === "PUT")).toBeUndefined();
+    fireEvent.keyUp(screen.getByRole("slider", { name: "Pontuação mínima para aparecer" }), { key: "ArrowRight" });
     expect(await screen.findByText(/configuração salva/i)).toBeInTheDocument();
     const put = calls.find((c) => c.method === "PUT");
     // busca.localidades e busca.modalidade não estão na tela, mas seguem no corpo, como o servidor devolveu
     expect(put?.body).toEqual({ ...CONFIG, filtro: { ...CONFIG.filtro, min_score: 5 } });
-    expect(screen.getByRole("button", { name: "Salvar" })).toBeDisabled();
+  });
+
+  it("salva ao sair de um campo numérico", async () => {
+    const user = userEvent.setup();
+    const { calls } = setup();
+    const campo = await screen.findByLabelText("Pausa mínima (s)");
+    await user.clear(campo);
+    await user.type(campo, "4");
+    expect(calls.find((c) => c.method === "PUT")).toBeUndefined();
+    await user.tab();
+    expect(await screen.findByText(/configuração salva/i)).toBeInTheDocument();
+    expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ ...CONFIG, ritmo: { ...CONFIG.ritmo, pausa_min_s: 4 } });
   });
 
   it("ativa a busca em paralelo por plataforma e envia navegador.abas_paralelas", async () => {
@@ -91,7 +108,6 @@ describe("ConfigPage", () => {
     const opcao = await screen.findByRole("checkbox", { name: /buscar as plataformas ao mesmo tempo/i });
     expect(opcao).not.toBeChecked();
     await user.click(opcao);
-    await user.click(screen.getByRole("button", { name: "Salvar" }));
     expect(await screen.findByText(/configuração salva/i)).toBeInTheDocument();
     expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ ...CONFIG, navegador: { abas_paralelas: true } });
   });
@@ -102,18 +118,8 @@ describe("ConfigPage", () => {
     const campo = await screen.findByLabelText("Pausa mínima (s)");
     await user.clear(campo);
     await user.type(campo, "9");
-    await user.click(screen.getByRole("button", { name: "Salvar" }));
+    await user.tab();
     expect(await screen.findByText(/pausa_min_s=9.0/)).toBeInTheDocument();
     expect(campo).toHaveValue(9);
-  });
-
-  it("Descartar volta aos valores em vigor", async () => {
-    const user = userEvent.setup();
-    setup();
-    const slider = await screen.findByRole("slider", { name: "Pontuação mínima para aparecer" });
-    fireEvent.change(slider, { target: { value: "7" } });
-    expect(slider).toHaveValue("7");
-    await user.click(screen.getByRole("button", { name: "Descartar" }));
-    expect(slider).toHaveValue("3");
   });
 });

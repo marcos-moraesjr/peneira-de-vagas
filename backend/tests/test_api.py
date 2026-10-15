@@ -486,23 +486,25 @@ def test_marcar_como_vistas_respeita_max_dias(client_ordenacao):
     assert [j["titulo"] for j in restantes] == ["Engenheiro Mecânico 1"]
 
 
-def test_cidade_e_estado_filtram_as_vagas_ja_encontradas_ignorando_acento_e_maiuscula(client_ordenacao):
-    assert titulos(client_ordenacao, "cidade=CAMPINAS") == ["Engenheiro Mecânico 2"]
-    assert titulos(client_ordenacao, "cidade=recife") == ["Engenheiro Mecânico 1"]
-    assert titulos(client_ordenacao, "estado=pe") == ["Engenheiro Mecânico 1"]
-    assert titulos(client_ordenacao, "estado=SP") == ["Engenheiro Mecânico 2"]
-    assert client_ordenacao.get("/api/jobs?cidade=campinas").json()["total"] == 1
+def test_local_filtra_por_cidade_estado_ou_modalidade_ignorando_acento_e_maiuscula(client_ordenacao):
+    assert titulos(client_ordenacao, "local=CAMPINAS") == ["Engenheiro Mecânico 2"]
+    assert titulos(client_ordenacao, "local=recife") == ["Engenheiro Mecânico 1"]
+    assert titulos(client_ordenacao, "local=pe") == ["Engenheiro Mecânico 1"]
+    assert titulos(client_ordenacao, "local=SP") == ["Engenheiro Mecânico 2"]
+    assert titulos(client_ordenacao, "local=Pernambuco") == ["Engenheiro Mecânico 1"]
+    assert titulos(client_ordenacao, "local=Remoto") == ["Engenheiro Mecânico 2"]
+    assert titulos(client_ordenacao, "local=hibrido") == ["Engenheiro Mecânico 3"]
+    assert client_ordenacao.get("/api/jobs?local=campinas").json()["total"] == 1
 
 
-def test_cidade_e_estado_vazios_ou_em_branco_nao_filtram(client_ordenacao):
-    assert len(titulos(client_ordenacao, "cidade=&estado=")) == 3
-    assert len(titulos(client_ordenacao, "cidade=%20%20")) == 3
+def test_local_vazio_ou_em_branco_nao_filtra(client_ordenacao):
+    assert len(titulos(client_ordenacao, "local=")) == 3
+    assert len(titulos(client_ordenacao, "local=%20%20")) == 3
 
 
-def test_cidade_e_estado_combinam_entre_si_e_com_os_outros_filtros(client_ordenacao):
-    assert titulos(client_ordenacao, "cidade=campinas&estado=pe") == []
-    assert titulos(client_ordenacao, "cidade=campinas&q=zeta") == []
-    assert titulos(client_ordenacao, "estado=pe&q=zeta") == ["Engenheiro Mecânico 1"]
+def test_local_combina_com_os_outros_filtros(client_ordenacao):
+    assert titulos(client_ordenacao, "local=campinas&q=zeta") == []
+    assert titulos(client_ordenacao, "local=pe&q=zeta") == ["Engenheiro Mecânico 1"]
 
 
 def test_vagas_trazem_a_modalidade(client_ordenacao):
@@ -534,10 +536,10 @@ def test_ordena_por_palavra_chave(client_ordenacao):
     assert titulos(client_ordenacao, "ordenar=palavra_chave&direcao=asc") == ["Engenheiro Mecânico 2", "Engenheiro Mecânico 3", "Engenheiro Mecânico 1"]
 
 
-def test_marcar_como_vistas_respeita_cidade_estado_e_modalidade(client_ordenacao):
-    assert client_ordenacao.post("/api/jobs/mark-seen", json={"cidade": "recife"}).json() == {"atualizadas": 1}
-    assert client_ordenacao.post("/api/jobs/mark-seen", json={"estado": "sp"}).json() == {"atualizadas": 1}
-    assert client_ordenacao.post("/api/jobs/mark-seen", json={"modalidade": "hibrido"}).json() == {"atualizadas": 1}
+def test_marcar_como_vistas_respeita_local(client_ordenacao):
+    assert client_ordenacao.post("/api/jobs/mark-seen", json={"local": "recife"}).json() == {"atualizadas": 1}
+    assert client_ordenacao.post("/api/jobs/mark-seen", json={"local": "sp"}).json() == {"atualizadas": 1}
+    assert client_ordenacao.post("/api/jobs/mark-seen", json={"local": "híbrido"}).json() == {"atualizadas": 1}
     assert client_ordenacao.get("/api/jobs?visto=false").json()["items"] == []
 
 

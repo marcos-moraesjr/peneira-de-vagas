@@ -61,8 +61,13 @@ por "testo depois".
 - Frontend não repete regra de negócio nem validação: exibe e envia; quem decide é o backend.
 - Ritmo humano é regra, não detalhe: uma aba por plataforma (paralelismo entre plataformas só com `navegador.abas_paralelas`, opção do usuário; nunca várias abas na mesma plataforma), sem remover as pausas variáveis, sem aumentar o
   limite de páginas abertas por palavra-chave e por fonte (`limites.max_paginas_por_termo`) sem pedido explícito.
-- Testes automatizados nunca acessam LinkedIn, Indeed ou Gupy; usam amostras salvas. A execução real
-  (`integration`) de LinkedIn, Indeed e Gupy é do usuário: não executar, automatizar nem agendar.
+- Testes automatizados (`pytest` comum) nunca acessam LinkedIn, Indeed ou Gupy; usam amostras salvas. A execução real
+  (`integration`) da Gupy é do usuário: não executar, automatizar nem agendar.
+- Execução real do navegador no LinkedIn e no Indeed (teste `integration` ou qualquer outra): **só com autorização
+  explícita do usuário, pedida antes, a cada vez**. Em vez de buscar alternativas para validar (amostras novas,
+  scripts avulsos, outro meio de acesso), **perguntar primeiro se pode executar o navegador**. A autorização vale
+  para aquela execução, não se estende a outras nem a rotina; não automatizar nem agendar. As demais regras desta
+  seção (ritmo humano, nunca contornar bloqueio, perfil dedicado) continuam valendo durante a execução autorizada.
 - Nunca apagar nem sobrescrever o `.db` do usuário; migração destrutiva só com pedido explícito e cópia prévia.
   Testes usam banco temporário.
 

@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 import pytest
 
 from backend.app.sources.browser import BrowserSource, PlaywrightNavigator
-from backend.app.sources.errors import SourceBlocked, SourceLayoutChanged, SourceUnavailable
+from backend.app.sources.errors import SourceBlocked, SourceLayoutChanged, SourceRateLimited, SourceUnavailable
 from backend.app.sources.types import Job
 from backend.app.sources.verification import VerificationGate
 from playwright.sync_api import Error as PlaywrightError
@@ -701,3 +701,120 @@ def test_enrich_tenta_cada_seletor_da_data_ate_um_dar_data(settings):
     nav = FakeNavigatorPorSeletor({}, details={link: {"detail": "descrição", "por_seletor": {"#a": "", "#b": "há 2 dias"}}})
     job = Job("1", "Vaga 1", "ACME", link, "curto", "fake")
     assert _fonte_datada(settings, nav, FakeDoisSeletores()).enrich([job])[0].publicada_em == "2026-10-14|há 2 dias"
+
+
+def _com_falhas_seguidas(settings, limite):
+    return replace(settings, navegador=replace(settings.navegador, max_falhas_termo_seguidas=limite))
+
+
+def _nav_que_falha_em(urls, erro, pages):
+    nav = FakeNavigator(pages)
+    abertas = nav.open
+
+    def open_com_falha(url):
+        abertas(url)
+        if url in urls:
+            raise erro(f"Falha ao abrir {url}: net::ERR_ABORTED")
+
+    nav.open = open_com_falha
+    return nav
+
+
+def test_termo_que_falha_por_erro_transitorio_e_pulado_e_a_busca_segue(settings):
+    nav = _nav_que_falha_em(
+        {"https://site/?q=a&start=0"},
+        SourceUnavailable,
+        {"https://site/?q=b&start=0": {"raw": [card(1)]}, "https://site/?q=b&start=2": {"raw": []}},
+    )
+    source, *_ = make_source(_com_falhas_seguidas(settings, 2), nav)
+    assert [j.id for j in source.search(["a", "b"])] == ["1"]
+    assert "https://site/?q=b&start=0" in nav.opened
+
+
+def test_falhas_seguidas_acima_do_limite_encerram_a_fonte(settings):
+    nav = _nav_que_falha_em(
+        {"https://site/?q=a&start=0", "https://site/?q=b&start=0"}, SourceUnavailable, {}
+    )
+    source, *_ = make_source(_com_falhas_seguidas(settings, 2), nav)
+    with pytest.raises(SourceUnavailable):
+        source.search(["a", "b", "c"])
+    assert "https://site/?q=c&start=0" not in nav.opened
+
+
+def test_termo_com_sucesso_zera_a_contagem_de_falhas_seguidas(settings):
+    nav = _nav_que_falha_em(
+        {"https://site/?q=a&start=0", "https://site/?q=c&start=0"},
+        SourceUnavailable,
+        {"https://site/?q=b&start=0": {"raw": [card(1)]}, "https://site/?q=b&start=2": {"raw": []}},
+    )
+    source, *_ = make_source(_com_falhas_seguidas(settings, 2), nav)
+    assert [j.id for j in source.search(["a", "b", "c"])] == ["1"]
+
+
+def test_limitacao_de_taxa_encerra_a_fonte_sem_pular_para_o_proximo_termo(settings):
+    nav = _nav_que_falha_em({"https://site/?q=a&start=0"}, SourceRateLimited, {})
+    source, *_ = make_source(_com_falhas_seguidas(settings, 5), nav)
+    with pytest.raises(SourceRateLimited):
+        source.search(["a", "b"])
+    assert nav.opened == ["https://site/?q=a&start=0"]
+
+
+def test_navegador_classifica_http_429_como_limitacao_de_taxa():
+    class Response:
+        def __init__(self, response_url):
+            self.url = response_url
+            self.status = 429
+
+    class Page:
+        listener = None
+
+        def on(self, event, listener):
+            self.listener = listener
+
+        def remove_listener(self, event, listener):
+            self.listener = None
+
+        def goto(self, url, wait_until, timeout):
+            self.listener(Response(url))
+            raise PlaywrightError("net::ERR_HTTP_RESPONSE_CODE_FAILURE")
+
+    with pytest.raises(SourceRateLimited):
+        PlaywrightNavigator(Page(), timeout_ms=1000, max_tentativas_abertura=3).open("https://linkedin.test/jobs")
+
+
+def _painel_que_falha_em(settings, falham, limite=3):
+    nav = FakeNavigator({})
+    nav._current = {"detail": "descrição"}
+    nav.open_detail = lambda js: not any(f'"{id_}"' in js for id_ in falham)
+
+    @contextmanager
+    def session():
+        yield nav
+
+    config = replace(settings, navegador=replace(settings.navegador, max_falhas_detalhe_seguidas=limite))
+    return BrowserSource(PanelOnlySite(), config, session, pause=lambda: None, scroll_pause=lambda: None)
+
+
+def _vagas(*ids):
+    return [Job(i, f"Vaga {i}", "ACME", f"https://site/job/{i}", "curto", "fake") for i in ids]
+
+
+def test_vaga_cujo_painel_nao_abre_e_pulada_e_as_demais_seguem(settings):
+    source = _painel_que_falha_em(settings, {"2"})
+    entregues = []
+    source.enrich(_vagas("1", "2", "3"), on_job=entregues.append)
+    assert [j.id for j in entregues] == ["1", "3"]
+
+
+def test_paineis_seguidos_acima_do_limite_encerram_a_fonte(settings):
+    source = _painel_que_falha_em(settings, {"1", "2", "3", "4"}, limite=2)
+    entregues = []
+    with pytest.raises(SourceLayoutChanged):
+        source.enrich(_vagas("1", "2", "3", "4"), on_job=entregues.append)
+
+
+def test_painel_que_abre_zera_a_contagem_de_falhas_seguidas(settings):
+    source = _painel_que_falha_em(settings, {"1", "3"}, limite=2)
+    entregues = []
+    source.enrich(_vagas("1", "2", "3", "4"), on_job=entregues.append)
+    assert [j.id for j in entregues] == ["2", "4"]

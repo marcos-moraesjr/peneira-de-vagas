@@ -57,6 +57,13 @@ Crie conforme a necessidade; sugestão inicial:
 
 ## Entradas
 
+### Indeed: cards-isca invisíveis quebravam a abertura do painel (2026-10-15)
+- **Contexto**: execução real do Indeed falhou com "Não abriu o painel da vaga … após 3 tentativa(s)" (`seletor_nao_encontrado`), em vagas que existiam na listagem.
+- **Causa raiz**: a listagem traz `div.job_seen_beacon` falsos (caixa 0×0, `data-jk` inventado, link `/viewjob`, título copiado de outra vaga; mudam a cada carga). O extrator os coletava; o clique neles navegava para `/viewjob`, os cards reais saíam do DOM e o painel da vaga seguinte nunca abria. Efeito colateral: abrir `/viewjob` é o que já havia gerado bloqueio Cloudflare. Além disso, `#jobDescriptionText` já não existe no painel (a descrição está em `.simple-job-description-html`).
+- **Impacto**: a fonte encerrava a execução na primeira vaga depois de uma isca; a descrição completa não era lida.
+- **Correção**: scanner `indeed` 1.10.2: só cards com área visível; `.simple-job-description-html` primeiro nos seletores do detalhe. Validado numa carga real (15 vagas abertas, 1 isca excluída). Lição: a contagem "16 no DOM, 15 no texto" da exploração já indicava a isca; divergência assim deve ser explicada antes de seguir.
+- **Risco futuro**: o Indeed pode trocar a técnica da isca (por exemplo, posicionar fora da tela em vez de 0×0) ou renomear o contêiner da descrição; a falha explícita continua pedindo nova exploração.
+
 ### Indeed: descrição no painel, sem abrir a vaga individual (2026-10-15)
 - **Antes:** o scanner abria `/viewjob?jk=…` para cada vaga nova, para ler a descrição e o JSON-LD `datePosted`.
 - **Depois:** clica no título do card pelo `data-jk` e lê a descrição completa no painel `DESKTOP_EMBEDDED` da listagem. Se o painel não abrir, falha como mudança de seletor; não há fallback para a URL individual.
@@ -69,6 +76,19 @@ Crie conforme a necessidade; sugestão inicial:
 - **Impacto**: o detalhe mostrava apenas um erro genérico e levava à tentativa equivocada de tratar qualquer resposta HTTP como transitória.
 - **Correção**: a abertura captura o status da resposta principal e o inclui no detalhe da falha. A fonte não repete `ERR_HTTP_RESPONSE_CODE_FAILURE`, pois 4xx/429 podem ser login, bloqueio ou limitação de taxa; só `ERR_ABORTED` mantém as tentativas configuradas.
 - **Risco futuro**: se o Chromium não emitir a resposta antes de falhar, o status continuará ausente; nesse caso o detalhe preserva o erro original e a execução real do usuário é necessária para diagnosticar a infraestrutura da plataforma.
+
+### Primeiro erro de abertura encerrava a fonte inteira (2026-10-15)
+- **Contexto**: no LinkedIn, a abertura de `start=25` do termo "Engenheiro Mecânico" recebeu HTTP 429 e a fonte falhou, perdendo os demais termos e os contadores do que já havia sido gravado.
+- **Causa raiz**: qualquer `SourceUnavailable` subia direto até a execução, sem distinguir erro transitório de limitação de taxa; o parcial lido não era contado.
+- **Impacto**: um timeout isolado cancelava os termos restantes; a linha da fonte mostrava 0 vagas mesmo com vagas já gravadas.
+- **Correção**: erro transitório pula só o termo (até `max_falhas_termo_seguidas` seguidas); 401/403/429 vira `SourceRateLimited` e encerra a fonte sem retentativa, conforme a regra de não contornar limitação de taxa; os contadores parciais são gravados na falha.
+- **Risco futuro**: o 429 em si só diminui com ritmo mais lento (`pausa_*`, `max_paginas_por_termo`), decisão do usuário; esperar e repetir seria insistir numa fonte que pediu para parar.
+
+### Uma vaga com painel que não abre derrubava o Indeed inteiro (2026-10-15)
+- **Contexto**: "Não abriu o painel da vaga 5d2a882098ab92fc em indeed após 3 tentativa(s)" encerrou a fonte, apesar de as demais vagas abrirem.
+- **Causa raiz**: `SourceLayoutChanged` de uma única vaga subia direto; não havia distinção entre seletor quebrado (todas falham) e vaga isolada (removida, lenta, isca).
+- **Correção**: a vaga é pulada e a próxima segue; `max_falhas_detalhe_seguidas` falhas seguidas, ou zero vagas detalhadas, mantêm a falha de seletor.
+- **Risco futuro**: pular esconde vagas persistentemente problemáticas; o aviso fica no log e a vaga volta na próxima execução.
 
 ### `ERR_ABORTED` sem contexto suficiente no Indeed (2026-10-15)
 - **Contexto**: a abertura de uma vaga do Indeed falhou em `page.goto` com `net::ERR_ABORTED`; a tela mostrava apenas uma mensagem técnica curta.
@@ -147,6 +167,11 @@ Crie conforme a necessidade; sugestão inicial:
 - **Parâmetros removidos**: `localidade` na listagem e em marcar como vistas, e o campo da tela. A ordenação `ordenar=localidade` continua.
 - **Motivo**: pedido do usuário. O filtro virou dois, `cidade` e `estado` (derivados do texto por `split_localidade`), mais o filtro `modalidade`, agora gravada na coluna `jobs.modalidade` (migração v6, não destrutiva).
 
+### Remoção: filtros `cidade` e `estado` da listagem, unificados em `local` (2026-10-15)
+- **Como funcionava**: `GET /api/jobs?cidade=&estado=` e o corpo de `POST /api/jobs/mark-seen` filtravam cidade e UF em campos separados; a tela tinha dois campos e uma lista de modalidade.
+- **Parâmetros removidos**: `cidade` e `estado` na listagem e em marcar como vistas, e os campos "Cidade", "Estado" e o seletor "Modalidade" da tela. `modalidade` segue aceito pela API (a tela não o envia mais).
+- **Motivo**: pedido do usuário. Um campo só (`local`) casa cidade, UF ou modalidade; o backend decide, o front só envia o texto.
+
 ### Remoção: botão Interromper e cancelamento da execução (2026-10-15)
 - **Como funcionava**: `POST /api/runs/{id}/cancel` acendia um `threading.Event` por execução (`app.state.cancel`) e o `VerificationGate.cancel()`; `run_service` e `BrowserSource` checavam o evento entre etapas, páginas e vagas e levantavam `SourceInterrupted`; o front tinha o botão **Interromper** (`useCancelRun`).
 - **Parâmetros removidos**: a rota `cancel`, `app.state.cancel`, o argumento `cancel` de `execute_run`/`start_run`, `SourceInterrupted`, `VerificationGate.cancel/check/reset`, `runs.ensure_running`. O motivo `interrompida` continua: é o que `db.close_stale_runs` grava quando o processo cai no meio de uma execução.
@@ -176,3 +201,8 @@ Crie conforme a necessidade; sugestão inicial:
 - **Como funcionava**: cada linha da tabela tinha um botão **Copiar**, que abria a edição contextual para informar o nome da cópia.
 - **Depois**: o botão foi removido das linhas. O formulário **Novo conjunto** ganhou a lista **Copiar palavras de**, com a opção **Começar vazio** e os conjuntos existentes; ao escolher uma origem, o nome digitado cria a cópia com todas as palavras.
 - **Motivo**: pedido do usuário. A tabela fica focada em selecionar, editar e excluir, enquanto criação e cópia ficam reunidas no mesmo fluxo.
+
+### Remoção: botões Salvar e Descartar da tela Configurações (2026-10-15)
+- **Como funcionava**: a tela mantinha um rascunho e só enviava `PUT /api/config` ao clicar em **Salvar**; **Descartar** voltava aos valores em vigor.
+- **Depois**: os botões foram removidos. O rascunho é enviado automaticamente quando o campo perde o foco (ou Enter), ao marcar/desmarcar uma opção e ao soltar ou usar o teclado num controle deslizante; nada é enviado se o valor não mudou. A tela mostra "Salvando…" e "Configuração salva. Vale a partir da próxima busca."; erro do backend (422) continua exibido, mantendo o que foi digitado.
+- **Motivo**: pedido do usuário. Não há debounce por tempo (evitaria um parâmetro novo no `config.toml`); sem o botão Descartar, um valor errado já salvo é corrigido editando de novo.

@@ -83,6 +83,33 @@ def test_indeed_extrai_cards_da_lista_salva(page, settings):
     assert [j.localidade for j in jobs] == ["São Paulo, SP", "Belo Horizonte, MG"]
 
 
+def test_indeed_ignora_card_isca_invisivel_da_listagem(page, settings):
+    """Observado na listagem real: cards 0x0 com id falso e link `/viewjob` que não aparecem ao usuário.
+    Clicá-los navega para fora da listagem e o painel das vagas seguintes não abre."""
+    page.set_content(
+        """<div class="job_seen_beacon"><a data-jk="a1b2c3d4e5f60001" href="/rc/clk?jk=a1b2c3d4e5f60001"><span title="Vaga Real">Vaga Real</span></a></div>
+        <div class="job_seen_beacon" style="width:0;height:0;overflow:hidden"><a data-jk="f1e2d3c4b5a67890" href="/viewjob?jk=f1e2d3c4b5a67890"><span title="Vaga Real">Vaga Real</span></a></div>
+        <div class="job_seen_beacon"><a data-jk="a1b2c3d4e5f60002" href="/rc/clk?jk=a1b2c3d4e5f60002"><span title="Outra Vaga">Outra Vaga</span></a></div>"""
+    )
+    site = IndeedSite(settings)
+    raws = PlaywrightNavigator(page, timeout_ms=5000).extract(site.extract_js)
+    assert [raw["id"] for raw in raws] == ["a1b2c3d4e5f60001", "a1b2c3d4e5f60002"]
+
+
+def test_indeed_le_a_descricao_do_painel_na_estrutura_atual(page, settings):
+    """Painel observado em 15/10/2026: sem `#jobDescriptionText`; a descrição fica em `.simple-job-description-html`."""
+    page.set_content(
+        """<div class="jobsearch-RightPane"><div data-testid="viewjob-job-content">
+        <h4 data-testid="vj-job-description-heading">Descrição completa da vaga</h4>
+        <div class="css-g5y9jx"><div class="react-native-html-content simple-job-description-html">Ensino superior em engenharia.\nExperiência com CAD.</div></div>
+        <div data-testid="vj-report-job">Denunciar anúncio</div></div></div>"""
+    )
+    site = IndeedSite(settings)
+    text = PlaywrightNavigator(page, timeout_ms=5000).first_text(site.detail_selectors)
+    assert "Experiência com CAD" in text
+    assert "Denunciar" not in text
+
+
 def test_indeed_abre_o_painel_do_card_sem_navegar_para_a_vaga(page, settings):
     page.set_content(
         """<div class="job_seen_beacon"><a class="jcs-JobTitle" data-jk="a1b2c3d4" href="/viewjob?jk=a1b2c3d4">Vaga</a></div>

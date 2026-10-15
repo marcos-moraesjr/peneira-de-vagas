@@ -41,7 +41,7 @@ function ProblemsTable() {
   );
 }
 
-export function TutorialPage() {
+export function ComoUsarPage() {
   return (
     <div className="space-y-4">
       <h2 className="text-display text-grafite-900">Como usar o Peneira de Vagas</h2>
@@ -54,7 +54,7 @@ export function TutorialPage() {
         <Step title="Abra o Chrome dedicado">
           <p>
             LinkedIn e Indeed são lidos pelo Chrome real, num perfil só do Peneira de Vagas (nunca o seu pessoal). Na aba
-            Vagas, clique em <strong>Abrir Chrome dedicado</strong>: o aviso "Chrome dedicado aberto" aparece quando ele
+            Buscar vagas, clique em <strong>Abrir Chrome dedicado</strong>: o aviso "Chrome dedicado aberto" aparece quando ele
             estiver pronto. Deixe a janela aberta durante a busca.
           </p>
           <p>
@@ -91,15 +91,18 @@ export function TutorialPage() {
           <p>
             Clique em <strong>Buscar agora</strong>. O andamento de cada fonte aparece ao lado do botão (aguardando,
             buscando, concluída, falhou). Uma busca por vez, em ritmo humano: com as três fontes, leva alguns minutos.
-            O app não contorna CAPTCHA nem bloqueios; se uma fonte pedir verificação, ela é encerrada e avisada.
+            Por padrão as plataformas buscam ao mesmo tempo, cada uma na sua aba (isso muda em Configurações).
+            O app não contorna CAPTCHA nem bloqueios: se uma fonte pedir verificação, ela espera na aba aberta. Conclua
+            a verificação à mão no Chrome dedicado e clique em <strong>Já concluí a verificação</strong> para a busca
+            seguir de onde parou; se o tempo de espera acabar, a fonte falha e é avisada.
           </p>
         </Step>
 
         <Step title="Leia os resultados">
           <p>
             A aba <strong>Não lidas</strong> mostra o que você ainda não viu. Clique no título para abrir a vaga original
-            (isso a marca como vista). Na primeira busca, a Gupy traz também vagas antigas;
-            depois disso, o app só mostra o que ainda não tinha visto. A aba Execuções guarda o histórico e o resultado
+            (isso a marca como vista). A aba Todas inclui também as já vistas.
+            A Gupy só traz vagas publicadas nos últimos dias (janela configurável). A aba Execuções guarda o histórico e o resultado
             de cada fonte.
           </p>
         </Step>
@@ -108,7 +111,7 @@ export function TutorialPage() {
       <section className={`${card} space-y-2`}>
         <h3 className="text-base font-semibold text-grafite-900">Se alguma fonte falhar</h3>
         <p className="text-sm text-grafite-500">
-            Uma fonte que falha aparece em destaque na aba Vagas, com a causa e o que fazer. As demais continuam. Falha
+            Uma fonte que falha aparece em destaque na aba Buscar vagas, com a causa e o que fazer. As demais continuam. Falha
           nunca é a mesma coisa que "nenhuma vaga".
         </p>
         <ProblemsTable />
@@ -118,7 +121,7 @@ export function TutorialPage() {
         <h3 className="text-base font-semibold text-grafite-900">Quando o scanner quebra</h3>
         <p>
           Sites mudam sem aviso. Se uma fonte falhar por layout, zero resultados ou erro de HTTP várias vezes seguidas,
-            a aba Vagas mostra "o scanner precisa ser refeito". Clique em <strong>Copiar instrução para o Claude</strong>{" "}
+            a aba Buscar vagas mostra "o scanner precisa ser refeito". Clique em <strong>Copiar instrução para o Claude</strong>{" "}
           e cole numa sessão do Claude Code neste repositório: ele explora a plataforma de novo e gera a versão
           seguinte do scanner. A aba Execuções mostra a versão de cada scanner.
         </p>

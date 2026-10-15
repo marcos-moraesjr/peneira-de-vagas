@@ -51,5 +51,5 @@ export function describeFailure(_fonte: string, motivo: string): { message: stri
   return TEXTS[motivo] ?? { message: `falhou (${motivo}).`, action: "Veja o log em logs/peneira-de-vagas.log." };
 }
 
-/** Todos os motivos padronizados de falha de fonte, na ordem em que o tutorial os explica. */
+/** Todos os motivos padronizados de falha de fonte, na ordem em que a página Como usar os explica. */
 export const FAILURE_REASONS = Object.keys(TEXTS);

@@ -3,13 +3,13 @@
 # registre no changelog de docs/SCANNERS.md. Regras de versão e procedimento: docs/SCANNERS.md.
 
 [linkedin]
-versao = "1.8.10"
+versao = "1.9.1"
 explorado_em = "2026-10-14"
 gerado_por = "Claude"
 referencia = "docs/EXPLORACAO_PLATAFORMAS.md §2.2"
 
 [indeed]
-versao = "1.10.1"
+versao = "1.11.1"
 explorado_em = "2026-10-15"
 gerado_por = "Claude"
 referencia = "docs/EXPLORACAO_PLATAFORMAS.md §2.3"

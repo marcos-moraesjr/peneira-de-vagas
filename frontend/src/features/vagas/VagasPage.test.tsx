@@ -31,15 +31,17 @@ describe("VagasPage", () => {
     expect(screen.getByText(/Beta/)).toBeInTheDocument();
   });
 
-  it("abre na aba Não lidas (visto=false) e Todas remove o filtro", async () => {
+  it("abre na aba Todas (sem visto), com Todas antes de Não lidas; Não lidas envia visto=false", async () => {
     const user = userEvent.setup();
     const { calls } = setup({ jobs: [makeJob(1)] });
     await screen.findByRole("link", { name: "Engenheiro Mecânico 1" });
-    expect(calls.some((c) => c.path.startsWith("/api/jobs") && c.path.includes("visto=false"))).toBe(true);
-    await user.click(screen.getByRole("tab", { name: "Todas" }));
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Todas", "Não lidas"]);
+    expect(screen.getByRole("tab", { name: "Todas" })).toHaveAttribute("aria-selected", "true");
+    expect(calls.some((c) => c.path.startsWith("/api/jobs") && c.path.includes("visto"))).toBe(false);
+    await user.click(screen.getByRole("tab", { name: "Não lidas" }));
     await waitFor(() => {
       const last = [...calls].reverse().find((c) => c.path.startsWith("/api/jobs"));
-      expect(last?.path).not.toContain("visto");
+      expect(last?.path).toContain("visto=false");
     });
   });
 
@@ -128,29 +130,24 @@ describe("VagasPage", () => {
     });
   });
 
-  it("filtra por cidade e por estado: envia cada um na listagem e em marcar como vistas; vazio remove", async () => {
+  it("filtra por local (cidade, estado ou modalidade): envia na listagem e em marcar como vistas; vazio remove", async () => {
     const user = userEvent.setup();
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const { calls } = setup({ jobs: [makeJob(1)] });
     await screen.findByRole("link", { name: "Engenheiro Mecânico 1" });
-    const cidade = screen.getByLabelText("Filtrar por cidade");
-    const estado = screen.getByLabelText("Filtrar por estado");
-    await user.type(cidade, "campinas");
-    await user.type(estado, "sp");
+    const local = screen.getByLabelText("Filtrar por cidade, estado ou modalidade");
+    await user.type(local, "campinas");
     await waitFor(() => {
       const last = [...calls].reverse().find((c) => c.path.startsWith("/api/jobs?"));
-      expect(last?.path).toContain("cidade=campinas");
-      expect(last?.path).toContain("estado=sp");
-      expect(last?.path).not.toContain("localidade");
+      expect(last?.path).toContain("local=campinas");
+      expect(last?.path).not.toMatch(/cidade|estado|modalidade/);
     });
     await user.click(screen.getByRole("button", { name: "Marcar todas como vistas" }));
-    await waitFor(() => expect(calls.find((c) => c.path === "/api/jobs/mark-seen")?.body).toEqual({ cidade: "campinas", estado: "sp" }));
-    await user.clear(cidade);
-    await user.clear(estado);
+    await waitFor(() => expect(calls.find((c) => c.path === "/api/jobs/mark-seen")?.body).toEqual({ local: "campinas" }));
+    await user.clear(local);
     await waitFor(() => {
       const last = [...calls].reverse().find((c) => c.path.startsWith("/api/jobs?"));
-      expect(last?.path).not.toContain("cidade");
-      expect(last?.path).not.toContain("estado");
+      expect(last?.path).not.toContain("local");
     });
   });
 
@@ -182,36 +179,18 @@ describe("VagasPage", () => {
 
     await waitFor(() => {
       const last = [...calls].reverse().find((c) => c.path.startsWith("/api/jobs?"));
-      expect(last?.path).toContain("estado=S%C3%A3o+Paulo");
+      expect(last?.path).toContain("local=S%C3%A3o+Paulo");
     });
     expect(calls.find((c) => c.method === "POST" && c.path === "/api/runs")?.body).toEqual({ fontes: null, localidade: "São Paulo" });
   });
 
-  it("filtra por modalidade: envia na listagem e em marcar como vistas; Todas remove", async () => {
-    const user = userEvent.setup();
-    vi.spyOn(window, "confirm").mockReturnValue(true);
-    const { calls } = setup({ jobs: [makeJob(1)] });
-    await screen.findByRole("link", { name: "Engenheiro Mecânico 1" });
-    await user.selectOptions(screen.getByLabelText("Modalidade da lista"), "remoto");
-    await waitFor(() => {
-      const last = [...calls].reverse().find((c) => c.path.startsWith("/api/jobs?"));
-      expect(last?.path).toContain("modalidade=remoto");
-    });
-    await user.click(screen.getByRole("button", { name: "Marcar todas como vistas" }));
-    await waitFor(() => expect(calls.find((c) => c.path === "/api/jobs/mark-seen")?.body).toEqual({ modalidade: "remoto" }));
-    await user.selectOptions(screen.getByLabelText("Modalidade da lista"), "");
-    await waitFor(() => {
-      const last = [...calls].reverse().find((c) => c.path.startsWith("/api/jobs?"));
-      expect(last?.path).not.toContain("modalidade");
-    });
-  });
-
-  it("a busca por título ou empresa vem antes dos filtros de cidade e estado", async () => {
+  it("a busca por título ou empresa vem antes do filtro de local e é mais larga que ele", async () => {
     setup({ jobs: [makeJob(1)] });
     await screen.findByRole("link", { name: "Engenheiro Mecânico 1" });
     const campos = screen.getAllByRole("textbox").map((campo) => campo.getAttribute("aria-label"));
-    expect(campos.indexOf("Buscar vagas")).toBeLessThan(campos.indexOf("Filtrar por cidade"));
-    expect(campos.indexOf("Filtrar por cidade")).toBeLessThan(campos.indexOf("Filtrar por estado"));
+    expect(campos.indexOf("Buscar vagas")).toBeLessThan(campos.indexOf("Filtrar por cidade, estado ou modalidade"));
+    expect(screen.getByLabelText("Buscar vagas").className).toContain("w-96");
+    expect(screen.queryByLabelText("Modalidade da lista")).not.toBeInTheDocument();
   });
 
 
@@ -245,8 +224,9 @@ describe("VagasPage", () => {
     expect(await screen.findByText(/use os controles acima/i)).toBeInTheDocument();
   });
 
-  it("depois de uma busca sem vagas novas mostra que não há vagas novas", async () => {
+  it("depois de uma busca sem vagas novas mostra que não há vagas novas (aba Não lidas)", async () => {
     setup({ jobs: [], runs: [makeRun(1, "concluida", [makeSource("gupy", { novas: 0 })])] });
+    await userEvent.setup().click(await screen.findByRole("tab", { name: "Não lidas" }));
     expect(await screen.findByText(/nenhuma vaga nova/i)).toBeInTheDocument();
   });
 
@@ -309,8 +289,8 @@ describe("VagasPage", () => {
       await screen.findByRole("link", { name: "Engenheiro Mecânico 1" });
       await user.click(screen.getByRole("button", { name: "Página 2" }));
       await waitFor(() => expect(ultima(calls)).toContain("offset=50"));
-      await user.type(screen.getByLabelText("Filtrar por cidade"), "c");
-      await waitFor(() => expect(ultima(calls)).toContain("cidade=c"));
+      await user.type(screen.getByLabelText("Filtrar por cidade, estado ou modalidade"), "c");
+      await waitFor(() => expect(ultima(calls)).toContain("local=c"));
       expect(ultima(calls)).not.toContain("offset");
     });
 

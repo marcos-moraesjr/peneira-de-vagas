@@ -1,18 +1,24 @@
+import type { ReactNode } from "react";
 import { useBrowser, useOpenBrowser } from "../../api/hooks";
 import { ErrorBox } from "../../components/ErrorBox";
 import { buttonSecondary } from "../../components/ui";
 
 /** Estado do Chrome dedicado (necessário para LinkedIn e Indeed) com botão para abri-lo. */
-export function ChromeStatus() {
+export function ChromeStatus({ children }: { children?: ReactNode }) {
   const browser = useBrowser();
   const open = useOpenBrowser();
-  if (!browser.data) return null;
+  if (!browser.data) {
+    return children ? <div className="flex flex-wrap items-center gap-3 rounded-painel border border-linha bg-painel px-3 py-1.5">{children}</div> : null;
+  }
   if (browser.data.aberto) {
     return (
-      <p className="flex items-center gap-2 text-[13px] font-semibold text-grafite-700 rounded-painel border border-linha bg-painel px-3 py-1.5">
-        <span aria-hidden className="h-2 w-2 rounded-full bg-sinal-ponto" />
-        Chrome dedicado aberto
-      </p>
+      <div className="flex flex-wrap items-center gap-3 rounded-painel border border-linha bg-painel px-3 py-1.5">
+        <p className="flex items-center gap-2 text-[13px] font-semibold text-grafite-700">
+          <span aria-hidden className="h-2 w-2 rounded-full bg-sinal-ponto" />
+          Chrome dedicado aberto
+        </p>
+        {children}
+      </div>
     );
   }
   return (
@@ -26,6 +32,7 @@ export function ChromeStatus() {
           {open.isPending ? "Abrindo…" : "Abrir Chrome dedicado"}
         </button>
         <span className="text-xs text-grafite-500">Necessário para LinkedIn e Indeed (a Gupy não precisa).</span>
+        {children}
       </div>
       {open.error && <ErrorBox message={open.error.message} />}
     </div>

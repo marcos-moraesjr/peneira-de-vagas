@@ -25,8 +25,8 @@ depois a correção.
 - API testada com `TestClient` do FastAPI; o serviço de execução é testado com fontes simuladas, chamado
   direto (síncrono). Segunda chamada a `POST /api/runs` durante uma execução devolve 409.
 - Sem `sleep` nem relógio real: pausas e "agora" são injetados (a pausa humana é função passada como parâmetro).
-- Testes `integration` (marker): contra os sites reais, rodados **só pelo usuário**, nunca em rotina nem por agente; pelo
-  agente, nos termos de `AI_GUIDELINES.md` §5.
+- Testes `integration` (marker): contra os sites reais, nunca em rotina. Gupy: rodados **só pelo usuário**. LinkedIn e
+  Indeed: o agente só executa o navegador com autorização explícita do usuário, pedida antes (`AI_GUIDELINES.md` §5).
 - Nome de teste descreve comportamento: `test_vaga_com_termo_excluido_e_descartada`.
 
 ## 2. Estilo
@@ -86,7 +86,7 @@ depois a correção.
 
 - [ ] Teste escrito antes e passando.
 - [ ] `pytest` verde no backend e `npm test` + `tsc --noEmit` verdes no frontend, quando tocados (exceto os
-      casos "sem teste" do §1); `integration` não é rodado por agente.
+      casos "sem teste" do §1); `integration` só é rodado por agente (LinkedIn/Indeed) com autorização prévia do usuário; Gupy, nunca.
 - [ ] Funções ≤ 40 linhas, arquivos ≤ 600, docstring nas novas, sem código morto.
 - [ ] Nada hardcoded; config no lugar certo.
 - [ ] Nenhuma tentativa de contornar bloqueio; falhas de fonte geram alerta.

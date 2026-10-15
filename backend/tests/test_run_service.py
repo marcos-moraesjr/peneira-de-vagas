@@ -7,7 +7,7 @@ import pytest
 from backend.app import db
 from backend.app.errors import Conflict, DomainError
 from backend.app.services import conjuntos, keywords, run_service
-from backend.app.sources.errors import SourceBlocked
+from backend.app.sources.errors import SourceBlocked, SourceRateLimited
 from backend.app.sources.types import Job
 
 NOW = "2026-10-14T12:00:00+00:00"
@@ -384,3 +384,17 @@ def test_mesma_vaga_em_outro_conjunto_e_gravada_de_novo_e_o_detalhe_e_aberto(con
     fonte = FakeSource(jobs=[job("1")])
     run_all(conn, settings, [fonte])
     assert fonte.enrich_calls == [[]]
+
+
+def test_limitacao_de_taxa_marca_falha_mas_preserva_o_que_ja_foi_lido(conn, settings):
+    class LimitadaNaSegundaPagina(FakeSource):
+        def search_and_enrich(self, termos, select_jobs, on_job=None):
+            for vaga in select_jobs(self._jobs):
+                on_job(vaga)
+            raise SourceRateLimited("HTTP 429", motivo="http_erro")
+
+    fonte = LimitadaNaSegundaPagina(jobs=[job("1", trecho="engenheiro mecânico")])
+    run_id = run_all(conn, settings, [fonte])
+    linha = sources_of(conn, run_id)["fake"]
+    assert (linha["status"], linha["motivo"]) == ("falha", "http_erro")
+    assert (linha["lidas"], linha["aprovadas"], linha["novas"]) == (1, 1, 1)

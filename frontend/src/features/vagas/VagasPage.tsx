@@ -4,7 +4,6 @@ import { useClearJobs, useConfig, useConjuntos, useJobs, useKeywords, useMarkAll
 import type { SeenFilter } from "../../api/types";
 import { buttonSecondary, inputClass } from "../../components/ui";
 import { SOURCES, sourceLabel } from "../../lib/failures";
-import { MODALIDADES } from "../../lib/format";
 import { ErrorBox } from "../../components/ErrorBox";
 import { ChromeStatus } from "./ChromeStatus";
 import { FailureBanner } from "./FailureBanner";
@@ -15,8 +14,8 @@ import { Pagination } from "./Pagination";
 import { JobsList, type Sort, type SortColumn } from "./JobsList";
 
 const TABS: { id: SeenFilter; label: string }[] = [
-  { id: "novas", label: "Não lidas" },
   { id: "todas", label: "Todas" },
+  { id: "novas", label: "Não lidas" },
 ];
 
 /** Quando a execução mais recente passa de 'executando' para 'concluida', recarrega as vagas. */
@@ -54,12 +53,10 @@ function nextSort(current: Sort, column: SortColumn): Sort {
 }
 
 export function VagasPage() {
-  const [seen, setSeen] = useState<SeenFilter>("novas");
+  const [seen, setSeen] = useState<SeenFilter>("todas");
   const [fonte, setFonte] = useState("");
   const [q, setQ] = useState("");
-  const [cidade, setCidade] = useState("");
-  const [estado, setEstado] = useState("");
-  const [modalidade, setModalidade] = useState("");
+  const [local, setLocal] = useState("");
   const [maxDias, setMaxDias] = useState("");
   const [page, setPage] = useState(1);
   const [sort, setSort] = useState<Sort>(null);
@@ -77,7 +74,7 @@ export function VagasPage() {
   const latest = runs.data?.[0];
   const keywords = useKeywords("busca");
   const startRun = useStartRun();
-  const jobs = useJobs({ visto: seen === "novas" ? false : undefined, fonte, q, cidade, estado, modalidade, conjuntoId, ordenar: sort?.column, direcao: sort?.direction, maxDias: maxDiasValue }, page, latest?.status === "executando");
+  const jobs = useJobs({ visto: seen === "novas" ? false : undefined, fonte, q, local, conjuntoId, ordenar: sort?.column, direcao: sort?.direction, maxDias: maxDiasValue }, page, latest?.status === "executando");
   const setSeenMutation = useSetSeen();
   const markAll = useMarkAllSeen();
   const clearJobs = useClearJobs();
@@ -95,7 +92,7 @@ export function VagasPage() {
 
   function markAllSeen() {
     if (window.confirm("Marcar todas as vagas filtradas como vistas?")) {
-      markAll.mutate({ fonte: fonte || undefined, q: q || undefined, cidade: cidade || undefined, estado: estado || undefined, modalidade: modalidade || undefined, max_dias: maxDiasValue, conjunto_id: conjuntoId });
+      markAll.mutate({ fonte: fonte || undefined, q: q || undefined, local: local || undefined, max_dias: maxDiasValue, conjunto_id: conjuntoId });
     }
   }
 
@@ -110,7 +107,7 @@ export function VagasPage() {
     // O estado escolhido na busca também define o recorte inicial da lista.
     // Sem isso, vagas antigas do conjunto continuam visíveis e parecem ter
     // ignorado o filtro, especialmente quando a Gupy não traz novas vagas.
-    setEstado(localidade);
+    setLocal(localidade);
     setPage(1);
     startRun.mutate({ fontes: sources, ...(localidade ? { localidade } : {}), ...(modalidadeBusca ? { modalidade: modalidadeBusca } : {}), ...(janelaDias ? { janela_dias: Number(janelaDias) } : {}) });
   }
@@ -133,9 +130,16 @@ export function VagasPage() {
       />
       {startRun.error && <ErrorBox message={startRun.error.message} />}
       <VerificationPrompt running={latest?.status === "executando"} />
-      <ChromeStatus />
+      <ChromeStatus>
+        <RunStatus latest={latest} />
+      </ChromeStatus>
       <FailureBanner run={latest} onRestart={runSearch} restarting={startRun.isPending} />
       <ScannerBanner />
+      <section aria-label="Filtros da lista" className="space-y-2 rounded-painel border border-linha bg-painel px-4 py-3">
+      <div className="flex flex-wrap items-baseline gap-x-3">
+        <h2 className="text-sm font-semibold text-grafite-900">Filtrar vagas encontradas</h2>
+        <p className="text-xs text-grafite-500">Só filtra o que já está na lista abaixo; não faz uma nova busca.</p>
+      </div>
       <div className="flex flex-wrap items-center gap-3">
         {conjuntos.length > 0 && (
           <label className="flex items-center gap-2 text-sm text-grafite-700">
@@ -185,25 +189,6 @@ export function VagasPage() {
           </select>
         </label>
         <label className="flex items-center gap-2 text-sm text-grafite-700">
-          Modalidade
-          <select
-            aria-label="Modalidade da lista"
-            value={modalidade}
-            onChange={(event) => {
-              setModalidade(event.target.value);
-              setPage(1);
-            }}
-            className={inputClass}
-          >
-            <option value="">Todas</option>
-            {MODALIDADES.map((item) => (
-              <option key={item.valor} value={item.valor}>
-                {item.rotulo}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex items-center gap-2 text-sm text-grafite-700">
           Publicadas há no máximo (dias)
           <input
             type="number"
@@ -216,15 +201,6 @@ export function VagasPage() {
             className={`${inputClass} w-20`}
           />
         </label>
-        <RunStatus latest={latest} />
-        <div className="ml-auto flex flex-wrap items-center gap-3">
-          <button type="button" className={buttonSecondary} onClick={markAllSeen}>
-            Marcar todas como vistas
-          </button>
-          <button type="button" className={buttonSecondary} disabled={clearJobs.isPending} onClick={deleteAll}>
-            Excluir todas as vagas
-          </button>
-        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -236,29 +212,28 @@ export function VagasPage() {
             setQ(event.target.value);
             setPage(1);
           }}
-          className={`${inputClass} min-w-0 flex-1`}
+          className={`${inputClass} w-96`}
         />
         <input
-          aria-label="Filtrar por cidade"
-          placeholder="Cidade"
-          value={cidade}
+          aria-label="Filtrar por cidade, estado ou modalidade"
+          placeholder="Cidade, estado ou modalidade"
+          value={local}
           onChange={(event) => {
-            setCidade(event.target.value);
+            setLocal(event.target.value);
             setPage(1);
           }}
-          className={`${inputClass} w-44`}
+          className={`${inputClass} w-72`}
         />
-        <input
-          aria-label="Filtrar por estado"
-          placeholder="Estado"
-          value={estado}
-          onChange={(event) => {
-            setEstado(event.target.value);
-            setPage(1);
-          }}
-          className={`${inputClass} w-24`}
-        />
+        <div className="ml-auto flex flex-wrap items-center gap-3">
+          <button type="button" className={buttonSecondary} onClick={markAllSeen}>
+            Marcar todas como vistas
+          </button>
+          <button type="button" className={buttonSecondary} disabled={clearJobs.isPending} onClick={deleteAll}>
+            Excluir todas as vagas
+          </button>
+        </div>
       </div>
+      </section>
 
       {jobs.isError && <ErrorBox message="Não foi possível carregar as vagas. Verifique se a API está rodando." />}
       {jobs.isLoading && <p className="text-sm text-grafite-500">Carregando vagas…</p>}

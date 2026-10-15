@@ -76,6 +76,7 @@ def _pre_approve(jobs: list[Job], flt: Filter, settings: Settings) -> list[Job]:
 
 def _run_source(conn, settings, source: Source, termos, flt, conjunto_id: int, run_id: int, now: str) -> None:
     local_filter = getattr(source, "local_filter", True)
+    lidas = 0
     aprovadas = 0
     novas = 0
 
@@ -88,23 +89,29 @@ def _run_source(conn, settings, source: Source, termos, flt, conjunto_id: int, r
 
     def select_page(page: list[Job]) -> list[Job]:
         """Triagem e deduplicação da página antes de abrir os detalhes."""
-        nonlocal aprovadas
+        nonlocal aprovadas, lidas
+        lidas += len(page)
         candidates = _pre_approve(page, flt, settings) if local_filter else page
         unknown = db.filter_unknown(conn, candidates, conjunto_id)
         aprovadas += len(candidates) - len(unknown)
         return unknown
 
     search_and_enrich = getattr(source, "search_and_enrich", None)
-    if callable(search_and_enrich):
-        jobs = search_and_enrich(termos, select_page, on_job=save)
-    else:
-        jobs = source.search(termos)
-        if not jobs:
-            raise SourceEmpty("A fonte não devolveu nenhuma vaga")
-        candidates = _pre_approve(jobs, flt, settings) if local_filter else jobs
-        unknown = db.filter_unknown(conn, candidates, conjunto_id)
-        aprovadas = len(candidates) - len(unknown)
-        source.enrich(unknown, on_job=save)
+    try:
+        if callable(search_and_enrich):
+            jobs = search_and_enrich(termos, select_page, on_job=save)
+        else:
+            jobs = source.search(termos)
+            if not jobs:
+                raise SourceEmpty("A fonte não devolveu nenhuma vaga")
+            candidates = _pre_approve(jobs, flt, settings) if local_filter else jobs
+            unknown = db.filter_unknown(conn, candidates, conjunto_id)
+            aprovadas = len(candidates) - len(unknown)
+            source.enrich(unknown, on_job=save)
+    except SourceError:
+        # o que já foi lido e gravado antes da falha continua contado na linha da fonte
+        _update_source(conn, run_id, source.name, lidas=lidas, aprovadas=aprovadas, novas=novas)
+        raise
     if not jobs:
         raise SourceEmpty("A fonte não devolveu nenhuma vaga")
     _update_source(conn, run_id, source.name, status="ok", lidas=len(jobs), aprovadas=aprovadas, novas=novas)

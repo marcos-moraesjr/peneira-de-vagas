@@ -44,10 +44,11 @@ type Props = {
 export function RunStatus({ latest }: { latest: Run | undefined }) {
   if (latest?.status !== "executando") return null;
   return (
-    <div className="inline-flex rounded-botao border border-linha bg-painel px-2 py-1">
-      <ul role="status" className="flex flex-wrap items-center gap-3 text-sm text-grafite-500">
+    <div className="inline-flex">
+      <ul role="status" className="flex flex-wrap items-center gap-3 text-[13px] font-semibold text-grafite-500">
         {latest.fontes.map((source) => (
-          <li key={source.fonte} className={STATUS_CLASS[source.status] ?? "text-grafite-500"}>
+          <li key={source.fonte} className={`flex items-center gap-2 border-l border-linha pl-3 ${STATUS_CLASS[source.status] ?? "text-grafite-500"}`}>
+            <span aria-hidden className="h-2 w-2 rounded-full bg-current" />
             {sourceLabel(source.fonte)}: {STATUS_TEXT[source.status] ?? source.status}
           </li>
         ))}
@@ -78,7 +79,11 @@ export function RunBar({
     setSelected((current) => (current.includes(name) ? current.filter((item) => item !== name) : [...current, name]));
   }
   return (
-    <div role="region" aria-label="Controles da busca" className="space-y-1.5 rounded-painel border border-linha bg-painel px-4 py-3">
+    <div role="region" aria-label="Controles da busca" className="space-y-2 rounded-painel border border-linha bg-painel px-4 py-3">
+      <div className="flex flex-wrap items-baseline gap-x-3">
+        <h2 className="text-sm font-semibold text-grafite-900">Buscar nas plataformas</h2>
+        <p className="text-xs text-grafite-500">Define o que será coletado nos sites; a janela de recência vale só para esta busca.</p>
+      </div>
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"

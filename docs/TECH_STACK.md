@@ -103,7 +103,7 @@ Todas as fontes devolvem o mesmo formato: `id`, `título`, `empresa`, `link`, `t
 | Camada | Escolha |
 | --- | --- |
 | Backend, unitário e API | **pytest** + `TestClient` do FastAPI — filtro, deduplicação, parsing da Gupy (amostras salvas), rotas, execução com fontes simuladas |
-| Backend, integração | **pytest** com marker `integration` — execução real contra os sites, rodada só pelo usuário |
+| Backend, integração | **pytest** com marker `integration` — execução real contra os sites, rodada pelo usuário (agente só com autorização prévia, em LinkedIn/Indeed) |
 | Frontend | **Vitest** + `@testing-library/react` — componentes e fluxos com a API simulada |
 
 ## Ferramentas

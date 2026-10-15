@@ -16,7 +16,7 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeout
 from playwright.sync_api import sync_playwright
 
 from ..config import Settings
-from .errors import SourceBlocked, SourceLayoutChanged, SourceUnavailable
+from .errors import SourceBlocked, SourceLayoutChanged, SourceRateLimited, SourceUnavailable
 from .relative_date import find_published_line
 from .types import Job
 from .verification import VerificationGate
@@ -61,6 +61,9 @@ class Navigator(Protocol):
     def open_detail(self, js: str) -> bool: ...
 
 
+RATE_LIMIT_STATUSES = (401, 403, 429)
+
+
 class NavigationResponse:
     """Captura o status da resposta principal sem manter listener depois da navegação."""
 
@@ -103,7 +106,8 @@ class PlaywrightNavigator:
             except PlaywrightError as error:
                 detail = f"HTTP {response.status}: " if response.status else ""
                 if "ERR_ABORTED" not in str(error).upper() or attempt + 1 == self._max_tentativas_abertura:
-                    raise SourceUnavailable(
+                    failure = SourceRateLimited if response.status in RATE_LIMIT_STATUSES else SourceUnavailable
+                    raise failure(
                         f"Falha ao abrir {url} após {attempt + 1} tentativa(s)"
                         f" de {self._max_tentativas_abertura}: {detail}{error}",
                         motivo="http_erro",
@@ -233,8 +237,7 @@ class BrowserSource:
     def search(self, termos: list[str]) -> list[Job]:
         found: dict[str, Job] = {}
         with self._session() as navigator:
-            for termo in termos:
-                self._search_term(navigator, termo, found)
+            self._search_terms(navigator, termos, found)
         return list(found.values())
 
     def search_and_enrich(
@@ -257,8 +260,7 @@ class BrowserSource:
                 on_job(job)
 
         with self._session() as navigator:
-            for termo in termos:
-                self._search_term(navigator, termo, found, select_jobs, deliver)
+            self._search_terms(navigator, termos, found, select_jobs, deliver)
         self._warn_missing_publication(enriched)
         return list(found.values())
 
@@ -295,8 +297,21 @@ class BrowserSource:
     ) -> list[Job]:
         """Abre uma sequência de detalhes usando a aba já conectada."""
         enriched = []
+        failures = 0
+        last_error: SourceLayoutChanged | None = None
         for job in jobs:
-            self._open_job_detail(navigator, job)
+            try:
+                self._open_job_detail(navigator, job)
+            except SourceLayoutChanged as error:
+                # uma vaga isolada (removida, isca, painel lento) não derruba a fonte: pula e segue; sem gravar,
+                # a próxima execução tenta de novo. Falhas seguidas indicam seletor alterado de fato.
+                failures += 1
+                last_error = error
+                if failures >= self._settings.navegador.max_falhas_detalhe_seguidas:
+                    raise
+                log.warning("Fonte %s: vaga %s pulada (%s)", self.name, job.id, error.detalhe)
+                continue
+            failures = 0
             expand_detail = getattr(self._site, "expand_detail_js", None)
             if expand_detail:
                 navigator.expand_detail(expand_detail)
@@ -305,6 +320,8 @@ class BrowserSource:
             enriched.append(detailed)
             if on_job:
                 on_job(detailed)
+        if last_error and not enriched:
+            raise last_error
         return enriched
 
     def _open_job_detail(self, navigator: Navigator, job: Job) -> None:
@@ -350,6 +367,36 @@ class BrowserSource:
                 return published
         return find_published_line(navigator.first_text(["body"]), now)
 
+    def _search_terms(
+        self,
+        navigator: Navigator,
+        termos: list[str],
+        found: dict[str, Job],
+        select_jobs: Callable[[list[Job]], list[Job]] | None = None,
+        on_job: Callable[[Job], None] | None = None,
+    ) -> None:
+        """Um termo que falha por erro transitório (timeout, 5xx, abertura abortada) é pulado e a busca segue com o
+        próximo; `max_falhas_termo_seguidas` falhas seguidas indicam problema da fonte e a encerram. Limitação de taxa
+        (`SourceRateLimited`), bloqueio e seletor alterado nunca são pulados: encerram a fonte na hora."""
+        failures = 0
+        last_error: SourceUnavailable | None = None
+        for termo in termos:
+            try:
+                self._search_term(navigator, termo, found, select_jobs, on_job)
+            except SourceRateLimited:
+                raise
+            except SourceUnavailable as error:
+                failures += 1
+                last_error = error
+                if failures >= self._settings.navegador.max_falhas_termo_seguidas:
+                    raise
+                log.warning("Fonte %s: termo %r pulado (%s); seguindo com o próximo", self.name, termo, error.detalhe)
+                self._pause()
+            else:
+                failures = 0
+        if last_error and not found:
+            raise last_error
+
     def _search_term(
         self,
         navigator: Navigator,
@@ -393,7 +440,7 @@ class BrowserSource:
         try:
             navigator.open(url)
         except SourceUnavailable as error:
-            raise SourceUnavailable(
+            raise type(error)(
                 f"Fonte {self.name}: falha na etapa {etapa}: {error.detalhe}",
                 motivo=error.motivo,
             ) from error
@@ -412,6 +459,8 @@ class BrowserSource:
         """Ao concluir a verificação o site ainda redireciona e o `goto` pode ser abortado: uma nova tentativa, após a pausa."""
         try:
             navigator.open(url)
+        except SourceRateLimited:
+            raise
         except SourceUnavailable:
             self._pause()
             navigator.open(url)

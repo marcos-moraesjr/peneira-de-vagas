@@ -106,9 +106,7 @@ export type JobFilters = {
   visto?: boolean;
   fonte?: string;
   q?: string;
-  cidade?: string;
-  estado?: string;
-  modalidade?: string;
+  local?: string;
   conjuntoId?: number;
   ordenar?: string;
   direcao?: "asc" | "desc";
@@ -124,9 +122,7 @@ export function useJobs(filters: JobFilters, page: number, live = false) {
   if (filters.visto !== undefined) params.set("visto", String(filters.visto));
   if (filters.fonte) params.set("fonte", filters.fonte);
   if (filters.q) params.set("q", filters.q);
-  if (filters.cidade) params.set("cidade", filters.cidade);
-  if (filters.estado) params.set("estado", filters.estado);
-  if (filters.modalidade) params.set("modalidade", filters.modalidade);
+  if (filters.local) params.set("local", filters.local);
   if (filters.conjuntoId !== undefined) params.set("conjunto_id", String(filters.conjuntoId));
   if (filters.maxDias !== undefined) params.set("max_dias", String(filters.maxDias));
   if (filters.ordenar) params.set("ordenar", filters.ordenar);
@@ -160,7 +156,7 @@ export function useSetSeen() {
 export function useMarkAllSeen() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (filters: { fonte?: string; q?: string; cidade?: string; estado?: string; modalidade?: string; max_dias?: number; conjunto_id?: number }) =>
+    mutationFn: (filters: { fonte?: string; q?: string; local?: string; max_dias?: number; conjunto_id?: number }) =>
       apiSend<{ atualizadas: number }>("POST", "/api/jobs/mark-seen", filters),
     onSuccess: () => client.invalidateQueries({ queryKey: ["jobs"] }),
   });
