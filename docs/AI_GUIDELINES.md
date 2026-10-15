@@ -58,6 +58,9 @@ por "testo depois".
 - Nunca ler, imprimir, logar ou commitar cookies, o perfil do Chrome (`data/chrome-profile/`),
   `*.db` ou o conteúdo de sessões logadas.
 - Abrir a API além de `127.0.0.1` ou enviar dados a terceiros além das três fontes de vagas: decisão **exclusiva do usuário**.
+- Git: `origin` é o repositório **privado** (padrão para commit e push); o **público** é o remote `publico`, e só
+  recebe push (e Release) quando o usuário pedir para subir a versão pública, seguindo o procedimento de
+  `CODE_QUALITY.md` §6. Nunca enviar ao `publico` por iniciativa própria.
 - Frontend não repete regra de negócio nem validação: exibe e envia; quem decide é o backend.
 - Ritmo humano é regra, não detalhe: uma aba por plataforma (paralelismo entre plataformas só com `navegador.abas_paralelas`, opção do usuário; nunca várias abas na mesma plataforma), sem remover as pausas variáveis, sem aumentar o
   limite de páginas abertas por palavra-chave e por fonte (`limites.max_paginas_por_termo`) sem pedido explícito.

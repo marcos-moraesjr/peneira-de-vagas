@@ -82,6 +82,22 @@ depois a correção.
 - Mensagem curta, no imperativo, em PT-BR: `adiciona filtro de exclusões por título`.
 - Sem `--no-verify` nem contorno de assinatura.
 
+### Repositórios: privado (padrão) e público
+
+| Remote | Repositório | Uso |
+| --- | --- | --- |
+| `origin` | `marcos-moraesjr/job-scanner` (**privado**) | trabalho do dia a dia: todo commit e todo `git push` vão para cá |
+| `publico` | `marcos-moraesjr/peneira-de-vagas` (**público**) | só quando o usuário pedir para **subir a versão pública** |
+
+- `main` acompanha `origin`; `git push` sem argumentos nunca chega ao público.
+- **Subir a versão pública** (só a pedido explícito, a cada vez): 1) árvore limpa e `origin` em dia; 2) suítes
+  verdes (`pytest`, `npm test`, `npm run typecheck`); 3) varredura do que vai ficar público (`git ls-files` e o
+  histórico ainda não publicado: sem `*.db`, `data/`, cookies, segredos nem dados pessoais); 4) `git push publico main`;
+  5) se for uma versão nova: `scripts/build-release.ps1 -Versao X.Y.Z` e `gh release create vX.Y.Z release/peneira.zip --repo marcos-moraesjr/peneira-de-vagas`.
+- O público é um retrato do `main`: recebe o mesmo histórico, só que quando o usuário manda. Nada entra no `main`
+  que não possa ficar público; o que for só do privado não vai para o `main` (use outra branch no `origin`).
+- O instalador (`scripts/install.ps1`) e o aviso de atualização do app apontam para o **público**.
+
 ## 7. Definição de pronto
 
 - [ ] Teste escrito antes e passando.
