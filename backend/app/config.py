@@ -78,6 +78,7 @@ class Navegador:
     espera_verificacao_s: int
     max_tentativas_abertura: int
     max_tentativas_painel: int
+    intervalo_tentativa_painel_s: float
     max_falhas_termo_seguidas: int
     max_falhas_detalhe_seguidas: int
 
@@ -212,6 +213,7 @@ def validate(settings: Settings) -> None:
         "min_score": settings.filtro.min_score,
         "pausa_min_s": ritmo.pausa_min_s,
         "rolagem_min_s": ritmo.rolagem_min_s,
+        "intervalo_tentativa_painel_s": settings.navegador.intervalo_tentativa_painel_s,
         "pausa_detalhe_min_s": ritmo.pausa_detalhe_min_s,
     }
     for name, value in non_negatives.items():

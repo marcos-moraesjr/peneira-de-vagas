@@ -345,7 +345,7 @@ def test_fonte_de_painel_sem_fallback_nao_abre_a_url_individual(settings):
     def session():
         yield nav
 
-    source = BrowserSource(PanelOnlySite(), settings, session, pause=lambda: None, scroll_pause=lambda: None)
+    source = BrowserSource(PanelOnlySite(), settings, session, pause=lambda: None, scroll_pause=lambda: None, sleep=lambda s: None)
     with pytest.raises(SourceLayoutChanged, match="painel"):
         source.enrich([job])
     assert nav.opened == []
@@ -362,11 +362,31 @@ def test_painel_e_tentado_ate_o_limite_configurado_antes_da_falha(settings):
         yield nav
 
     pauses = []
-    source = BrowserSource(PanelOnlySite(), settings, session, pause=lambda: None, scroll_pause=lambda: pauses.append(1))
+    source = BrowserSource(
+        PanelOnlySite(), settings, session, pause=lambda: None, scroll_pause=lambda: pauses.append(1), sleep=lambda s: None
+    )
     with pytest.raises(SourceLayoutChanged, match="3 tentativa"):
         source.enrich([job])
     assert len(attempts) == settings.navegador.max_tentativas_painel == 3
-    assert len(pauses) == 2
+
+
+def test_tentativas_do_painel_esperam_o_intervalo_configurado_entre_si(settings):
+    job = Job("1", "Vaga 1", "ACME", "https://site/job/1", "curto", "fake")
+    nav = FakeNavigator({})
+    nav.open_detail = lambda js: False
+
+    @contextmanager
+    def session():
+        yield nav
+
+    esperas = []
+    source = BrowserSource(
+        PanelOnlySite(), settings, session, pause=lambda: None, scroll_pause=lambda: None, sleep=esperas.append
+    )
+    with pytest.raises(SourceLayoutChanged):
+        source.enrich([job])
+    assert settings.navegador.intervalo_tentativa_painel_s == 15
+    assert esperas == [15, 15]  # entre 3 tentativas há 2 intervalos; nenhum depois da última
 
 
 def test_cada_painel_aberto_espera_a_pausa_de_detalhe_e_nao_a_de_rolagem(settings):
@@ -810,7 +830,7 @@ def _painel_que_falha_em(settings, falham, limite=3):
         yield nav
 
     config = replace(settings, navegador=replace(settings.navegador, max_falhas_detalhe_seguidas=limite))
-    return BrowserSource(PanelOnlySite(), config, session, pause=lambda: None, scroll_pause=lambda: None)
+    return BrowserSource(PanelOnlySite(), config, session, pause=lambda: None, scroll_pause=lambda: None, sleep=lambda s: None)
 
 
 def _vagas(*ids):

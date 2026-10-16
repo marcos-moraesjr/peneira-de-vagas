@@ -50,13 +50,30 @@ def test_abas_paralelas_e_editavel_e_grava_so_o_valor(settings, arquivo):
     with _client(settings, arquivo) as client:
         novo = client.get("/api/config").json()
         atual = novo["navegador"]["abas_paralelas"]
-        assert novo["navegador"] == {"abas_paralelas": atual}
+        assert set(novo["navegador"]) == {"abas_paralelas", "max_tentativas_painel", "intervalo_tentativa_painel_s"}
         novo["navegador"]["abas_paralelas"] = not atual
         resposta = client.put("/api/config", json=novo)
         assert resposta.status_code == 200
-        assert client.get("/api/config").json()["navegador"] == {"abas_paralelas": not atual}
+        assert client.get("/api/config").json()["navegador"]["abas_paralelas"] == (not atual)
     texto = arquivo.read_text(encoding="utf-8")
     assert f"abas_paralelas = {str(not atual).lower()}" in texto and "# true: uma aba por fonte" in texto
+
+
+def test_tentativas_e_intervalo_do_painel_sao_editaveis_e_gravam_so_o_valor(settings, arquivo):
+    with _client(settings, arquivo) as client:
+        novo = client.get("/api/config").json()
+        assert novo["navegador"]["max_tentativas_painel"] == 3
+        assert novo["navegador"]["intervalo_tentativa_painel_s"] == 15
+        novo["navegador"]["max_tentativas_painel"] = 5
+        novo["navegador"]["intervalo_tentativa_painel_s"] = 20.5
+        assert client.put("/api/config", json=novo).status_code == 200
+        atual = client.get("/api/config").json()["navegador"]
+        novo["navegador"]["max_tentativas_painel"] = 0
+        assert client.put("/api/config", json=novo).status_code == 422
+    assert atual["max_tentativas_painel"] == 5 and atual["intervalo_tentativa_painel_s"] == 20.5
+    texto = arquivo.read_text(encoding="utf-8")
+    assert "max_tentativas_painel = 5 " in texto and "intervalo_tentativa_painel_s = 20.5 " in texto
+    assert "# espera entre uma tentativa" in texto
 
 
 def test_put_invalido_devolve_422_e_nao_altera_nada(settings, arquivo):
@@ -117,3 +134,13 @@ def test_put_grava_varias_modalidades_como_lista(settings, arquivo):
         assert client.put("/api/config", json=novo).status_code == 422
         assert client.get("/api/config").json()["busca"]["modalidade"] == ["remoto", "hibrido"]
     assert 'modalidade = ["remoto", "hibrido"]' in arquivo.read_text(encoding="utf-8")
+
+
+def test_config_antigo_sem_a_chave_nova_do_painel_ainda_grava(settings, arquivo):
+    linhas = arquivo.read_text(encoding="utf-8").splitlines(keepends=True)
+    arquivo.write_text("".join(x for x in linhas if not x.startswith("intervalo_tentativa_painel_s")), encoding="utf-8")
+    with _client(settings, arquivo) as client:
+        novo = client.get("/api/config").json()
+        novo["navegador"]["intervalo_tentativa_painel_s"] = 30
+        assert client.put("/api/config", json=novo).status_code == 200
+    assert "intervalo_tentativa_painel_s = 30" in arquivo.read_text(encoding="utf-8")

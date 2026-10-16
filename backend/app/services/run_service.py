@@ -19,6 +19,9 @@ from .scanners import Manifest
 
 log = logging.getLogger(__name__)
 
+# Falha que encerra a sequência de conjuntos: bloqueio, login ou limitação de taxa (nunca contornados).
+MOTIVOS_DE_BLOQUEIO = ("captcha", "login", "http_erro")
+
 
 class Source(Protocol):
     name: str
@@ -28,13 +31,13 @@ class Source(Protocol):
     def enrich(self, jobs: list[Job], on_job: Callable[[Job], None] | None = None) -> list[Job]: ...
 
 
-def _build_filter(conn: sqlite3.Connection, settings: Settings) -> tuple[list[str], Filter]:
+def build_filter(conn: sqlite3.Connection, settings: Settings, conjunto_id: int | None = None) -> tuple[list[str], Filter]:
     """Termos enviados às fontes (só os `busca`, os primeiros `max_termos_busca`) e o filtro, que pontua com
-    `busca` + `ranking` (um termo nos dois grupos conta uma vez)."""
-    termos = [k["termo"] for k in keywords.list_all(conn, "busca")]
-    ranking = [k["termo"] for k in keywords.list_all(conn, "ranking")]
+    `busca` + `ranking` (um termo nos dois grupos conta uma vez). Palavras do conjunto pedido (padrão: o ativo)."""
+    termos = [k["termo"] for k in keywords.list_all(conn, "busca", conjunto_id)]
+    ranking = [k["termo"] for k in keywords.list_all(conn, "ranking", conjunto_id)]
     pontuam = list({normalize(termo): termo for termo in termos + ranking}.values())
-    exclusoes = [k["termo"] for k in keywords.list_all(conn, "exclusao")]
+    exclusoes = [k["termo"] for k in keywords.list_all(conn, "exclusao", conjunto_id)]
     f = settings.filtro
     return termos[: settings.busca.max_termos_busca], Filter(pontuam, exclusoes, f.peso_titulo, f.peso_descricao, f.min_score)
 
@@ -132,14 +135,15 @@ def execute_run(
     sources: list[Source],
     now: Callable[[], str],
     manifest: Manifest | None = None,
+    conjunto_id: int | None = None,
 ) -> None:
     """Roda cada fonte isolada: a falha de uma é registrada e a execução segue para a próxima.
 
     Em sequência por padrão; com `navegador.abas_paralelas` todas rodam ao mesmo tempo, uma aba por fonte."""
     conn = db.connect(settings.geral.db_path)
     try:
-        termos, flt = _build_filter(conn, settings)
-        conjunto_id = conjuntos.active_id(conn)  # as vagas vão para o conjunto cujas palavras foram lidas agora
+        conjunto_id = conjunto_id or conjuntos.active_id(conn)  # as vagas vão para o conjunto cujas palavras foram lidas agora
+        termos, flt = build_filter(conn, settings, conjunto_id)
         if settings.navegador.abas_paralelas and len(sources) > 1:
             _run_sources_in_parallel(settings, run_id, sources, termos, flt, conjunto_id, now)
         else:
@@ -183,6 +187,39 @@ def spawn_thread(target: Callable[[], None]) -> None:
     threading.Thread(target=target, daemon=True).start()
 
 
+def _blocked(conn: sqlite3.Connection, run_id: int) -> bool:
+    marks = ",".join("?" * len(MOTIVOS_DE_BLOQUEIO))
+    row = conn.execute(
+        f"SELECT 1 FROM run_sources WHERE run_id=? AND status='falha' AND motivo IN ({marks})", (run_id, *MOTIVOS_DE_BLOQUEIO)
+    ).fetchone()
+    return row is not None
+
+
+def execute_sequence(
+    settings: Settings,
+    run_id: int,
+    conjunto_ids: list[int],
+    sources: list[Source],
+    now: Callable[[], str],
+    manifest: Manifest | None = None,
+) -> None:
+    """Roda um conjunto por execução, na ordem pedida; cada um tem a própria linha no histórico."""
+    conn = db.connect(settings.geral.db_path)
+    try:
+        for position, conjunto_id in enumerate(conjunto_ids):
+            if position:
+                run_id = db.create_run(
+                    conn, [source.name for source in sources], now(), manifest.versions() if manifest else None,
+                    conjuntos.name_of(conn, conjunto_id),
+                )
+            execute_run(settings, run_id, sources, now, manifest, conjunto_id)
+            if _blocked(conn, run_id):
+                log.warning("Sequência interrompida: fonte bloqueada no conjunto %s", conjuntos.name_of(conn, conjunto_id))
+                return
+    finally:
+        conn.close()
+
+
 def start_run(
     conn: sqlite3.Connection,
     settings: Settings,
@@ -190,11 +227,18 @@ def start_run(
     now: Callable[[], str],
     spawn: Callable[[Callable[[], None]], None] = spawn_thread,
     manifest: Manifest | None = None,
+    conjunto_ids: list[int] | None = None,
 ) -> int:
-    """Valida, abre a execução (uma por vez) e a dispara em segundo plano, gravando a versão de cada scanner."""
-    if not keywords.list_all(conn, "busca"):
-        raise DomainError("Adicione ao menos uma palavra-chave para buscar")
+    """Valida, abre a execução (uma por vez) e a dispara em segundo plano, gravando a versão de cada scanner.
+
+    Com `conjunto_ids`, roda uma execução por conjunto, em sequência; devolve o id da primeira."""
+    ids = conjunto_ids or [conjuntos.active_id(conn)]
+    if len(set(ids)) != len(ids):
+        raise DomainError("Conjunto repetido na sequência")
+    for conjunto_id in ids:
+        if not keywords.list_all(conn, "busca", conjunto_id):
+            raise DomainError(f"Adicione ao menos uma palavra-chave para buscar no conjunto {conjuntos.name_of(conn, conjunto_id)!r}")
     versions = manifest.versions() if manifest else None
-    run_id = db.create_run(conn, [source.name for source in sources], now(), versions)
-    spawn(lambda: execute_run(settings, run_id, sources, now, manifest))
+    run_id = db.create_run(conn, [source.name for source in sources], now(), versions, conjuntos.name_of(conn, ids[0]))
+    spawn(lambda: execute_sequence(settings, run_id, ids, sources, now, manifest))
     return run_id

@@ -14,10 +14,10 @@ def _check_type(tipo: str) -> None:
         raise DomainError(f"Valor inválido: tipo={tipo!r} (esperado {TIPOS})")
 
 
-def list_all(conn: sqlite3.Connection, tipo: str | None = None) -> list[dict]:
-    """Palavras do conjunto ativo."""
+def list_all(conn: sqlite3.Connection, tipo: str | None = None, conjunto_id: int | None = None) -> list[dict]:
+    """Palavras do conjunto pedido (padrão: o ativo)."""
     sql = "SELECT id, termo, tipo, criada_em FROM keywords WHERE conjunto_id=?"
-    params: tuple = (conjuntos.active_id(conn),)
+    params: tuple = (conjuntos.active_id(conn) if conjunto_id is None else conjunto_id,)
     if tipo is not None:
         _check_type(tipo)
         sql += " AND tipo=?"

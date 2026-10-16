@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { CONFIG, makeJob, makeRun, makeSource, mockApi, renderWithClient } from "../../test/mockApi";
 import { VagasPage } from "./VagasPage";
@@ -110,6 +110,25 @@ describe("VagasPage", () => {
     await waitFor(() => expect(calls.find((c) => c.path === "/api/jobs/mark-seen")?.body).toEqual({}));
   });
 
+  it("filtra por pontuação mínima: envia min_pontos na listagem e em marcar como vistas; vazio remove", async () => {
+    const user = userEvent.setup();
+    const { calls } = setup({ jobs: [makeJob(1)] });
+    await screen.findByRole("link", { name: "Engenheiro Mecânico 1" });
+    const campo = screen.getByLabelText("Pontuação mínima");
+    await user.type(campo, "5");
+    await waitFor(() => {
+      const last = [...calls].reverse().find((c) => c.path.startsWith("/api/jobs?"));
+      expect(last?.path).toContain("min_pontos=5");
+    });
+    await user.click(screen.getByRole("button", { name: "Marcar todas como vistas" }));
+    await waitFor(() => expect(calls.find((c) => c.path === "/api/jobs/mark-seen")?.body).toEqual({ min_pontos: 5 }));
+    await user.clear(campo);
+    await waitFor(() => {
+      const last = [...calls].reverse().find((c) => c.path.startsWith("/api/jobs?"));
+      expect(last?.path).not.toContain("min_pontos");
+    });
+  });
+
   it("filtra por idade: \"Publicadas há no máximo\" envia max_dias na listagem e em marcar como vistas; vazio remove", async () => {
     const user = userEvent.setup();
     vi.spyOn(window, "confirm").mockReturnValue(true);
@@ -155,7 +174,6 @@ describe("VagasPage", () => {
     const user = userEvent.setup();
     const { calls } = setup({ jobs: [] });
     const select = await screen.findByRole("combobox", { name: "Modalidade da busca" });
-    expect(select.parentElement?.parentElement?.className).toContain("border-l");
     await user.selectOptions(select, "remoto");
     await user.click(screen.getByRole("button", { name: "Buscar agora" }));
     await waitFor(() => expect(calls.find((c) => c.method === "POST" && c.path === "/api/runs")?.body).toEqual({ fontes: null, modalidade: "remoto" }));
@@ -184,12 +202,12 @@ describe("VagasPage", () => {
     expect(calls.find((c) => c.method === "POST" && c.path === "/api/runs")?.body).toEqual({ fontes: null, localidade: "São Paulo" });
   });
 
-  it("a busca por título ou empresa vem antes do filtro de local e é mais larga que ele", async () => {
+  it("a busca por título ou empresa vem antes do filtro de local e ocupa a largura da coluna", async () => {
     setup({ jobs: [makeJob(1)] });
     await screen.findByRole("link", { name: "Engenheiro Mecânico 1" });
     const campos = screen.getAllByRole("textbox").map((campo) => campo.getAttribute("aria-label"));
     expect(campos.indexOf("Buscar vagas")).toBeLessThan(campos.indexOf("Filtrar por cidade, estado ou modalidade"));
-    expect(screen.getByLabelText("Buscar vagas").className).toContain("w-96");
+    expect(screen.getByLabelText("Buscar vagas").className).toContain("w-full");
     expect(screen.queryByLabelText("Modalidade da lista")).not.toBeInTheDocument();
   });
 
@@ -363,8 +381,8 @@ describe("VagasPage — seletor de conjunto", () => {
     const { calls } = setup({ jobs: [makeJob(1)], extra: { "GET /api/conjuntos": conjuntos } });
     const seletor = await screen.findByLabelText("Conjunto");
     expect(seletor).toHaveValue("1");
-    expect(screen.getByRole("option", { name: "Mecânica (ativo)" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "Tecnologia" })).toBeInTheDocument();
+    expect(within(seletor).getByRole("option", { name: "Mecânica (ativo)" })).toBeInTheDocument();
+    expect(within(seletor).getByRole("option", { name: "Tecnologia" })).toBeInTheDocument();
     expect(ultimaListagem(calls)).not.toContain("conjunto_id");
   });
 
@@ -404,3 +422,82 @@ describe("VagasPage — seletor de conjunto", () => {
     expect(confirm).toHaveBeenCalledWith(expect.stringContaining("Tecnologia"));
   });
 });
+
+describe("VagasPage — conjunto da busca", () => {
+  const conjuntos = [
+    { id: 1, nome: "Mecânica", ativo: true },
+    { id: 2, nome: "Tecnologia", ativo: false },
+  ];
+
+  it("a barra de busca não tem seletor de conjunto único; o conjunto ativo se troca no filtro da lista", async () => {
+    setup({ jobs: [makeJob(1)], extra: { "GET /api/conjuntos": conjuntos } });
+    const barra = within(await screen.findByRole("region", { name: "Controles da busca" }));
+    await barra.findByRole("combobox", { name: "Adicionar à sequência" });
+    expect(barra.queryByRole("combobox", { name: /Conjunto da busca/ })).not.toBeInTheDocument();
+  });
+
+  it("monta uma sequência de conjuntos, reordena e envia a ordem na busca", async () => {
+    const user = userEvent.setup();
+    const tres = [...conjuntos, { id: 3, nome: "Soldagem", ativo: false }];
+    const { calls } = setup({ jobs: [makeJob(1)], extra: { "GET /api/conjuntos": tres } });
+    const barra = within(await screen.findByRole("region", { name: "Controles da busca" }));
+    const adicionar = await barra.findByRole("combobox", { name: "Adicionar à sequência" });
+    await user.selectOptions(adicionar, "1");
+    await user.selectOptions(barra.getByRole("combobox", { name: "Adicionar à sequência" }), "3");
+    await user.click(barra.getByRole("button", { name: "Subir Soldagem" }));
+    const itens = barra.getAllByRole("listitem").filter((item) => item.textContent?.match(/Mecânica|Soldagem/) && item.closest("ol"));
+    expect(itens.map((item) => item.textContent)).toEqual([expect.stringContaining("Soldagem"), expect.stringContaining("Mecânica")]);
+    await user.click(barra.getByRole("button", { name: "Buscar agora" }));
+    await waitFor(() => expect(calls.find((c) => c.method === "POST" && c.path === "/api/runs")?.body).toEqual({ fontes: null, conjunto_ids: [3, 1] }));
+  });
+
+  it("remover da sequência a esvazia e a busca volta a usar só o conjunto ativo", async () => {
+    const user = userEvent.setup();
+    const { calls } = setup({ jobs: [makeJob(1)], extra: { "GET /api/conjuntos": conjuntos } });
+    const barra = within(await screen.findByRole("region", { name: "Controles da busca" }));
+    await user.selectOptions(await barra.findByRole("combobox", { name: "Adicionar à sequência" }), "2");
+    await user.click(barra.getByRole("button", { name: "Remover Tecnologia" }));
+    await user.click(barra.getByRole("button", { name: "Buscar agora" }));
+    await waitFor(() => expect(calls.find((c) => c.method === "POST" && c.path === "/api/runs")?.body).toEqual({ fontes: null }));
+  });
+
+  it("arrastar um item da sequência para outra posição reordena a lista", async () => {
+    const user = userEvent.setup();
+    const tres = [...conjuntos, { id: 3, nome: "Soldagem", ativo: false }];
+    const { calls } = setup({ jobs: [makeJob(1)], extra: { "GET /api/conjuntos": tres } });
+    const barra = within(await screen.findByRole("region", { name: "Controles da busca" }));
+    for (const id of ["1", "2", "3"]) await user.selectOptions(await barra.findByRole("combobox", { name: "Adicionar à sequência" }), id);
+    const item = (nome: string) => within(barra.getByRole("list")).getByText(nome).closest("li") as HTMLElement;
+    expect(item("Soldagem")).toHaveAttribute("draggable", "true");
+    fireEvent.dragStart(item("Soldagem"));
+    fireEvent.dragOver(item("Mecânica"));
+    fireEvent.drop(item("Mecânica"));
+    fireEvent.dragEnd(item("Soldagem"));
+    await user.click(barra.getByRole("button", { name: "Buscar agora" }));
+    await waitFor(() => expect(calls.find((c) => c.method === "POST" && c.path === "/api/runs")?.body).toEqual({ fontes: null, conjunto_ids: [3, 1, 2] }));
+  });
+
+  it("carrega a sequência salva no servidor e a usa na busca", async () => {
+    const user = userEvent.setup();
+    const { calls } = setup({ jobs: [makeJob(1)], extra: { "GET /api/conjuntos": conjuntos, "GET /api/conjuntos/sequencia": { conjunto_ids: [2, 1] } } });
+    const barra = within(await screen.findByRole("region", { name: "Controles da busca" }));
+    const lista = within(await barra.findByRole("list"));
+    expect(lista.getAllByRole("listitem").map((item) => item.textContent)).toEqual([expect.stringContaining("Tecnologia"), expect.stringContaining("Mecânica")]);
+    await user.click(barra.getByRole("button", { name: "Buscar agora" }));
+    await waitFor(() => expect(calls.find((c) => c.method === "POST" && c.path === "/api/runs")?.body).toEqual({ fontes: null, conjunto_ids: [2, 1] }));
+  });
+
+  it("salva a ordem no servidor a cada mudança da sequência", async () => {
+    const user = userEvent.setup();
+    const { calls } = setup({ jobs: [makeJob(1)], extra: { "GET /api/conjuntos": conjuntos } });
+    const barra = within(await screen.findByRole("region", { name: "Controles da busca" }));
+    await user.selectOptions(await barra.findByRole("combobox", { name: "Adicionar à sequência" }), "1");
+    await user.selectOptions(barra.getByRole("combobox", { name: "Adicionar à sequência" }), "2");
+    await user.click(barra.getByRole("button", { name: "Subir Tecnologia" }));
+    await waitFor(() => {
+      const puts = calls.filter((c) => c.method === "PUT" && c.path === "/api/conjuntos/sequencia").map((c) => c.body);
+      expect(puts).toEqual([{ conjunto_ids: [1] }, { conjunto_ids: [1, 2] }, { conjunto_ids: [2, 1] }]);
+    });
+  });
+});
+

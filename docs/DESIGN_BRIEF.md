@@ -1,8 +1,7 @@
 # Peneira de Vagas — Briefing para o design da interface
 
 App web **pessoal e local** de busca de vagas (um usuário, sem login, pt-BR). A API executa a busca no
-LinkedIn, Indeed e Gupy; a interface dispara a busca e exibe os resultados. Escopo em [`MVP.md`](MVP.md);
-contratos em [`ARCHITECTURE.md`](ARCHITECTURE.md) (seção API).
+LinkedIn, Indeed e Gupy; a interface dispara a busca e exibe os resultados. Escopo e regras de negócio em [`ARCHITECTURE.md`](ARCHITECTURE.md), que também traz os contratos (seção API).
 
 ## Princípio de design
 
@@ -75,5 +74,5 @@ mensagens de motivo padronizadas.
 
 ## Referências
 
-- Escopo e critérios: [`MVP.md`](MVP.md) · fases: [`FASES.md`](FASES.md)
+- Escopo e regras de negócio: [`ARCHITECTURE.md`](ARCHITECTURE.md)
 - Arquitetura e API: [`ARCHITECTURE.md`](ARCHITECTURE.md) · stack: [`TECH_STACK.md`](TECH_STACK.md)

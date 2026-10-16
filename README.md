@@ -81,10 +81,9 @@ Gerar o pacote de instalação: `powershell -File scripts\build-release.ps1 -Ver
 
 | Doc | Conteúdo |
 | --- | --- |
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | fluxo, API, módulos, dados e configuração |
-| [`docs/MVP.md`](docs/MVP.md) · [`docs/FASES.md`](docs/FASES.md) | escopo e ordem de construção |
-| [`docs/SCANNERS.md`](docs/SCANNERS.md) | versão dos scanners e o que fazer quando um quebra |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | escopo, regras de negócio, fluxo, API, módulos, dados e configuração |
+| [`docs/SCANNERS.md`](docs/SCANNERS.md) | exploração das plataformas, versão dos scanners e o que fazer quando um quebra |
 | [`docs/TECH_STACK.md`](docs/TECH_STACK.md) · [`docs/CODE_QUALITY.md`](docs/CODE_QUALITY.md) | bibliotecas, testes, estilo e git |
-| [`docs/DESIGN_BRIEF.md`](docs/DESIGN_BRIEF.md) · [`docs/EXPLORACAO_PLATAFORMAS.md`](docs/EXPLORACAO_PLATAFORMAS.md) | telas da interface e exploração das plataformas |
+| [`docs/DESIGN_BRIEF.md`](docs/DESIGN_BRIEF.md) | telas da interface |
 | [`docs/LESSONS.md`](docs/LESSONS.md) | erros e lições registrados |
 | [`docs/AI_GUIDELINES.md`](docs/AI_GUIDELINES.md) | regras para agentes de IA |

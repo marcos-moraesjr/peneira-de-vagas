@@ -12,6 +12,11 @@ class RunIn(BaseModel):
     localidade: str | None = None
     modalidade: str | None = None
     janela_dias: int | None = None
+    conjunto_ids: list[int] | None = None  # sequência: uma execução por conjunto, na ordem; None = só o ativo
+
+
+class SequenciaIO(BaseModel):
+    conjunto_ids: list[int]
 
 
 class RunStarted(BaseModel):
@@ -55,6 +60,7 @@ class RunOut(BaseModel):
     inicio: str
     fim: str | None
     status: str
+    conjunto: str
     fontes: list[RunSourceOut]
 
 
@@ -96,6 +102,7 @@ class MarkSeenIn(BaseModel):
     fonte: str | None = None
     q: str | None = None
     max_dias: int | None = None
+    min_pontos: int | None = None
     local: str | None = None
     modalidade: str | None = None
     conjunto_id: int | None = None
@@ -104,6 +111,11 @@ class MarkSeenIn(BaseModel):
 
 class MarkSeenOut(BaseModel):
     atualizadas: int
+
+
+class RecalcularOut(BaseModel):
+    atualizadas: int
+    total: int
 
 
 class JobsCleared(BaseModel):
@@ -158,6 +170,8 @@ class ConfigRitmo(BaseModel):
 
 class ConfigNavegador(BaseModel):
     abas_paralelas: bool
+    max_tentativas_painel: int
+    intervalo_tentativa_painel_s: float
 
 
 class ConfigApi(BaseModel):

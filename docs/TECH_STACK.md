@@ -137,7 +137,7 @@ Não introduza nenhum destes sem uma decisão explícita registrada neste arquiv
 
 ## Pendências de decisão
 
-- **Agendamento automático:** hoje a busca é disparada por botão no front. Agendar exige um agendador interno (sai das exclusões só com aprovação) ou o agendador do SO chamando `POST /api/runs`. Decidir depois da Fase 5.
+- **Agendamento automático:** hoje a busca é disparada por botão no front. Agendar exige um agendador interno (sai das exclusões só com aprovação) ou o agendador do SO chamando `POST /api/runs`. Decidir depois de um período de uso real.
 - **Local de execução:** PC próprio (IP residencial, precisa estar ligado e com o Chrome aberto) ou VPS (IP de datacenter é bloqueado mais rápido). Ponto de partida: PC próprio.
 - **Exclusões iniciais, localidade e modalidade** (`config.toml`). Palavra-chave de desenvolvimento: "Engenheiro Mecânico".
 - **Editar os demais parâmetros pela interface** (pesos, limites): exigiria mover a config para o SQLite. Fora do MVP.

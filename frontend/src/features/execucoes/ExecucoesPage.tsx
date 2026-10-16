@@ -42,11 +42,12 @@ function SourcesTable({ run }: { run: Run }) {
   );
 }
 
-type SortKey = "id" | "inicio" | "duracao" | "resultado";
+type SortKey = "id" | "conjunto" | "inicio" | "duracao" | "resultado";
 type SortState = { key: SortKey; dir: "asc" | "desc" };
 
 const COLUMNS: { key: SortKey; label: string }[] = [
   { key: "id", label: "Execução" },
+  { key: "conjunto", label: "Conjunto" },
   { key: "inicio", label: "Início" },
   { key: "duracao", label: "Duração" },
   { key: "resultado", label: "Resultado" },
@@ -56,10 +57,12 @@ function failedCount(run: Run): number {
   return run.fontes.filter((source) => source.status === "falha").length;
 }
 
-function sortValue(run: Run, key: SortKey): number {
+function sortValue(run: Run, key: SortKey): number | string {
   switch (key) {
     case "id":
       return run.id;
+    case "conjunto":
+      return run.conjunto;
     case "inicio":
       return new Date(run.inicio).getTime();
     case "duracao":
@@ -71,7 +74,9 @@ function sortValue(run: Run, key: SortKey): number {
 
 function sortRuns(runs: Run[], { key, dir }: SortState): Run[] {
   const sign = dir === "asc" ? 1 : -1;
-  return [...runs].sort((a, b) => sign * (sortValue(a, key) - sortValue(b, key)) || b.id - a.id);
+  const compare = (a: number | string, b: number | string) =>
+    typeof a === "string" || typeof b === "string" ? String(a).localeCompare(String(b), "pt-BR") : a - b;
+  return [...runs].sort((a, b) => sign * compare(sortValue(a, key), sortValue(b, key)) || b.id - a.id);
 }
 
 function resultLabel(run: Run): string {
@@ -100,6 +105,7 @@ function RunDetail({ run, onClose }: { run: Run; onClose: () => void }) {
               Execução #{run.id}
             </h2>
             <p className="text-sm text-grafite-500">
+              {run.conjunto ? `Conjunto ${run.conjunto} · ` : ""}
               {formatDateTime(run.inicio)} · {formatDuration(run.inicio, run.fim)} · {resultLabel(run)}
             </p>
           </div>
@@ -165,6 +171,7 @@ function RunsTable({ runs, onSelect, onDelete, disabled, onClear, clearDisabled 
                   Execução #{run.id}
                 </button>
               </td>
+              <td>{run.conjunto || "—"}</td>
               <td>{formatDateTime(run.inicio)}</td>
               <td className="text-grafite-500">{formatDuration(run.inicio, run.fim)}</td>
               <td className={failedCount(run) ? "text-atencao-fg" : "text-grafite-500"}>{resultLabel(run)}</td>
@@ -260,7 +267,7 @@ function DocumentationPanel() {
       <h2 className="text-titulo text-grafite-900">Refazer a documentação das plataformas</h2>
       <p className="text-xs text-grafite-500">
         Gera uma instrução para colar numa sessão do Claude Code neste repositório: ele explora as plataformas de novo
-        e atualiza docs/EXPLORACAO_PLATAFORMAS.md, sem mexer no código.
+        e atualiza docs/SCANNERS.md, sem mexer no código.
       </p>
       <div className="flex flex-wrap items-center gap-3">
         <label className="flex items-center gap-2 text-sm text-grafite-700">

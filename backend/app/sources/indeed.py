@@ -1,4 +1,4 @@
-"""Adaptador do Indeed. Seletores OBSERVADOS no DOM real em 14/10/2026 (EXPLORACAO_PLATAFORMAS.md §2.3); frágeis.
+"""Adaptador do Indeed. Seletores OBSERVADOS no DOM real em 14/10/2026 (docs/SCANNERS.md §Indeed); frágeis.
 Cloudflare e verificações são detectados e tratados como falha da fonte; nunca contornados.
 
 O card não traz data de publicação; o filtro de recência é só o `fromage` da URL (efeito não confirmado)

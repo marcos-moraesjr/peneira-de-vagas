@@ -133,7 +133,7 @@ def evaluate(conn: sqlite3.Connection, settings: Settings, manifest: Manifest, t
 DOC_INSTRUCTION = """Refaça a documentação das plataformas de vagas: {plataformas}.
 
 Contexto: o Peneira de Vagas lê cada plataforma com um scanner versionado (docs/SCANNERS.md). A documentação atual \
-está em docs/EXPLORACAO_PLATAFORMAS.md e pode estar desatualizada.
+está em docs/SCANNERS.md e pode estar desatualizada.
 
 Plataformas e versão atual do scanner:
 {linhas}
@@ -141,7 +141,7 @@ Plataformas e versão atual do scanner:
 Termos de busca a usar na exploração: {termos}.
 
 O que fazer (apenas documentação, no Chrome dedicado já logado):
-1. Para cada plataforma, repita a busca com esses termos e registre em docs/EXPLORACAO_PLATAFORMAS.md \
+1. Para cada plataforma, repita a busca com esses termos e registre em docs/SCANNERS.md \
 (substituindo a seção da plataforma e a data da exploração): URL e parâmetros de busca; seletores dos cards \
 (ID estável, título, empresa, local); paginação; filtro de data (e se ele realmente funciona); formato da \
 resposta (para a Gupy: endpoint, parâmetros e JSON); renderização incremental; banner de cookies; qualquer \

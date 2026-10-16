@@ -681,3 +681,99 @@ def test_excluir_o_conjunto_exclui_as_vagas_dele_e_mantem_as_dos_outros(dois_con
     assert client.delete(f"/api/conjuntos/{outro}").status_code == 204
     assert client.get(f"/api/jobs?conjunto_id={outro}").status_code == 404
     assert ids_da_lista(client) == ["1", "2"]  # o conjunto 1 voltou a ser o ativo
+
+
+def test_recalcular_pontuacao_usa_as_palavras_atuais_e_nao_apaga_vagas(settings):
+    vagas = [
+        Job("1", "Engenheiro Mecânico Projetista", "ACME", "https://x/1", "", "stub"),
+        Job("2", "Engenheiro Mecânico", "Beta", "https://x/2", "", "stub"),
+    ]
+    with make_client(settings, [StubSource(jobs=vagas)]) as client:
+        client.post("/api/runs")
+        antes = {v["id_da_vaga"]: v["pontos"] for v in client.get("/api/jobs").json()["items"]}
+        client.post("/api/keywords", json={"termo": "Projetista", "tipo": "ranking"})
+        resposta = client.post("/api/jobs/recalcular")
+        depois = {v["id_da_vaga"]: v["pontos"] for v in client.get("/api/jobs").json()["items"]}
+    assert resposta.status_code == 200
+    assert resposta.json() == {"atualizadas": 1, "total": 2}
+    assert depois["1"] == antes["1"] + settings.filtro.peso_titulo
+    assert depois["2"] == antes["2"]
+
+
+def test_recalcular_pontuacao_durante_uma_busca_devolve_409(settings):
+    with make_client(settings, [StubSource()], spawn=lambda fn: None) as test_client:
+        test_client.post("/api/runs")
+        assert test_client.post("/api/jobs/recalcular").status_code == 409
+
+
+def test_recalcular_pontuacao_vale_para_todos_os_conjuntos_cada_um_com_as_suas_palavras(settings):
+    vagas = [
+        Job("1", "Engenheiro Mecânico Projetista", "ACME", "https://x/1", "", "stub"),
+        Job("2", "Engenheiro Mecânico", "Beta", "https://x/2", "", "stub"),
+    ]
+    with make_client(settings, [StubSource(jobs=vagas)]) as client:
+        ativo_a = next(c["id"] for c in client.get("/api/conjuntos").json() if c["ativo"])
+        client.post("/api/runs")  # conjunto A (palavras padrão): 2 vagas
+        b = client.post("/api/conjuntos", json={"nome": "B"}).json()["id"]
+        client.post(f"/api/conjuntos/{b}/ativar")
+        client.post("/api/keywords", json={"termo": "Projetista", "tipo": "busca"})
+        client.post("/api/runs")  # conjunto B: 1 vaga, 3 pontos
+        client.post("/api/keywords", json={"termo": "Engenheiro", "tipo": "ranking"})
+        client.post(f"/api/conjuntos/{ativo_a}/ativar")
+        resposta = client.post("/api/jobs/recalcular")
+        pontos_b = [v["pontos"] for v in client.get(f"/api/jobs?conjunto_id={b}").json()["items"]]
+    assert resposta.json() == {"atualizadas": 1, "total": 3}
+    assert pontos_b == [3 + settings.filtro.peso_titulo]
+
+
+def test_filtro_de_pontuacao_minima_na_lista_e_em_marcar_como_vistas(settings):
+    vagas = [
+        Job("1", "Engenheiro Mecânico Projetista", "ACME", "https://x/1", "", "stub"),
+        Job("2", "Engenheiro Mecânico", "Beta", "https://x/2", "", "stub"),
+    ]
+    with make_client(settings, [StubSource(jobs=vagas)]) as client:
+        client.post("/api/keywords", json={"termo": "Projetista", "tipo": "ranking"})
+        client.post("/api/runs")
+        peso = settings.filtro.peso_titulo
+        todas = client.get("/api/jobs").json()
+        filtradas = client.get(f"/api/jobs?min_pontos={2 * peso}").json()
+        marcadas = client.post("/api/jobs/mark-seen", json={"min_pontos": 2 * peso}).json()
+        invalida = client.get("/api/jobs?min_pontos=-1")
+    assert todas["total"] == 2
+    assert [v["titulo"] for v in filtradas["items"]] == ["Engenheiro Mecânico Projetista"]
+    assert filtradas["total"] == 1
+    assert marcadas == {"atualizadas": 1}
+    assert invalida.status_code == 422
+
+
+def test_busca_aceita_sequencia_de_conjuntos_e_gera_uma_execucao_por_conjunto(client):
+    primeiro = client.get("/api/conjuntos").json()[0]["id"]
+    segundo = client.post("/api/conjuntos", json={"nome": "Soldador"}).json()["id"]
+    client.post("/api/keywords", json={"termo": "soldador", "tipo": "busca"})
+    resposta = client.post("/api/runs", json={"conjunto_ids": [segundo, primeiro]})
+    assert resposta.status_code == 202
+    historico = client.get("/api/runs").json()
+    assert [run["conjunto"] for run in reversed(historico)] == ["Soldador", "Padrão"]
+    assert resposta.json()["id"] == historico[-1]["id"]
+
+
+def test_busca_rejeita_sequencia_com_conjunto_inexistente(client):
+    primeiro = client.get("/api/conjuntos").json()[0]["id"]
+    assert client.post("/api/runs", json={"conjunto_ids": [primeiro, 999]}).status_code == 404
+    assert client.post("/api/runs", json={"conjunto_ids": [primeiro, primeiro]}).status_code == 422
+
+
+def test_sequencia_salva_e_devolve_a_ordem(client):
+    assert client.get("/api/conjuntos/sequencia").json() == {"conjunto_ids": []}
+    primeiro = client.get("/api/conjuntos").json()[0]["id"]
+    segundo = client.post("/api/conjuntos", json={"nome": "Soldador"}).json()["id"]
+    resposta = client.put("/api/conjuntos/sequencia", json={"conjunto_ids": [segundo, primeiro]})
+    assert resposta.status_code == 200
+    assert resposta.json() == {"conjunto_ids": [segundo, primeiro]}
+    assert client.get("/api/conjuntos/sequencia").json() == {"conjunto_ids": [segundo, primeiro]}
+
+
+def test_sequencia_rejeita_conjunto_inexistente_ou_repetido(client):
+    primeiro = client.get("/api/conjuntos").json()[0]["id"]
+    assert client.put("/api/conjuntos/sequencia", json={"conjunto_ids": [999]}).status_code == 404
+    assert client.put("/api/conjuntos/sequencia", json={"conjunto_ids": [primeiro, primeiro]}).status_code == 422

@@ -12,7 +12,7 @@ export function makeScanner(fonte: string, overrides: Record<string, unknown> = 
     versao: "1.0.0",
     explorado_em: "2026-10-14",
     gerado_por: "Claude",
-    referencia: "docs/EXPLORACAO_PLATAFORMAS.md",
+    referencia: "docs/SCANNERS.md §LinkedIn",
     status: "ok",
     falhas_consecutivas: 0,
     ultimo_motivo: null,
@@ -23,7 +23,16 @@ export function makeScanner(fonte: string, overrides: Record<string, unknown> = 
 }
 
 export function mockApi(userRoutes: Record<string, Handler | unknown>) {
-  const routes: Record<string, Handler | unknown> = { "GET /api/scanners": [], ...userRoutes };
+  let sequencia: number[] = [];
+  const routes: Record<string, Handler | unknown> = {
+    "GET /api/scanners": [],
+    "GET /api/conjuntos/sequencia": () => ({ conjunto_ids: sequencia }),
+    "PUT /api/conjuntos/sequencia": (body: unknown) => {
+      sequencia = (body as { conjunto_ids: number[] }).conjunto_ids;
+      return { conjunto_ids: sequencia };
+    },
+    ...userRoutes,
+  };
   const calls: { method: string; path: string; body: unknown }[] = [];
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input), "http://localhost");
@@ -53,7 +62,7 @@ export const CONFIG = {
   filtro: { peso_titulo: 3, peso_descricao: 1, min_score: 3, trecho_max_chars: 4000 },
   limites: { max_paginas_por_termo: 3 },
   ritmo: { pausa_min_s: 2, pausa_max_s: 6, rolagem_min_s: 0.25, rolagem_max_s: 0.7 },
-  navegador: { abas_paralelas: false },
+  navegador: { abas_paralelas: false, max_tentativas_painel: 3, intervalo_tentativa_painel_s: 15 },
   api: { jobs_page_size: 50, poll_interval_ms: 50 },
 };
 
@@ -83,8 +92,8 @@ export function makeJob(id: number, overrides: Record<string, unknown> = {}) {
   };
 }
 
-export function makeRun(id: number, status: "executando" | "concluida", fontes: Record<string, unknown>[] = []) {
-  return { id, inicio: "2026-10-14T12:00:00+00:00", fim: status === "concluida" ? "2026-10-14T12:01:00+00:00" : null, status, fontes };
+export function makeRun(id: number, status: "executando" | "concluida", fontes: Record<string, unknown>[] = [], conjunto = "Padrão") {
+  return { id, inicio: "2026-10-14T12:00:00+00:00", fim: status === "concluida" ? "2026-10-14T12:01:00+00:00" : null, status, conjunto, fontes };
 }
 
 export function makeSource(fonte: string, overrides: Record<string, unknown> = {}) {

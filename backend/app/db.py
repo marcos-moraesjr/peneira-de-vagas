@@ -168,11 +168,22 @@ _MIGRATION_V11 = "ALTER TABLE jobs ADD COLUMN candidatada INTEGER NOT NULL DEFAU
 
 _MIGRATION_V12 = "ALTER TABLE jobs ADD COLUMN candidatada_em TEXT;"
 
+# V13: a execução guarda o nome do conjunto usado na busca (cópia: o conjunto pode ser renomeado ou apagado depois).
+_MIGRATION_V13 = "ALTER TABLE runs ADD COLUMN conjunto TEXT NOT NULL DEFAULT '';"
+
+# V14: ordem salva da sequência de buscas por conjunto (some junto com o conjunto apagado).
+_MIGRATION_V14 = """
+CREATE TABLE sequencia_conjuntos (
+    posicao INTEGER PRIMARY KEY,
+    conjunto_id INTEGER NOT NULL UNIQUE REFERENCES conjuntos(id) ON DELETE CASCADE
+);
+"""
+
 # Versão do esquema → script. Banco existente é copiado para backup_dir antes de qualquer migração.
 MIGRATIONS = {
     1: _SCHEMA_V1, 2: _MIGRATION_V2, 3: _MIGRATION_V3, 4: _MIGRATION_V4,
     5: _MIGRATION_V5, 6: _MIGRATION_V6, 7: _MIGRATION_V7, 8: _MIGRATION_V8, 9: _MIGRATION_V9,
-    10: _MIGRATION_V10, 11: _MIGRATION_V11, 12: _MIGRATION_V12,
+    10: _MIGRATION_V10, 11: _MIGRATION_V11, 12: _MIGRATION_V12, 13: _MIGRATION_V13, 14: _MIGRATION_V14,
 }
 SCHEMA_VERSION = max(MIGRATIONS)
 
@@ -240,14 +251,18 @@ def init_db(conn: sqlite3.Connection, settings: Settings, now: str = "1970-01-01
     _seed_keywords(conn, settings, now)
 
 
-def create_run(conn: sqlite3.Connection, fontes: list[str], now: str, versions: dict[str, str] | None = None) -> int:
-    """Abre uma execução (uma por vez), gravando a versão do scanner de cada fonte."""
+def create_run(
+    conn: sqlite3.Connection, fontes: list[str], now: str, versions: dict[str, str] | None = None, conjunto: str = ""
+) -> int:
+    """Abre uma execução (uma por vez), gravando o nome do conjunto e a versão do scanner de cada fonte."""
     versions = versions or {}
     conn.execute("BEGIN IMMEDIATE")
     try:
         if conn.execute("SELECT 1 FROM runs WHERE status='executando'").fetchone():
             raise Conflict("Já existe uma execução em andamento")
-        run_id = conn.execute("INSERT INTO runs (inicio, status) VALUES (?, 'executando')", (now,)).lastrowid
+        run_id = conn.execute(
+            "INSERT INTO runs (inicio, status, conjunto) VALUES (?, 'executando', ?)", (now, conjunto)
+        ).lastrowid
         conn.executemany(
             "INSERT INTO run_sources (run_id, fonte, status, scanner_versao) VALUES (?, ?, 'aguardando', ?)",
             [(run_id, fonte, versions.get(fonte, "")) for fonte in fontes],

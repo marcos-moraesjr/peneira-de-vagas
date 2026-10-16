@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from "react";
-import { useConfig, useSaveConfig } from "../../api/hooks";
+import { useConfig, useRecalcularPontuacao, useSaveConfig } from "../../api/hooks";
 import type { Config } from "../../api/types";
 import { ErrorBox } from "../../components/ErrorBox";
-import { card, inputClass } from "../../components/ui";
+import { buttonSecondary, card, inputClass } from "../../components/ui";
 
 type Section = keyof Config;
 type Field = {
@@ -114,6 +114,21 @@ const GROUPS: { titulo: string; intro?: string; fields: Field[] }[] = [
         kind: "checkbox",
         dica: "Uma aba por plataforma, cada uma com as próprias pausas. Desligado: uma plataforma por vez.",
       },
+      {
+        section: "navegador",
+        key: "max_tentativas_painel",
+        label: "Tentativas para abrir o painel da vaga",
+        kind: "number",
+        dica: "Quantas vezes o sistema tenta abrir o painel de uma vaga antes de pular a vaga e seguir para a próxima.",
+      },
+      {
+        section: "navegador",
+        key: "intervalo_tentativa_painel_s",
+        label: "Intervalo entre tentativas (s)",
+        kind: "number",
+        step: "any",
+        dica: "Espera depois de um erro ao abrir o painel, antes de tentar de novo. Dá tempo de a página do site se estabilizar.",
+      },
     ],
   },
   {
@@ -162,6 +177,7 @@ function toConfig(draft: Draft, base: Config): Config {
 
 function ConfigForm({ config }: { config: Config }) {
   const save = useSaveConfig();
+  const recalcular = useRecalcularPontuacao();
   const [draft, setDraft] = useState<Draft>(() => toDraft(config));
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -202,7 +218,7 @@ function ConfigForm({ config }: { config: Config }) {
         <section key={group.titulo} className={card} aria-label={group.titulo}>
           <h2 className={`${group.intro ? "mb-1" : "mb-3"} text-sm font-semibold text-grafite-900`}>{group.titulo}</h2>
           {group.intro && <p className="mb-3 text-xs text-grafite-500">{group.intro}</p>}
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-x-10 gap-y-3 sm:grid-cols-2">
             {group.fields.map((field) => (
               <div key={id(field)} className="flex flex-col gap-1">
                 {field.kind === "checkbox" ? (
@@ -216,29 +232,26 @@ function ConfigForm({ config }: { config: Config }) {
                   </label>
                 ) : field.kind === "slider" ? (
                   <>
-                    <label htmlFor={id(field)} className="text-sm text-grafite-700">
-                      {field.label}
-                    </label>
-                    <div className="flex items-center gap-3">
-                      <input
-                        id={id(field)}
-                        type="range"
-                        min={Math.min(field.min ?? 0, Number(valueOf(config, field)), Number(draft[id(field)]))}
-                        max={Math.max(field.max ?? SLIDER_MAX, Number(valueOf(config, field)), Number(draft[id(field)]))}
-                        step={field.step ?? 1}
-                        className="w-full accent-[var(--pn-grafite-900)]"
-                        value={draft[id(field)]}
-                        onChange={(e) => change(field, e.target.value)}
-                        onPointerUp={() => commit()}
-                        onKeyUp={() => commit()}
-                      />
-                      <output
-                        data-testid={`valor-${id(field)}`}
-                        className="w-10 text-right text-sm font-medium tabular-nums"
-                      >
+                    <div className="flex items-baseline justify-between gap-3">
+                      <label htmlFor={id(field)} className="text-sm text-grafite-700">
+                        {field.label}
+                      </label>
+                      <output data-testid={`valor-${id(field)}`} className="text-sm font-semibold tabular-nums text-grafite-900">
                         {draft[id(field)]}
                       </output>
                     </div>
+                    <input
+                      id={id(field)}
+                      type="range"
+                      min={Math.min(field.min ?? 0, Number(valueOf(config, field)), Number(draft[id(field)]))}
+                      max={Math.max(field.max ?? SLIDER_MAX, Number(valueOf(config, field)), Number(draft[id(field)]))}
+                      step={field.step ?? 1}
+                      className="w-full accent-[var(--pn-grafite-900)]"
+                      value={draft[id(field)]}
+                      onChange={(e) => change(field, e.target.value)}
+                      onPointerUp={() => commit()}
+                      onKeyUp={() => commit()}
+                    />
                   </>
                 ) : (
                   <label className="flex flex-col gap-1 text-sm text-grafite-700">
@@ -258,6 +271,21 @@ function ConfigForm({ config }: { config: Config }) {
           </div>
         </section>
       ))}
+      <section className={card} aria-label="Recalcular pontuação">
+        <h2 className="mb-1 text-sm font-semibold text-grafite-900">Recalcular pontuação</h2>
+        <p className="mb-3 text-xs text-grafite-500">
+          Reaplica os pesos atuais e as palavras-chave de cada conjunto salvo às vagas já encontradas nele. Só muda a pontuação: nenhuma vaga é apagada.
+        </p>
+        <button type="button" className={buttonSecondary} disabled={recalcular.isPending} onClick={() => recalcular.mutate()}>
+          Recalcular pontuação
+        </button>
+        {recalcular.isSuccess && (
+          <p role="status" className="mt-2 text-sm text-sinal-fg">
+            {recalcular.data.atualizadas} de {recalcular.data.total} vagas tiveram a pontuação atualizada.
+          </p>
+        )}
+        {recalcular.isError && <ErrorBox message={recalcular.error.message} />}
+      </section>
       {error && <ErrorBox message={error} />}
       <p role="status" className="min-h-5 text-sm text-sinal-fg">
         {save.isPending ? <span className="text-grafite-500">Salvando…</span> : saved ? "Configuração salva. Vale a partir da próxima busca." : null}

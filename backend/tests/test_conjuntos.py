@@ -131,3 +131,33 @@ def test_copiar_com_nome_invalido_ou_repetido_ou_de_conjunto_inexistente_nao_cri
     with pytest.raises(NotFound):
         conjuntos.duplicate(conn, settings, 999, "Qualquer", NOW)
     assert [(c["nome"], c["ativo"]) for c in conjuntos.list_all(conn)] == [("Padrão", True)]
+
+
+def test_sequencia_comeca_vazia_e_guarda_a_ordem_salva(conn, settings):
+    primeiro = conjuntos.active_id(conn)
+    segundo = conjuntos.add(conn, settings, "Soldador", "2026-10-16T12:00:00+00:00")["id"]
+    assert conjuntos.get_sequence(conn) == []
+    conjuntos.set_sequence(conn, [segundo, primeiro])
+    assert conjuntos.get_sequence(conn) == [segundo, primeiro]
+    conjuntos.set_sequence(conn, [primeiro])
+    assert conjuntos.get_sequence(conn) == [primeiro]
+    conjuntos.set_sequence(conn, [])
+    assert conjuntos.get_sequence(conn) == []
+
+
+def test_sequencia_rejeita_conjunto_inexistente_ou_repetido_sem_alterar_a_salva(conn):
+    ativo = conjuntos.active_id(conn)
+    conjuntos.set_sequence(conn, [ativo])
+    with pytest.raises(NotFound):
+        conjuntos.set_sequence(conn, [ativo, 999])
+    with pytest.raises(DomainError, match="repetido"):
+        conjuntos.set_sequence(conn, [ativo, ativo])
+    assert conjuntos.get_sequence(conn) == [ativo]
+
+
+def test_apagar_conjunto_o_tira_da_sequencia_salva(conn, settings):
+    primeiro = conjuntos.active_id(conn)
+    segundo = conjuntos.add(conn, settings, "Soldador", "2026-10-16T12:00:00+00:00")["id"]
+    conjuntos.set_sequence(conn, [primeiro, segundo])
+    conjuntos.remove(conn, segundo)
+    assert conjuntos.get_sequence(conn) == [primeiro]

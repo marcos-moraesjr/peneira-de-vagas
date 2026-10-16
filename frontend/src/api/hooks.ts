@@ -14,6 +14,25 @@ export function useConjuntos() {
   return useQuery({ queryKey: ["conjuntos"], queryFn: () => apiGet<Conjunto[]>("/api/conjuntos") });
 }
 
+export function useSequencia() {
+  return useQuery({
+    queryKey: ["sequencia"],
+    queryFn: async () => (await apiGet<{ conjunto_ids: number[] }>("/api/conjuntos/sequencia")).conjunto_ids,
+  });
+}
+
+/** Salva a ordem da sequência; a lista na tela muda na hora (otimista) e volta ao valor do servidor se der erro. */
+export function useSaveSequencia() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: number[]) => apiSend<{ conjunto_ids: number[] }>("PUT", "/api/conjuntos/sequencia", { conjunto_ids: ids }),
+    onMutate: (ids) => {
+      client.setQueryData<number[]>(["sequencia"], ids);
+    },
+    onError: () => client.invalidateQueries({ queryKey: ["sequencia"] }),
+  });
+}
+
 /** Criar, renomear, ativar ou excluir um conjunto muda quais palavras valem e quais vagas aparecem: recarrega conjuntos, palavras e vagas. */
 function useConjuntoMutation<T>(mutationFn: (value: T) => Promise<unknown>) {
   const client = useQueryClient();
@@ -81,7 +100,7 @@ export function useRuns() {
 export function useStartRun() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (input: { fontes: string[] | null; localidade?: string; modalidade?: string; janela_dias?: number }) => apiSend<{ id: number }>("POST", "/api/runs", input),
+    mutationFn: (input: { fontes: string[] | null; localidade?: string; modalidade?: string; janela_dias?: number; conjunto_ids?: number[] }) => apiSend<{ id: number }>("POST", "/api/runs", input),
     onSuccess: () => client.invalidateQueries({ queryKey: ["runs"] }),
   });
 }
@@ -114,6 +133,7 @@ export type JobFilters = {
   ordenar?: string;
   direcao?: "asc" | "desc";
   maxDias?: number;
+  minPontos?: number;
 };
 
 /** `live`: com uma execução rodando, recarrega no intervalo da config para as vagas aparecerem conforme são gravadas. */
@@ -131,6 +151,7 @@ export function useJobs(filters: JobFilters, page: number, live = false) {
   if (filters.excluidas) params.set("excluidas", "true");
   if (filters.candidatadas) params.set("candidatadas", "true");
   if (filters.maxDias !== undefined) params.set("max_dias", String(filters.maxDias));
+  if (filters.minPontos !== undefined) params.set("min_pontos", String(filters.minPontos));
   if (filters.ordenar) params.set("ordenar", filters.ordenar);
   if (filters.ordenar && filters.direcao) params.set("direcao", filters.direcao);
   if (pageSize) params.set("limit", String(pageSize));
@@ -178,8 +199,16 @@ export function useSetCandidatada() {
 export function useMarkAllSeen() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (filters: { fonte?: string; q?: string; local?: string; max_dias?: number; conjunto_id?: number; todos_conjuntos?: boolean }) =>
+    mutationFn: (filters: { fonte?: string; q?: string; local?: string; max_dias?: number; min_pontos?: number; conjunto_id?: number; todos_conjuntos?: boolean }) =>
       apiSend<{ atualizadas: number }>("POST", "/api/jobs/mark-seen", filters),
+    onSuccess: () => client.invalidateQueries({ queryKey: ["jobs"] }),
+  });
+}
+
+export function useRecalcularPontuacao() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiSend<{ atualizadas: number; total: number }>("POST", "/api/jobs/recalcular"),
     onSuccess: () => client.invalidateQueries({ queryKey: ["jobs"] }),
   });
 }

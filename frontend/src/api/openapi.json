@@ -412,6 +412,22 @@
               "default": false,
               "title": "Candidatadas"
             }
+          },
+          {
+            "name": "min_pontos",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Min Pontos"
+            }
           }
         ],
         "responses": {
@@ -513,6 +529,24 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/recalcular": {
+      "post": {
+        "summary": "Recalcular",
+        "operationId": "recalcular_api_jobs_recalcular_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecalcularOut"
                 }
               }
             }
@@ -728,6 +762,60 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ConjuntoOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conjuntos/sequencia": {
+      "get": {
+        "summary": "Get Sequencia",
+        "operationId": "get_sequencia_api_conjuntos_sequencia_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SequenciaIO"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Put Sequencia",
+        "operationId": "put_sequencia_api_conjuntos_sequencia_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SequenciaIO"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SequenciaIO"
                 }
               }
             }
@@ -1306,11 +1394,21 @@
           "abas_paralelas": {
             "type": "boolean",
             "title": "Abas Paralelas"
+          },
+          "max_tentativas_painel": {
+            "type": "integer",
+            "title": "Max Tentativas Painel"
+          },
+          "intervalo_tentativa_painel_s": {
+            "type": "number",
+            "title": "Intervalo Tentativa Painel S"
           }
         },
         "type": "object",
         "required": [
-          "abas_paralelas"
+          "abas_paralelas",
+          "max_tentativas_painel",
+          "intervalo_tentativa_painel_s"
         ],
         "title": "ConfigNavegador"
       },
@@ -1698,6 +1796,17 @@
             ],
             "title": "Max Dias"
           },
+          "min_pontos": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Pontos"
+          },
           "local": {
             "anyOf": [
               {
@@ -1753,6 +1862,24 @@
         ],
         "title": "MarkSeenOut"
       },
+      "RecalcularOut": {
+        "properties": {
+          "atualizadas": {
+            "type": "integer",
+            "title": "Atualizadas"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "atualizadas",
+          "total"
+        ],
+        "title": "RecalcularOut"
+      },
       "RunIn": {
         "properties": {
           "fontes": {
@@ -1801,6 +1928,20 @@
               }
             ],
             "title": "Janela Dias"
+          },
+          "conjunto_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conjunto Ids"
           }
         },
         "type": "object",
@@ -1831,6 +1972,10 @@
             "type": "string",
             "title": "Status"
           },
+          "conjunto": {
+            "type": "string",
+            "title": "Conjunto"
+          },
           "fontes": {
             "items": {
               "$ref": "#/components/schemas/RunSourceOut"
@@ -1845,6 +1990,7 @@
           "inicio",
           "fim",
           "status",
+          "conjunto",
           "fontes"
         ],
         "title": "RunOut"
@@ -2047,6 +2193,22 @@
         },
         "type": "object",
         "title": "SeenIn"
+      },
+      "SequenciaIO": {
+        "properties": {
+          "conjunto_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Conjunto Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "conjunto_ids"
+        ],
+        "title": "SequenciaIO"
       },
       "ValidationError": {
         "properties": {

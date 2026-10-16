@@ -18,6 +18,34 @@ def active_id(conn: sqlite3.Connection) -> int:
     return conn.execute("SELECT id FROM conjuntos WHERE ativo=1").fetchone()["id"]
 
 
+def active_name(conn: sqlite3.Connection) -> str:
+    return conn.execute("SELECT nome FROM conjuntos WHERE ativo=1").fetchone()["nome"]
+
+
+def name_of(conn: sqlite3.Connection, conjunto_id: int) -> str:
+    row = conn.execute("SELECT nome FROM conjuntos WHERE id=?", (conjunto_id,)).fetchone()
+    if row is None:
+        raise NotFound(f"Conjunto {conjunto_id} não existe")
+    return row["nome"]
+
+
+def get_sequence(conn: sqlite3.Connection) -> list[int]:
+    return [row["conjunto_id"] for row in conn.execute("SELECT conjunto_id FROM sequencia_conjuntos ORDER BY posicao")]
+
+
+def set_sequence(conn: sqlite3.Connection, conjunto_ids: list[int]) -> None:
+    """Salva a ordem da sequência de buscas; valida tudo antes de gravar (lista vazia limpa a sequência)."""
+    if len(set(conjunto_ids)) != len(conjunto_ids):
+        raise DomainError("Conjunto repetido na sequência")
+    for conjunto_id in conjunto_ids:
+        name_of(conn, conjunto_id)
+    conn.execute("DELETE FROM sequencia_conjuntos")
+    conn.executemany(
+        "INSERT INTO sequencia_conjuntos (posicao, conjunto_id) VALUES (?, ?)", list(enumerate(conjunto_ids))
+    )
+    conn.commit()
+
+
 def _set_active(conn: sqlite3.Connection, conjunto_id: int) -> None:
     conn.execute("UPDATE conjuntos SET ativo=0 WHERE ativo=1")
     conn.execute("UPDATE conjuntos SET ativo=1 WHERE id=?", (conjunto_id,))

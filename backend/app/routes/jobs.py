@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 
 from ..config import Settings
 from ..deps import get_conn, get_now, get_settings
-from ..schemas import JobOut, JobsCleared, JobsPage, MarkSeenIn, MarkSeenOut, SeenIn
+from ..schemas import JobOut, JobsCleared, JobsPage, MarkSeenIn, MarkSeenOut, RecalcularOut, SeenIn
 from ..services import jobs
 
 router = APIRouter()
@@ -26,13 +26,14 @@ def list_jobs(
     todos_conjuntos: bool = False,
     excluidas: bool = False,
     candidatadas: bool = False,
+    min_pontos: int | None = None,
     conn: sqlite3.Connection = Depends(get_conn),
     settings: Settings = Depends(get_settings),
     now=Depends(get_now),
 ) -> dict:
     corte = jobs.cutoff_date(now(), max_dias)
     return jobs.list_jobs(
-        conn, visto, fonte, q, limit or settings.api.jobs_page_size, offset, ordenar, direcao, corte, local, modalidade, conjunto_id, todos_conjuntos, excluidas, candidatadas
+        conn, visto, fonte, q, limit or settings.api.jobs_page_size, offset, ordenar, direcao, corte, local, modalidade, conjunto_id, todos_conjuntos, excluidas, candidatadas, min_pontos
     )
 
 
@@ -44,8 +45,13 @@ def clear_jobs(conjunto_id: int | None = None, conn: sqlite3.Connection = Depend
 @router.post("/jobs/mark-seen", response_model=MarkSeenOut)
 def mark_seen(body: MarkSeenIn, conn: sqlite3.Connection = Depends(get_conn), now=Depends(get_now)) -> MarkSeenOut:
     return MarkSeenOut(
-        atualizadas=jobs.mark_seen(conn, body.fonte, body.q, jobs.cutoff_date(now(), body.max_dias), body.local, body.modalidade, body.conjunto_id, body.todos_conjuntos)
+        atualizadas=jobs.mark_seen(conn, body.fonte, body.q, jobs.cutoff_date(now(), body.max_dias), body.local, body.modalidade, body.conjunto_id, body.todos_conjuntos, body.min_pontos)
     )
+
+
+@router.post("/jobs/recalcular", response_model=RecalcularOut)
+def recalcular(conn: sqlite3.Connection = Depends(get_conn), settings: Settings = Depends(get_settings)) -> dict:
+    return jobs.recalcular_pontuacao(conn, settings)
 
 
 @router.patch("/jobs/{job_id}", response_model=JobOut)

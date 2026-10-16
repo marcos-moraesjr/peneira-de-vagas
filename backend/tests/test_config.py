@@ -171,6 +171,8 @@ def test_pausa_de_detalhe_valida_minimo_e_maximo():
         ("filtro", "min_score", -1),
         ("ritmo", "pausa_min_s", -0.5),
         ("ritmo", "rolagem_min_s", -0.5),
+        ("navegador", "intervalo_tentativa_painel_s", -1),
+        ("navegador", "max_tentativas_painel", 0),
     ],
 )
 def test_config_rejeita_valores_fora_do_intervalo(secao, chave, valor):

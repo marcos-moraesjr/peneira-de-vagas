@@ -61,3 +61,13 @@ def test_chave_inexistente_nao_altera_o_arquivo(tmp_path):
     with pytest.raises(DomainError, match="busca.nao_existe"):
         write_values(arquivo, {"filtro": {"min_score": 7}, "busca": {"nao_existe": 1}})
     assert arquivo.read_text(encoding="utf-8") == TOML
+
+
+def test_chave_ausente_e_acrescentada_ao_fim_da_secao_quando_pedido(tmp_path):
+    arquivo = tmp_path / "config.toml"
+    arquivo.write_text(TOML, encoding="utf-8")
+    write_values(arquivo, {"filtro": {"min_score": 7, "nova": 15}}, adicionar_ausentes=True)
+    dados = _ler(arquivo)
+    assert dados["filtro"] == {"min_score": 7, "nova": 15}
+    assert dados["ritmo"] == {"pausa_min_s": 2.0} and dados["outra"] == {"min_score": 99}
+    assert "# mínimo" in arquivo.read_text(encoding="utf-8")

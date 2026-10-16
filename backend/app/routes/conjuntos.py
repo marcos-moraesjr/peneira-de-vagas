@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Response
 
 from ..config import Settings
 from ..deps import get_conn, get_now, get_settings
-from ..schemas import ConjuntoIn, ConjuntoOut
+from ..schemas import ConjuntoIn, ConjuntoOut, SequenciaIO
 from ..services import conjuntos
 
 router = APIRouter()
@@ -13,6 +13,17 @@ router = APIRouter()
 @router.get("/conjuntos", response_model=list[ConjuntoOut])
 def list_conjuntos(conn: sqlite3.Connection = Depends(get_conn)) -> list[dict]:
     return conjuntos.list_all(conn)
+
+
+@router.get("/conjuntos/sequencia", response_model=SequenciaIO)
+def get_sequencia(conn: sqlite3.Connection = Depends(get_conn)) -> dict:
+    return {"conjunto_ids": conjuntos.get_sequence(conn)}
+
+
+@router.put("/conjuntos/sequencia", response_model=SequenciaIO)
+def put_sequencia(body: SequenciaIO, conn: sqlite3.Connection = Depends(get_conn)) -> dict:
+    conjuntos.set_sequence(conn, body.conjunto_ids)
+    return {"conjunto_ids": conjuntos.get_sequence(conn)}
 
 
 @router.post("/conjuntos", response_model=ConjuntoOut, status_code=201)

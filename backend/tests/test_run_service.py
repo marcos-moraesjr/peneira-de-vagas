@@ -5,9 +5,9 @@ import time
 import pytest
 
 from backend.app import db
-from backend.app.errors import Conflict, DomainError
+from backend.app.errors import Conflict, DomainError, NotFound
 from backend.app.services import conjuntos, keywords, run_service
-from backend.app.sources.errors import SourceBlocked, SourceRateLimited
+from backend.app.sources.errors import SourceBlocked, SourceEmpty, SourceRateLimited
 from backend.app.sources.types import Job
 
 NOW = "2026-10-14T12:00:00+00:00"
@@ -398,3 +398,67 @@ def test_limitacao_de_taxa_marca_falha_mas_preserva_o_que_ja_foi_lido(conn, sett
     linha = sources_of(conn, run_id)["fake"]
     assert (linha["status"], linha["motivo"]) == ("falha", "http_erro")
     assert (linha["lidas"], linha["aprovadas"], linha["novas"]) == (1, 1, 1)
+
+
+def test_start_run_grava_o_nome_do_conjunto_ativo_na_execucao(conn, settings):
+    nome = conn.execute("SELECT nome FROM conjuntos WHERE ativo=1").fetchone()["nome"]
+    run_id = run_service.start_run(conn, settings, [FakeSource()], now, spawn=lambda fn: None)
+    assert conn.execute("SELECT conjunto FROM runs WHERE id=?", (run_id,)).fetchone()["conjunto"] == nome
+
+
+def _outro_conjunto(conn, settings, nome, termo):
+    """Cria um conjunto com um termo de busca e devolve seu id, deixando o conjunto original ativo."""
+    original = conjuntos.active_id(conn)
+    novo = conjuntos.add(conn, settings, nome, NOW)["id"]
+    keywords.add(conn, settings, termo, "busca", NOW)
+    conjuntos.activate(conn, original)
+    return novo
+
+
+def test_execute_run_com_conjunto_usa_as_palavras_e_grava_vagas_nesse_conjunto(conn, settings):
+    outro = _outro_conjunto(conn, settings, "Soldador", "soldador")
+    fonte = FakeSource(jobs=[job("1", titulo="Soldador")])
+    run_id = db.create_run(conn, ["fake"], NOW)
+    run_service.execute_run(settings, run_id, [fonte], now, conjunto_id=outro)
+    assert fonte.search_calls == [["soldador"]]
+    assert conn.execute("SELECT conjunto_id FROM jobs").fetchone()["conjunto_id"] == outro
+
+
+def test_start_run_com_sequencia_roda_um_conjunto_por_execucao_na_ordem_pedida(conn, settings):
+    primeiro = _outro_conjunto(conn, settings, "Soldador", "soldador")
+    segundo = _outro_conjunto(conn, settings, "Pintor", "pintor")
+    fonte = FakeSource()
+    run_id = run_service.start_run(conn, settings, [fonte], now, spawn=lambda fn: fn(), conjunto_ids=[segundo, primeiro])
+    assert fonte.search_calls == [["pintor"], ["soldador"]]
+    runs = conn.execute("SELECT id, conjunto, status FROM runs ORDER BY id").fetchall()
+    assert [(r["conjunto"], r["status"]) for r in runs] == [("Pintor", "concluida"), ("Soldador", "concluida")]
+    assert run_id == runs[0]["id"]
+
+
+def test_sequencia_para_quando_uma_fonte_e_bloqueada(conn, settings):
+    primeiro = _outro_conjunto(conn, settings, "Soldador", "soldador")
+    segundo = _outro_conjunto(conn, settings, "Pintor", "pintor")
+    fonte = FakeSource(error=SourceBlocked("captcha"))
+    run_service.start_run(conn, settings, [fonte], now, spawn=lambda fn: fn(), conjunto_ids=[primeiro, segundo])
+    assert fonte.search_calls == [["soldador"]]
+    assert [r["conjunto"] for r in conn.execute("SELECT conjunto FROM runs")] == ["Soldador"]
+
+
+def test_sequencia_segue_quando_a_falha_nao_e_bloqueio(conn, settings):
+    primeiro = _outro_conjunto(conn, settings, "Soldador", "soldador")
+    segundo = _outro_conjunto(conn, settings, "Pintor", "pintor")
+    fonte = FakeSource(error=SourceEmpty("vazio"))
+    run_service.start_run(conn, settings, [fonte], now, spawn=lambda fn: fn(), conjunto_ids=[primeiro, segundo])
+    assert fonte.search_calls == [["soldador"], ["pintor"]]
+
+
+def test_start_run_rejeita_sequencia_invalida(conn, settings):
+    ativo = conjuntos.active_id(conn)
+    with pytest.raises(DomainError, match="repetido"):
+        run_service.start_run(conn, settings, [FakeSource()], now, spawn=lambda fn: None, conjunto_ids=[ativo, ativo])
+    with pytest.raises(NotFound):
+        run_service.start_run(conn, settings, [FakeSource()], now, spawn=lambda fn: None, conjunto_ids=[ativo, 999])
+    vazio = conjuntos.add(conn, settings, "Vazio", NOW)["id"]
+    with pytest.raises(DomainError, match="Vazio"):
+        run_service.start_run(conn, settings, [FakeSource()], now, spawn=lambda fn: None, conjunto_ids=[ativo, vazio])
+    assert conn.execute("SELECT COUNT(*) FROM runs").fetchone()[0] == 0

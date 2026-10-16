@@ -36,6 +36,19 @@ describe("ExecucoesPage", () => {
     expect(rows[2]).toHaveTextContent("5");
   });
 
+  it("o histórico tem a coluna Conjunto com o nome usado na busca, e traço nas execuções antigas", async () => {
+    mockApi({
+      "GET /api/config": CONFIG,
+      "GET /api/runs": [makeRun(2, "concluida", [makeSource("gupy")], "Mecânica"), makeRun(1, "concluida", [makeSource("gupy")], "")],
+    });
+    renderWithClient(<ExecucoesPage />);
+    const table = await screen.findByRole("table", { name: "Execuções" });
+    expect(within(table).getByRole("button", { name: "Conjunto" })).toBeInTheDocument();
+    const rows = within(table).getAllByRole("row");
+    expect(rows[1]).toHaveTextContent("Mecânica");
+    expect(rows[2]).toHaveTextContent("—");
+  });
+
   it("o card fecha no botão Fechar", async () => {
     const user = userEvent.setup();
     mockApi({ "GET /api/config": CONFIG, "GET /api/runs": [makeRun(2, "concluida", [makeSource("gupy")])] });

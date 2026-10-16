@@ -104,6 +104,12 @@ Crie conforme a necessidade; sugestão inicial:
 - **Correção**: o detalhe agora informa fonte, etapa, URL, tentativas realizadas/limite e erro original; o botão **Ver detalhes** continua exibindo a mensagem completa sem expor dados da sessão.
 - **Risco futuro**: `ERR_ABORTED` pode continuar sendo causado por redirecionamento, login ou bloqueio externo; verificar o detalhe e o log antes de alterar seletores.
 
+### Indeed: painel "não abriu" por link ausente, não por lentidão (2026-10-15)
+- **Contexto**: o erro "Não abriu o painel da vaga … após 3 tentativa(s)" voltava de forma intermitente no Indeed, que no mais funcionava.
+- **Causa raiz** (hipótese inferida do código, não confirmada em log): o script de abertura só devolve `false` quando o `a[data-jk]` da vaga não está no DOM; as 3 tentativas ficavam separadas só pela pausa de rolagem (0,25–0,7 s), curta demais se a lista é redesenhada pelo site.
+- **Correção**: espera de `[navegador] intervalo_tentativa_painel_s` (15 s) entre tentativas; tentativas e intervalo editáveis na tela Configurações; scanners `linkedin` 1.9.3 e `indeed` 1.11.3.
+- **Risco futuro**: se o erro persistir mesmo com 15 s, a causa não é timing (ids trocados, bloqueio, layout); olhar o log "vaga … pulada" antes de aumentar tentativas.
+
 ### Detalhes só depois de toda a paginação (2026-10-15)
 - **Contexto**: execução real do LinkedIn e do Indeed; o navegador passava vários minutos rolando resultados sem abrir uma vaga.
 - **Causa raiz**: `BrowserSource.search` precisava concluir todas as palavras-chave e páginas antes de o serviço chamar `enrich`.

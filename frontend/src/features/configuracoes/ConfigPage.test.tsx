@@ -63,6 +63,15 @@ describe("ConfigPage", () => {
     });
   });
 
+  it("recalcula a pontuação das vagas e informa quantas mudaram", async () => {
+    const user = userEvent.setup();
+    const api = mockApi({ "GET /api/config": CONFIG, "POST /api/jobs/recalcular": { atualizadas: 2, total: 5 } });
+    renderWithClient(<ConfigPage />);
+    await user.click(await screen.findByRole("button", { name: "Recalcular pontuação" }));
+    expect(await screen.findByText("2 de 5 vagas tiveram a pontuação atualizada.")).toBeInTheDocument();
+    expect(api.calls.some((c) => c.method === "POST" && c.path === "/api/jobs/recalcular")).toBe(true);
+  });
+
   it("não tem botões Salvar nem Descartar: o salvamento é automático", async () => {
     setup();
     await screen.findByRole("slider", { name: "Pontuação mínima para aparecer" });
@@ -109,7 +118,26 @@ describe("ConfigPage", () => {
     expect(opcao).not.toBeChecked();
     await user.click(opcao);
     expect(await screen.findByText(/configuração salva/i)).toBeInTheDocument();
-    expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ ...CONFIG, navegador: { abas_paralelas: true } });
+    expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ ...CONFIG, navegador: { ...CONFIG.navegador, abas_paralelas: true } });
+  });
+
+  it("edita as tentativas e o intervalo de espera para abrir o painel da vaga", async () => {
+    const user = userEvent.setup();
+    const { calls } = setup();
+    const tentativas = await screen.findByLabelText(/tentativas para abrir o painel/i);
+    expect(tentativas).toHaveValue(3);
+    await user.clear(tentativas);
+    await user.type(tentativas, "5");
+    const intervalo = screen.getByLabelText(/intervalo entre tentativas/i);
+    expect(intervalo).toHaveValue(15);
+    await user.clear(intervalo);
+    await user.type(intervalo, "20");
+    await user.tab();
+    expect(await screen.findByText(/configuração salva/i)).toBeInTheDocument();
+    expect(calls.filter((c) => c.method === "PUT").at(-1)?.body).toEqual({
+      ...CONFIG,
+      navegador: { ...CONFIG.navegador, max_tentativas_painel: 5, intervalo_tentativa_painel_s: 20 },
+    });
   });
 
   it("mostra o erro do backend e mantém o que foi digitado", async () => {

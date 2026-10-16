@@ -22,8 +22,22 @@ def _format(value: object) -> str:
     return repr(value)
 
 
-def write_values(path: Path, values: dict[str, dict[str, object]]) -> None:
-    """`values` = {seção: {chave: valor}}. Chave ausente no arquivo: erro, sem gravar nada."""
+def _append(lines: list[str], section: str, key: str, value: object) -> None:
+    """Insere `chave = valor` depois da última linha não vazia da seção."""
+    start = next((i for i, line in enumerate(lines) if (m := _SECTION.match(line)) and m.group(1).strip() == section), None)
+    if start is None:
+        raise DomainError(f"config.toml sem a seção: {section}")
+    end = next((i for i in range(start + 1, len(lines)) if _SECTION.match(lines[i])), len(lines))
+    while end - 1 > start and not lines[end - 1].strip():
+        end -= 1
+    if end > 0 and not lines[end - 1].endswith("\n"):
+        lines[end - 1] += "\n"
+    lines.insert(end, f"{key} = {_format(value)}\n")
+
+
+def write_values(path: Path, values: dict[str, dict[str, object]], adicionar_ausentes: bool = False) -> None:
+    """`values` = {seção: {chave: valor}}. Chave ausente no arquivo: erro, sem gravar nada; com `adicionar_ausentes`,
+    é acrescentada ao fim da seção (config copiado de uma versão antiga do app, sem a chave nova)."""
     lines = Path(path).read_text(encoding="utf-8").splitlines(keepends=True)
     pending = {(section, key) for section, keys in values.items() for key in keys}
     section = None
@@ -40,6 +54,10 @@ def write_values(path: Path, values: dict[str, dict[str, object]]) -> None:
                 lines[index] = match.group(1) + _format(value) + line[match.end():]
                 pending.discard((section, key))
                 break
+    if pending and adicionar_ausentes:
+        for section, key in sorted(pending):
+            _append(lines, section, key, values[section][key])
+        pending = set()
     if pending:
         missing = ", ".join(f"{section}.{key}" for section, key in sorted(pending))
         raise DomainError(f"config.toml sem as chaves: {missing}")
@@ -56,5 +74,5 @@ def update_config(settings: Settings, path: Path, values: dict[str, dict[str, ob
         validate(updated)
     except ConfigError as error:
         raise DomainError(str(error)) from error
-    write_values(path, values)
+    write_values(path, values, adicionar_ausentes=True)
     return updated

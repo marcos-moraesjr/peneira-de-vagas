@@ -1,14 +1,10 @@
 # Peneira de Vagas — Arquitetura
 
 Fonte de verdade de fluxo, contratos, módulos, config e convenções. Stack e exclusões:
-[`TECH_STACK.md`](TECH_STACK.md). Escopo: [`MVP.md`](MVP.md); ordem de construção: [`FASES.md`](FASES.md);
-telas: [`DESIGN_BRIEF.md`](DESIGN_BRIEF.md).
-Estado atual: **Fases 0–4 implementadas** (backend com 110+ testes e frontend com 41). Falta a validação do
-usuário contra os sites reais (critérios 7 e 8 do MVP) e a Fase 5 (14 dias de uso). Endpoint da Gupy e
-seletores do LinkedIn/Indeed seguem a exploração em DOM real de 14/10/2026 registrada em
-[`EXPLORACAO_PLATAFORMAS.md`](EXPLORACAO_PLATAFORMAS.md) (§2); o código Python daquele documento foi **superado** por esta
-arquitetura. Continua **não verificado**: a Gupy responder a `httpx` fora do navegador, o efeito real de
-`fromage=1` no Indeed, a paginação por `start=` nos dois sites e o comportamento em perfil sem login.
+[`TECH_STACK.md`](TECH_STACK.md). Telas: [`DESIGN_BRIEF.md`](DESIGN_BRIEF.md). Escopo, regras de negócio, riscos e o que
+ainda falta validar: seções **Regras de negócio**, **Fora de escopo**, **Riscos** e **Validação manual pendente** abaixo.
+Endpoint da Gupy e seletores do LinkedIn/Indeed seguem a exploração em DOM real de 14/10/2026 registrada em
+[`SCANNERS.md`](SCANNERS.md) (§Plataformas).
 
 ## Visão geral
 
@@ -16,6 +12,19 @@ App **local** com front end (React) e API (FastAPI). O front dispara a busca; a 
 plano, as tarefas de cada fonte (LinkedIn e Indeed via navegador real/CDP; Gupy via API JSON), filtra,
 deduplica no SQLite e expõe os resultados, que o front exibe. Um usuário, nada sai da máquina além das
 requisições às três fontes.
+
+**Pergunta que o produto responde:** *saiu alguma vaga relevante desde a última vez que olhei?*
+
+Premissas: um único usuário na própria máquina (sem login nem nuvem), desktop, pt-BR, vagas no Brasil; a API escuta só em `127.0.0.1`.
+
+Dois riscos centrais guiam as decisões de escopo:
+
+1. **Bloqueio das fontes.** LinkedIn e Indeed detectam automação. A estratégia é o Chrome dedicado do usuário (via CDP) em
+   ritmo humano e **falhar explicitamente** quando algo bloquear (CAPTCHA, login, Cloudflare), nunca contornar.
+2. **Ruído.** Lista cheia de vaga irrelevante é ignorada. Toda decisão de escopo é julgada por: *isso reduz vaga irrelevante
+   ou evita perder vaga relevante?* Se não, fica fora. Consequências: o filtro (palavras-chave, ranking, exclusões, pesos) é a
+   peça mais importante; a tela mostra o que é **novo** logo de cara; falha de fonte aparece com destaque, para o silêncio
+   nunca ser confundido com "sem vagas".
 
 ## Fluxo
 
@@ -53,19 +62,21 @@ Tudo sob `/api`, JSON, só em `127.0.0.1`. Erros: `422` (entrada inválida), `40
 | Rota | Efeito |
 | --- | --- |
 | `GET /api/health` | `{status, db}` |
-| `POST /api/runs` | inicia a busca; corpo opcional `{fontes, localidade, modalidade, janela_dias}` (`fontes` nulo/ausente = todas; localidade, modalidade e a janela em dias são selecionadas no card de busca da página Vagas; `janela_dias` ≥ 1; lista = só essas fontes); `202 {id}`; `409` se há outra em andamento; `422` se a lista for vazia, tiver fonte inexistente ou filtro inválido |
-| `GET /api/runs?limit=` | histórico (mais recentes primeiro), cada um com suas `fontes` |
+| `POST /api/runs` | inicia a busca; corpo opcional `{fontes, localidade, modalidade, janela_dias, conjunto_ids}` (`fontes` nulo/ausente = todas; localidade, modalidade e a janela em dias são selecionadas no card de busca da página Vagas; `janela_dias` ≥ 1; lista = só essas fontes); `conjunto_ids` = **sequência de buscas**: lista ordenada de conjuntos, uma execução por conjunto (cada uma com a própria linha no histórico), rodadas uma após a outra por uma única thread; ausente/vazia = só o conjunto ativo, que a sequência **não troca**; devolve o id da primeira; as palavras de cada conjunto são lidas quando a sua vez chega; a sequência **para** (sem disparar os conjuntos restantes) se alguma fonte terminar com falha de motivo `captcha`, `login` ou `http_erro` (`MOTIVOS_DE_BLOQUEIO` em `run_service`); outras falhas não a interrompem. Entre o fim de uma execução e a abertura da seguinte há um intervalo mínimo em que nenhuma está `executando`; se outra busca entrar nele, a sequência termina; `202 {id}`; `409` se há outra em andamento; `404` se um conjunto não existe; `422` se a lista for vazia, tiver fonte inexistente, filtro inválido, conjunto repetido ou conjunto sem palavra-chave `busca` (validado antes de iniciar) |
+| `GET /api/runs?limit=` | histórico (mais recentes primeiro), cada um com o `conjunto` (nome do conjunto ativo na largada; `""` em execuções anteriores ao esquema v13) e suas `fontes` |
 | `DELETE /api/runs/{id}` | exclui uma execução (botão **Excluir** da linha, com confirmação) e seus `run_sources`; `200 {removidas: 1}`; `404` se não existe; `409` se ela está em andamento. As vagas são mantidas (`run_id` nulo) |
 | `DELETE /api/runs` | limpa o histórico: apaga **todas** as execuções (e seus `run_sources`); `200 {removidas}`; `409` se há execução em andamento. As vagas nunca são apagadas: ficam com `run_id` nulo (antes, execuções que originaram vagas eram preservadas e a limpeza não removia nada se todas tinham originado) |
 | `GET /api/runs/{id}` | andamento: `status` e, por fonte, `status`, `motivo`, `lidas`, `aprovadas`, `novas` |
-| `GET /api/jobs?conjunto_id=&todos_conjuntos=&excluidas=&candidatadas=&visto=&fonte=&q=&local=&modalidade=&max_dias=&ordenar=&direcao=&limit=&offset=` | vagas **de um conjunto**: `conjunto_id` escolhe o conjunto (inexistente → `404`); omitido, vale o conjunto ativo; `excluidas=true` lista só as excluídas (padrão: só as não excluídas); `candidatadas=true` lista só as candidaturas (a lista comum e as excluídas não as trazem), da mais recente para a mais antiga (`candidatada_em`) quando não há `ordenar`; `todos_conjuntos=true` tira o filtro de conjunto (lista as vagas de todos; prevalece sobre `conjunto_id`). Cada vaga (cada uma com `localidade`, `cidade`, `estado`, `modalidade`, `palavra_chave` e `publicada_em`; `cidade` e `estado` (sigla UF) são derivados do texto livre da `localidade` por `split_localidade` em `services/localizacao.py`, não são colunas do banco; vazio quando a fonte não informa). `local`: um texto só para cidade, estado ou modalidade; filtra as já encontradas se contiver na cidade, na sigla da UF ou na modalidade (sem acento nem maiúscula); o nome de um estado ("Pernambuco") casa a UF dele; antes eram os parâmetros `cidade` e `estado`; `modalidade` ∈ `remoto`, `hibrido`, `presencial` (outro valor → `422` com valor e esperado); vazio = sem filtro. `POST /api/jobs/mark-seen` aceita os mesmos (`local` e `modalidade`). Sem `ordenar`: ordem padrão (execução mais recente, pontos, id). `ordenar` ∈ `titulo`, `empresa`, `localidade`, `cidade`, `estado`, `modalidade`, `palavra_chave`, `publicada_em`, `encontrada_em`, `fonte`, `pontos` e `direcao` ∈ `asc` (padrão) / `desc`; texto compara sem acento nem maiúscula; vagas sem `publicada_em` ficam no fim nas duas direções; desempate por `id` decrescente; valor fora da lista → `422` com valor e esperado. A ordenação é no servidor porque a lista pagina; `visto=false` = novas. `max_dias=N` (inteiro ≥ 1, senão `422`) descarta da listagem as vagas com `publicada_em` anterior a *hoje − N dias* (comparação pela data, com o "agora" da API); **vagas sem `publicada_em` (LinkedIn, Indeed) nunca são descartadas** por esse filtro. É filtro de exibição: nada é apagado |
+| `GET /api/jobs?conjunto_id=&todos_conjuntos=&excluidas=&candidatadas=&visto=&fonte=&q=&local=&modalidade=&max_dias=&min_pontos=&ordenar=&direcao=&limit=&offset=` | vagas **de um conjunto**: `conjunto_id` escolhe o conjunto (inexistente → `404`); omitido, vale o conjunto ativo; `excluidas=true` lista só as excluídas (padrão: só as não excluídas); `candidatadas=true` lista só as candidaturas (a lista comum e as excluídas não as trazem), da mais recente para a mais antiga (`candidatada_em`) quando não há `ordenar`; `todos_conjuntos=true` tira o filtro de conjunto (lista as vagas de todos; prevalece sobre `conjunto_id`). Cada vaga (cada uma com `localidade`, `cidade`, `estado`, `modalidade`, `palavra_chave` e `publicada_em`; `cidade` e `estado` (sigla UF) são derivados do texto livre da `localidade` por `split_localidade` em `services/localizacao.py`, não são colunas do banco; vazio quando a fonte não informa). `local`: um texto só para cidade, estado ou modalidade; filtra as já encontradas se contiver na cidade, na sigla da UF ou na modalidade (sem acento nem maiúscula); o nome de um estado ("Pernambuco") casa a UF dele; antes eram os parâmetros `cidade` e `estado`; `modalidade` ∈ `remoto`, `hibrido`, `presencial` (outro valor → `422` com valor e esperado); vazio = sem filtro. `POST /api/jobs/mark-seen` aceita os mesmos (`local` e `modalidade`). Sem `ordenar`: ordem padrão (execução mais recente, pontos, id). `ordenar` ∈ `titulo`, `empresa`, `localidade`, `cidade`, `estado`, `modalidade`, `palavra_chave`, `publicada_em`, `encontrada_em`, `fonte`, `pontos` e `direcao` ∈ `asc` (padrão) / `desc`; texto compara sem acento nem maiúscula; vagas sem `publicada_em` ficam no fim nas duas direções; desempate por `id` decrescente; valor fora da lista → `422` com valor e esperado. A ordenação é no servidor porque a lista pagina; `visto=false` = novas. `max_dias=N` (inteiro ≥ 1, senão `422`) descarta da listagem as vagas com `publicada_em` anterior a *hoje − N dias* (comparação pela data, com o "agora" da API); **vagas sem `publicada_em` (LinkedIn, Indeed) nunca são descartadas** por esse filtro. `min_pontos=N` (inteiro ≥ 0, senão `422`) lista só as vagas com `pontos >= N`; vazio ou 0 = sem filtro. É filtro de exibição: nada é apagado |
 | `PATCH /api/jobs/{id}` | `{visto?: bool, excluida?: bool, candidatada?: bool}` (ao menos um; `422` se nenhum): `excluida` é exclusão **lógica** (botão da linha; a vaga fica no banco, some da lista e de "marcar como vistas", e a deduplicação continua a reconhecendo, então não volta como nova). `candidatada` marca que o usuário se candidatou (botão **✓** da linha): a vaga sai da lista comum e ganha a aba **Candidaturas**, com as mesmas garantias (fica no banco, fora de "marcar como vistas", não volta como nova). `candidatada_em` guarda a data/hora (relógio da API) em que a candidatura foi marcada; desfazer a limpa. `excluida` e `candidatada` são excludentes: marcar uma desmarca a outra. `404` se não existe |
 | `DELETE /api/jobs?conjunto_id=` | apaga todas as vagas **do conjunto** (padrão: o ativo; vistas e novas, sem filtro); `200 {removidas}`; `409` se há execução em andamento. Vaga excluída que reaparecer numa busca volta como nova (a deduplicação consulta a tabela `jobs`); "Limpar execuções" apaga o histórico independentemente das vagas |
-| `POST /api/jobs/mark-seen` | marca como vistas todas as que casam com os filtros do corpo (`fonte`, `q`, `local`, `modalidade`, `max_dias`) **no conjunto** de `conjunto_id` (padrão: o ativo), ou em todos com `todos_conjuntos: true` |
+| `POST /api/jobs/mark-seen` | marca como vistas todas as que casam com os filtros do corpo (`fonte`, `q`, `local`, `modalidade`, `max_dias`, `min_pontos`) **no conjunto** de `conjunto_id` (padrão: o ativo), ou em todos com `todos_conjuntos: true` |
+| `POST /api/jobs/recalcular` | reescreve `pontos` das vagas de **todos os conjuntos**, cada um com as palavras (busca + ranking + exclusões) do próprio conjunto e os pesos atuais (antes: só o conjunto ativo), sobre `titulo` e `trecho` gravados (sem rede nem navegador). Só muda a pontuação: nenhuma vaga é apagada nem reprovada pelo `min_score` (excluída por palavra de exclusão fica com 0). Devolve `{atualizadas, total}` (`atualizadas` = quantas tiveram o valor alterado); durante uma execução → `409` |
 | `GET /api/keywords?tipo=` | lista palavras-chave da busca (`busca`, viram queries), de ranking (`ranking`, só pontuam) e/ou exclusões (`exclusao`) **do conjunto ativo** |
 | `POST /api/keywords` | `{termo, tipo}` → `201` (grava no conjunto ativo); `422` se vazio, maior que `keyword_max_length`, acima de `max_termos_busca` (só `busca`; `ranking` não tem teto) ou duplicado **no mesmo grupo do conjunto** (sem acento/caixa; o mesmo termo pode estar em `busca` e em `ranking`) |
 | `DELETE /api/keywords/{id}` | remove; `404` se não existe |
 | `GET /api/conjuntos` | conjuntos de palavras-chave `[{id, nome, ativo}]`; exatamente um está ativo |
+| `GET /api/conjuntos/sequencia` · `PUT /api/conjuntos/sequencia` | ordem **salva** da sequência de buscas: `{conjunto_ids}`; o `PUT` substitui a lista inteira (vazia limpa); `404` se um conjunto não existe, `422` se repetido (nada é gravado); apagar um conjunto o tira da sequência. O front grava a cada mudança (otimista) e a usa como `conjunto_ids` do `POST /api/runs` |
 | `POST /api/conjuntos` | `{nome}` → `201`; cria um conjunto **vazio e já o ativa**; `422` se vazio, maior que `keyword_max_length` ou duplicado (sem acento/caixa) |
 | `PATCH /api/conjuntos/{id}` | `{nome}` → `200` com `{id, nome, ativo}`; troca o nome mantendo palavras e estado ativo; `404` se não existe; `422` se vazio, maior que `keyword_max_length` ou igual (sem acento/caixa) ao nome de **outro** conjunto (mudar só a caixa/acento do próprio nome é permitido) |
 | `POST /api/conjuntos/{id}/copiar` | `{nome}` → `201` com `{id, nome, ativo}`; cria um conjunto com **todas as palavras** do original (`busca`, `ranking` e `exclusao`) e já o ativa; o original não muda; `404` se o original não existe; `422` nas mesmas condições de `POST /api/conjuntos` (nome vazio, longo ou repetido) |
@@ -77,7 +88,7 @@ Tudo sob `/api`, JSON, só em `127.0.0.1`. Erros: `422` (entrada inválida), `40
 | `GET /api/scanners/instrucao?fonte=` | instrução pronta para o Claude Code **refazer só a documentação** das plataformas (todas ou uma), com versões atuais, palavras-chave cadastradas e regras de segurança; 422 se a fonte for desconhecida |
 | `GET /api/atualizacao` | `{estado, instalada, disponivel, comando}`: há Release mais nova no GitHub? `estado` ∈ `disponivel` (traz as três versões e o `comando`, `peneira atualizar`), `atualizado`, `desenvolvimento` (sem `versao.txt`: nunca consulta), `desligado` (`[atualizacao] verificar = false`: nunca consulta) e `indisponivel` (sem rede, limite de taxa, resposta inesperada: a tela só não mostra o aviso, sem erro). A tela chama uma vez por sessão |
 | `GET /api/scanners` | versão e estado (`ok`/`atencao`/`refazer`) de cada scanner; em `refazer`, traz a `instrucao` pronta para o Claude (`SCANNERS.md`) |
-| `GET /api/config` | config em vigor: seções `busca` (sem o teto fixo de termos), `filtro`, `limites` (`max_paginas_por_termo`), `ritmo`, `navegador` (só `abas_paralelas`), `api` (caminhos, `cdp_url`, `chrome_paths` e URLs das fontes ficam de fora) |
+| `GET /api/config` | config em vigor: seções `busca` (sem o teto fixo de termos), `filtro`, `limites` (`max_paginas_por_termo`), `ritmo`, `navegador` (só `abas_paralelas`, `max_tentativas_painel` e `intervalo_tentativa_painel_s`), `api` (caminhos, `cdp_url`, `chrome_paths` e URLs das fontes ficam de fora) |
 | `PUT /api/config` | corpo = o mesmo formato do `GET` (completo); valida, regrava só esses valores no `config.toml` (comentários e demais chaves intactos) e passa a valer na hora; `422` se inválido (arquivo intacto), `409` se há execução em andamento |
 
 Motivos de falha de fonte (enum): `captcha`, `login`, `cloudflare`, `seletor_nao_encontrado`,
@@ -94,7 +105,7 @@ Ajustar aqui ao criar cada diretório.
 | --- | --- |
 | `backend/app/main.py` | `create_app()`: rotas sob `/api`, lifespan, tradução de erros, build estático em `/` |
 | `backend/app/routes/` | rotas finas: `health`, `runs`, `jobs`, `keywords`, `conjuntos`, `config` |
-| `backend/app/services/` | `run_service` (orquestra uma execução, trava de execução única), `jobs` (consulta e marcação), `keywords` (CRUD no conjunto ativo, normalização, seed), `conjuntos` (criar, copiar, renomear, ativar, remover), `filters` (normalização, pontuação, exclusões) |
+| `backend/app/services/` | `run_service` (orquestra uma execução, trava de execução única), `jobs` (consulta, marcação e recálculo de pontuação), `keywords` (CRUD no conjunto ativo, normalização, seed), `conjuntos` (criar, copiar, renomear, ativar, remover), `filters` (normalização, pontuação, exclusões) |
 | `backend/app/services/runs.py` | consulta de execuções e resultado por fonte |
 | `backend/app/sources/` | `verification.py` (`VerificationGate`: espera/confirmação da verificação manual), `gupy.py` (httpx), `browser.py` (`BrowserSource`, `PlaywrightNavigator`, `playwright_session`: CDP, ritmo, bloqueio), `linkedin.py` e `indeed.py` (adaptadores de site), `registry.py` (`build_sources`: LinkedIn → Indeed → Gupy), `types.py` (`Job`), `errors.py` (`SourceBlocked`, `SourceLayoutChanged`, `SourceEmpty`, `SourceUnavailable`) |
 | `backend/app/schemas.py` | contratos Pydantic de toda a API |
@@ -115,7 +126,7 @@ Ajustar aqui ao criar cada diretório.
 | `backend/app/services/chrome.py` · `routes/browser.py` | `is_open`, `find_chrome`, `open_chrome`: sonda, descoberta e abertura do Chrome dedicado; `cdp_url` só aceita 127.0.0.1/localhost (validado na config) |
 | `backend/tests/` | pytest, um `test_<módulo>.py` por módulo; `conftest.py`: SQLite temporário, `Settings` e "agora" injetados; `samples/` (JSON/HTML salvos, sem dados pessoais) |
 | `frontend/src/api/` | `client.ts` (`apiGet` tipado + `apiSend`), `hooks.ts`; `schema.d.ts` e `openapi.json` gerados e versionados |
-| `frontend/src/features/` | `vagas` (controles de execução, plataformas, estado, Chrome, lista paginada por números de página (`Pagination`: `limit` e `offset` da API), filtros e seletor de conjuntos (com a opção **Todos**, que tira o filtro de conjunto; nela "Excluir todas as vagas" fica desabilitado); durante a execução, o status por fonte (`RunStatus`) aparece em uma faixa com borda alinhada ao grupo dos botões de marcar/excluir vagas, usando cores semânticas por estado), `configuracoes` (parâmetros ajustáveis; salvamento automático: ao sair do campo, ao marcar a opção e ao soltar o controle deslizante), `execucoes` (histórico em tabela ordenável pelo cabeçalho, detalhe por fonte em card ao clicar, botão de excluir na linha, e config), `como-usar` (aba Como usar, passos e tabela de problemas gerados de `lib/failures.ts`), `vagas/BuscaPage` (aba Parâmetros de busca, com palavras-chave e exclusões) |
+| `frontend/src/features/` | `vagas` (controles de execução, plataformas, estado, Chrome, lista paginada por números de página (`Pagination`: `limit` e `offset` da API), filtros e sequência de conjuntos em card quadrado à direita do card de busca (ordem salva no servidor; seletor **Adicionar à sequência**, lista ordenada em que cada item se **arrasta** para reordenar (HTML5 nativo, sem biblioteca), com subir, descer e remover como alternativa por botão; vazia busca só o ativo), seletor de conjuntos (com a opção **Todos**, que tira o filtro de conjunto; nela "Excluir todas as vagas" fica desabilitado); durante a execução, o status por fonte (`RunStatus`) aparece em uma faixa com borda alinhada ao grupo dos botões de marcar/excluir vagas, usando cores semânticas por estado), `configuracoes` (parâmetros ajustáveis; salvamento automático: ao sair do campo, ao marcar a opção e ao soltar o controle deslizante), `execucoes` (histórico em tabela ordenável pelo cabeçalho, detalhe por fonte em card ao clicar, botão de excluir na linha, e config), `como-usar` (aba Como usar, passos e tabela de problemas gerados de `lib/failures.ts`), `vagas/BuscaPage` (aba Parâmetros de busca, com palavras-chave e exclusões) |
 | `frontend/src/components/` | componentes comuns (`Tabs`, `ErrorBox`, `SourceBadge`, `ConjuntosPanel` com tabela para ativar, editar e excluir conjuntos, botões de uso uniformes e exclusão no padrão vermelho `buttonDanger`, e formulário para criar vazio ou copiar um conjunto existente, `ui.ts` com classes Tailwind compartilhadas) |
 | `frontend/public/`, `frontend/src/index.css` | ícone da marca Peneira de Vagas e tokens de identidade (variáveis `--pn-*`, temas claro e escuro via `data-theme`, escolhido pelo botão da barra (`ThemeToggle`, salvo em `localStorage` `peneira-de-vagas-tema`, com leitura do nome legado) ou, sem escolha, pelo `prefers-color-scheme` em `index.html`; mapeadas no `@theme` do Tailwind; fonte única Noto Sans empacotada (`@fontsource/noto-sans`, pesos 400–700; a do Indeed), com a pilha do sistema como reserva) |
 | `frontend/dist/` | build estático (gerado, não versionado) |
@@ -144,7 +155,7 @@ Cada `sources/<fonte>.py` expõe `fetch(config, ...) -> list[Job]`. `Job`:
 
 Cada fonte expõe também `name` e `enrich(jobs) -> list[Job]` (abre o detalhe; na Gupy é identidade).
 Falhas são exceções de `sources/errors.py` (com `motivo` e `detalhe`), nunca lista vazia disfarçada. **Zero
-resultados** é decidido pelo serviço de execução (`SourceEmpty`, MVP §6.8); a fonte de navegador devolve `[]`
+resultados** é decidido pelo serviço de execução (`SourceEmpty`, regra de negócio 8); a fonte de navegador devolve `[]`
 quando a página traz o aviso de "nenhum resultado" e levanta `SourceLayoutChanged` quando não há cards **nem**
 o aviso. Exceção inesperada vira `erro_interno` sem derrubar as demais fontes.
 
@@ -228,7 +239,8 @@ antes de qualquer mudança de esquema.
 | `jobs` | `id` PK, `fonte`, `id_da_vaga`, `titulo`, `empresa`, `link`, `trecho`, `pontos`, `run_id` FK (anulável, `ON DELETE SET NULL`; esquema v5), `encontrada_em`, `localidade` (`''` se a fonte não informa), `publicada_em` (NULL se não informa), `modalidade` (`remoto`/`hibrido`/`presencial` ou `''` se a fonte não informa; esquema v6), `palavra_chave` (`''` se desconhecida; esquema v7), `visto` (0/1), `excluida` (0/1, `DEFAULT 0`; esquema v10: exclusão lógica pelo botão da linha), `candidatada` (0/1, `DEFAULT 0`; esquema v11: candidatura marcada pelo botão ✓ da linha), `candidatada_em` (texto ISO, NULL se não candidatada; esquema v12: data da candidatura), `conjunto_id` FK (`ON DELETE CASCADE`; esquema v9) | `UNIQUE(conjunto_id, fonte, id_da_vaga)` (antes `UNIQUE(fonte, id_da_vaga)`): **uma linha por conjunto**, com pontuação e `visto` próprios; a migração 9 atrela as vagas existentes ao primeiro conjunto; excluir o conjunto exclui as vagas dele |
 | `conjuntos` (esquema v4) | `id` PK, `nome`, `nome_normalizado` (único), `ativo` (0/1), `criada_em` | índice único parcial: no máximo um `ativo=1`; a migração cria o conjunto `Padrão` (ativo) |
 | `keywords` | `id` PK, `termo`, `termo_normalizado`, `tipo` (`busca`/`ranking`/`exclusao`), `criada_em`, `conjunto_id` FK (`ON DELETE CASCADE`) | `UNIQUE(conjunto_id, termo_normalizado, tipo)` (antes `UNIQUE(termo_normalizado, tipo)`); a migração 4 move as palavras existentes para o `Padrão`; a migração 8 adiciona `ranking` e **apaga as palavras `busca` existentes** (exclusões e vagas ficam; cópia do `.db` em `backups/` antes) |
-| `runs` | `id` PK, `inicio`, `fim`, `status` (`executando`/`concluida`) | |
+| `sequencia_conjuntos` (esquema v14) | `posicao` PK, `conjunto_id` FK único (`ON DELETE CASCADE`) | ordem salva da sequência de buscas |
+| `runs` | `id` PK, `inicio`, `fim`, `status` (`executando`/`concluida`), `conjunto` (nome do conjunto ativo ao iniciar, cópia que sobrevive a renomear/apagar; `""` nas antigas; esquema v13) | |
 | `run_sources` | `run_id` FK, `fonte`, `status` (`aguardando`/`buscando`/`ok`/`falha`), `motivo`, `detalhe`, `lidas`, `aprovadas`, `novas`, `scanner_versao` (versão do scanner usada; esquema v2) | `PRIMARY KEY(run_id, fonte)` |
 
 Datas em ISO 8601 (UTC); o front formata em pt-BR com `Intl`. "Agora" é injetado, não lido no meio da regra.
@@ -237,7 +249,7 @@ Datas em ISO 8601 (UTC); o front formata em pt-BR com `Intl`. "Agora" é injetad
 
 Todo valor que ajusta comportamento mora aqui, nunca como literal (`CODE_QUALITY.md` §5). `config.toml` lido
 por `backend/app/config.py` (`tomllib`) e editável pela aba Configurações **só** nas seções `busca`, `filtro`, `limites`,
-`ritmo`, `api` e, de `navegador`, apenas `abas_paralelas` (`PUT /api/config`; escrita em `services/config_edit.py`, sem biblioteca: troca só o valor da linha).
+`ritmo`, `api` e, de `navegador`, apenas `abas_paralelas`, `max_tentativas_painel` e `intervalo_tentativa_painel_s` (`PUT /api/config`; escrita em `services/config_edit.py`, sem biblioteca: troca só o valor da linha; chave que o `config.toml` do usuário ainda não tem é acrescentada ao fim da seção).
 Antes: `janela_dias`, `trecho_max_chars`, pesos e `poll_interval_ms` não tinham limite; agora exigem `> 0` (pesos, `min_score` e pausas, `>= 0`); caminhos relativos partem da raiz do projeto. Host e porta são
 argumentos do `uvicorn` (`127.0.0.1` por padrão; abrir para a rede é decisão registrada no TECH_STACK).
 
@@ -255,11 +267,11 @@ argumentos do `uvicorn` (`127.0.0.1` por padrão; abrir para a rede é decisão 
 | `[filtro] aceitar_desconhecido` | `true` | vaga sem localidade/modalidade informada (ou só "Brasil", ou remota) passa pelo filtro de local e modalidade; `false` descarta. Só no `config.toml` (não aparece na tela) |
 | `[busca] janela_dias` | `3` | filtro de recência da própria busca. A aba **Buscar vagas** permite definir a janela (em dias) para cada execução; o valor da config é o padrão inicial |
 | `[filtro] peso_titulo` / `peso_descricao` | `3` / `1` | pontos por termo no título e no trecho |
-| `[filtro] min_score` | `3` | pontuação mínima para aprovar |
+| `[filtro] min_score` | `5` | pontuação mínima para aprovar |
 | `[limites] max_paginas_por_termo` | `3` | páginas de resultados abertas por palavra-chave e por fonte (LinkedIn 25 vagas/página, Indeed 10, Gupy 50; máximo de páginas por fonte = `max_termos_busca` × este valor); editável na tela Configurações (controle deslizante, 1–10). Antes: `max_vagas_lista` (teto de vagas da fonte inteira, 300) |
-| `[filtro] trecho_max_chars` | `4000` | tamanho máximo do trecho/descrição guardado |
+| `[filtro] trecho_max_chars` | `5000` | tamanho máximo do trecho/descrição guardado |
 | `[ritmo] rolagem_min_s` / `rolagem_max_s` | `0.25` / `0.7` | pausa ao rolar a lista card a card (LinkedIn) |
-| `[ritmo] pausa_min_s` / `pausa_max_s` | `2` / `6` | pausa aleatória entre ações no navegador |
+| `[ritmo] pausa_min_s` / `pausa_max_s` | `2.5` / `5.0` | pausa aleatória entre ações no navegador |
 | `[ritmo] pausa_detalhe_min_s` / `pausa_detalhe_max_s` | `2.0` / `3.5` | pausa depois de abrir o painel de cada vaga (LinkedIn/Indeed); antes reutilizava a pausa de rolagem (0,25–0,7 s). Só no `config.toml` (não aparece na tela Configurações); `min <= max` e `min >= 0` |
 | `[geral] backup_dir` | `backups` | cópia do `.db` antes de migrar o esquema |
 | `[linkedin]` / `[indeed]` `base_url`, `page_size` | URL de busca e passo de paginação (`start`) | |
@@ -267,28 +279,85 @@ argumentos do `uvicorn` (`127.0.0.1` por padrão; abrir para a rede é decisão 
 | `[navegador] timeout_s` | `30` | espera máxima por página/elemento |
 | `[navegador] espera_verificacao_s` | `600` | tempo que a fonte espera o usuário concluir a verificação e confirmar; esgotado (ou sem confirmar), falha como antes. Antes: o bloqueio encerrava a fonte na hora |
 | `[navegador] max_tentativas_abertura` | `3` | número de tentativas de abertura para `ERR_ABORTED`; atingido o limite, registra `http_erro` na fonte e a execução continua com as demais |
-| `[navegador] max_tentativas_painel` | `3` | número de tentativas de clique no painel de detalhe antes de registrar `seletor_nao_encontrado` |
+| `[navegador] max_tentativas_painel` | `3` | número de tentativas de clique no painel de detalhe antes de registrar `seletor_nao_encontrado`; editável na tela Configurações |
+| `[navegador] intervalo_tentativa_painel_s` | `15` | espera, em segundos, entre uma tentativa e outra de abrir o painel da vaga (só entre tentativas, não depois da última); `>= 0`. Editável na tela Configurações junto de `max_tentativas_painel`. Antes: a espera era a pausa de rolagem (0,25–0,7 s) |
 | `[navegador] max_falhas_detalhe_seguidas` | `3` | vagas seguidas cujo painel pode não abrir (a vaga é pulada) antes de a fonte falhar como `seletor_nao_encontrado` |
 | `[navegador] max_falhas_termo_seguidas` | `2` | termos seguidos que podem falhar por erro transitório (timeout, 5xx, abertura abortada) sendo pulados; ao atingir o limite a fonte falha com `http_erro`. Não vale para 401/403/429 |
-| `[navegador] abas_paralelas` | `false` | `true`: as fontes rodam ao mesmo tempo, uma aba por plataforma (cada aba mantém as próprias pausas). Antes: sempre em sequência, sem esta chave |
+| `[navegador] abas_paralelas` | `true` | `true`: as fontes rodam ao mesmo tempo, uma aba por plataforma (cada aba mantém as próprias pausas). Antes: sempre em sequência, sem esta chave |
 | `[navegador] probe_timeout_s` / `chrome_paths` | `1.5` / caminhos do Chrome (Windows, Linux, macOS) | espera ao sondar o CDP; onde procurar o Chrome para o botão "Abrir Chrome dedicado" (o primeiro que existir) |
 | `[geral] chrome_profile_dir` | `data/chrome-profile` | perfil do Chrome dedicado (nunca o pessoal) |
-| `[api] jobs_page_size` | `50` | tamanho padrão da página de vagas |
+| `[api] jobs_page_size` | `20` | tamanho padrão da página de vagas |
 | `[api] runs_history_limit` | `30` | execuções devolvidas por padrão no histórico |
-| `[api] poll_interval_ms` | `2000` | intervalo do polling do front (exposto em `GET /api/config`) |
+| `[api] poll_interval_ms` | `100` | intervalo do polling do front (exposto em `GET /api/config`) |
 | `[atualizacao] verificar` / `repositorio` / `timeout_s` | `true` / `marcos-moraesjr/peneira-de-vagas` / `5` | consulta da última Release (aviso na tela Vagas); `repositorio` precisa ser `dono/nome`; `false` desliga a consulta |
 | `[versionamento] falhas_consecutivas` / `max_idade_dias` | `2` / `90` | falhas de quebra seguidas (na versão atual) que mandam refazer o scanner; idade que pede atenção |
 | `[versionamento] motivos_de_quebra` | `seletor_nao_encontrado`, `zero_resultados`, `http_erro` | motivos que contam como scanner quebrado (bloqueios não contam) |
 | `[gupy] base_url`, `page_size`, `timeout_s` | `portal.gupy.io/api/job-search/jobs`, `50`, `20` | endpoint (parâmetros `jobName`, `limit`, `offset`, `workplaceType`), página e timeout. A Gupy não tem filtro remoto de recência nem de localidade; o adaptador filtra localmente por `publishedDate` e `[busca] janela_dias` |
 
-Os valores `(a definir)` dependem das decisões em aberto de `MVP.md` §11. Parâmetro novo é registrado aqui
+Os valores `(a definir)` dependem das decisões em aberto de `TECH_STACK.md` (Pendências de decisão). Parâmetro novo é registrado aqui
 na mesma sessão.
 
 ## Regras de negócio
 
-Vivem no `MVP.md` §6 (nova × vista, filtro em duas passadas, detalhe só se passar, falha explícita,
-execução única). Alterar uma delas: registrar aqui o **antes e o depois** e abrir entrada em `LESSONS.md`
+1. **Vaga nova = ausente do SQLite no conjunto**, não "publicada nas últimas X horas". Execução perdida é compensada na seguinte.
+2. **Vista × não vista:** a vaga nasce `visto=0` ("nova" na tela) e só muda por ação do usuário (vista, excluída, candidatada).
+3. **Formato único das fontes:** o filtro e o banco não conhecem a origem (ver **Contrato das fontes**).
+4. **Filtro em duas passadas:** primeiro a própria busca da fonte (palavra-chave e janela de recência); depois o filtro local sobre título e trecho.
+5. **Pontuação:** acerto no título pesa mais que na descrição; qualquer exclusão descarta a vaga, mesmo com pontuação alta. Pesos e limiar ficam na config.
+6. **Só vagas aprovadas são gravadas** em `jobs`; as descartadas só contam em `runs.lidas`.
+7. **Detalhe só se passar:** a página ou o painel da vaga só é aberto quando título/trecho passa no filtro; a leitura é limitada por `[limites] max_paginas_por_termo`.
+8. **Falha explícita por fonte:** CAPTCHA, login inesperado, seletor quebrado, **zero resultados** ou Chrome inacessível encerram *aquela fonte*, ficam registrados em `runs` e não interrompem as demais.
+9. **Uma execução por vez:** pedir outra durante uma em andamento é rejeitado (`409`).
+10. **Sem contorno de bloqueio e ritmo humano:** pausas variáveis, uma aba por plataforma (paralelismo só com `[navegador] abas_paralelas`).
+
+Alterar uma delas: registrar aqui o **antes e o depois** e abrir entrada em `LESSONS.md`
 se for mudança de comportamento.
+
+## Fora de escopo
+
+Fora, explicitamente: notificação externa (Telegram etc.), login e multiusuário, candidatura automática, resolução de CAPTCHA,
+proxies, classificação por IA/embeddings, outras fontes (Catho, InfoJobs, Glassdoor…), APIs de agregadores, leitura de alertas
+por e-mail, execução em nuvem/Docker e gráficos.
+
+Ideias para depois, **ordenadas pelo que o uso real indicar** (hipótese, não compromisso):
+
+1. Agendamento automático da busca (agendador interno ou do SO chamando `POST /api/runs`; exige aprovação de stack; ver `TECH_STACK.md`, Pendências de decisão).
+2. Ajuste fino do filtro (sinônimos, pesos por campo); fuzzy/embeddings só com falso positivo **medido**.
+3. Notificação (por exemplo, Telegram ou do sistema), se o agendamento entrar.
+4. Execução em VPS (avaliar bloqueio por IP de datacenter).
+
+## Riscos
+
+| Risco | Impacto | Mitigação |
+| --- | --- | --- |
+| Restrição da conta no LinkedIn por automação | Alto | Risco aceito conscientemente; ritmo humano, volume baixo, perfil dedicado, parar ao primeiro aviso. |
+| Cloudflare/CAPTCHA no Indeed | Médio | Falha da fonte, visível no front; sem contorno. |
+| Mudança de seletor ou de endpoint (Gupy não documentada) | Alto | Falha explícita; amostras salvas nos testes para localizar a quebra; scanner versionado (`SCANNERS.md`). |
+| Chrome dedicado fechado na hora da busca | Médio | Falha `cdp_indisponivel` com instrução na tela. |
+| Filtro gera falso positivo/negativo | Médio | Ajuste de palavras-chave/exclusões na tela e dos pesos no `config.toml`; registrar casos reais em `LESSONS.md`. |
+| Sem agendamento, o usuário esquece de buscar | Médio | Medir no uso real; agendar é a primeira ideia da lista acima. |
+| API exposta na rede sem autenticação | Médio | Escutar só em `127.0.0.1`; abrir exige decisão registrada. |
+
+## Validação manual pendente
+
+Só o usuário pode confirmar (execução real, fora dos testes automatizados):
+
+- Uma execução real nas três fontes retorna vagas, com o Chrome dedicado logado.
+- A Gupy responder a `httpx` fora do navegador (se der 403, parar e reavaliar), o efeito real de `fromage=1` no Indeed, a paginação por `start=` nos dois sites, o comportamento em perfil sem login e a falha provocada (Chrome fechado).
+- Distribuição: o `irm … | iex` com o PATH real e `peneira` num terminal novo; `peneira atualizar` e o aviso de versão nova; `peneira desinstalar`; antivírus/SmartScreen em outra máquina.
+
+**Critério de sucesso do produto:** usar por **14 dias seguidos**, buscando ao menos uma vez por dia útil, com nenhuma vaga
+duplicada, nenhuma falha silenciosa e vagas relevantes aparecendo antes de o usuário as achar sozinho. Durante o uso, registrar
+cada atrito (vaga irrelevante, vaga relevante perdida, falha recorrente de fonte, esquecer de buscar), ajustar palavras-chave e
+`config.toml` e registrar em `LESSONS.md` o que for erro real. O resultado decide o que entra depois (incluindo o agendamento).
+
+## Desvios do plano original
+
+- Porta **8100** na API e no README (a 8000 estava em uso por outro app); `Python 3.14` no ambiente de desenvolvimento.
+- Tailwind 4.1.11 no lugar da 4.0.0 (falha de build); `threading` no lugar de `BackgroundTasks`.
+- A Gupy não tem filtro remoto de localidade nem de recência; o adaptador filtra localmente.
+- Fonte **Google** criada e depois removida a pedido do usuário (ver `LESSONS.md`).
+- Extras pedidos pelo usuário fora do plano inicial (conjuntos de palavras-chave, versionamento dos scanners, abas em paralelo, identidade visual, exclusão e candidatura por vaga, distribuição pelo comando `peneira`) estão descritos nas seções de API, configuração e fluxo, em `SCANNERS.md` e no `README.md`.
 
 ## Uso programático
 

@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { useClearJobs, useConfig, useConjuntos, useJobs, useKeywords, useMarkAllSeen, useRuns, useSetCandidatada, useSetExcluida, useSetSeen, useStartRun } from "../../api/hooks";
+import { useClearJobs, useConfig, useConjuntos, useJobs, useKeywords, useMarkAllSeen, useRuns, useSetCandidatada, useSetExcluida, useSaveSequencia, useSequencia, useSetSeen, useStartRun } from "../../api/hooks";
 import type { SeenFilter } from "../../api/types";
 import { buttonSecondary, inputClass } from "../../components/ui";
 import { SOURCES, sourceLabel } from "../../lib/failures";
@@ -56,6 +56,7 @@ function nextSort(current: Sort, column: SortColumn): Sort {
 }
 
 const TODOS = "todos";
+const campo = "flex min-w-0 flex-col gap-1 text-legenda font-medium text-grafite-500";
 
 export function VagasPage() {
   const [seen, setSeen] = useState<SeenFilter>("todas");
@@ -63,6 +64,7 @@ export function VagasPage() {
   const [q, setQ] = useState("");
   const [local, setLocal] = useState("");
   const [maxDias, setMaxDias] = useState("");
+  const [minPontos, setMinPontos] = useState("");
   const [page, setPage] = useState(1);
   const [sort, setSort] = useState<Sort>(null);
   const [conjuntoEscolhido, setConjuntoEscolhido] = useState<number | typeof TODOS | null>(null);
@@ -76,11 +78,14 @@ export function VagasPage() {
   const conjuntoId = todosConjuntos ? undefined : conjuntos.some((item) => item.id === conjuntoEscolhido) ? (conjuntoEscolhido ?? undefined) : undefined;
   const conjuntoMostrado = todosConjuntos ? undefined : conjuntos.find((item) => item.id === (conjuntoId ?? conjuntos.find((c) => c.ativo)?.id));
   const maxDiasValue = maxDias === "" ? undefined : Number(maxDias);
+  const minPontosValue = minPontos === "" ? undefined : Number(minPontos);
   const runs = useRuns();
   const latest = runs.data?.[0];
   const keywords = useKeywords("busca");
   const startRun = useStartRun();
-  const jobs = useJobs({ visto: seen === "novas" ? false : undefined, fonte, q, local, conjuntoId, todosConjuntos, excluidas: seen === "excluidas", candidatadas: seen === "candidatadas", ordenar: sort?.column, direcao: sort?.direction, maxDias: maxDiasValue }, page, latest?.status === "executando");
+  const sequencia = useSequencia().data ?? [];
+  const saveSequencia = useSaveSequencia();
+  const jobs = useJobs({ visto: seen === "novas" ? false : undefined, fonte, q, local, conjuntoId, todosConjuntos, excluidas: seen === "excluidas", candidatadas: seen === "candidatadas", ordenar: sort?.column, direcao: sort?.direction, maxDias: maxDiasValue, minPontos: minPontosValue }, page, latest?.status === "executando");
   const setSeenMutation = useSetSeen();
   const setExcluida = useSetExcluida();
   const setCandidatada = useSetCandidatada();
@@ -100,7 +105,7 @@ export function VagasPage() {
 
   function markAllSeen() {
     if (window.confirm("Marcar todas as vagas filtradas como vistas?")) {
-      markAll.mutate({ fonte: fonte || undefined, q: q || undefined, local: local || undefined, max_dias: maxDiasValue, conjunto_id: conjuntoId, ...(todosConjuntos ? { todos_conjuntos: true } : {}) });
+      markAll.mutate({ fonte: fonte || undefined, q: q || undefined, local: local || undefined, max_dias: maxDiasValue, min_pontos: minPontosValue, conjunto_id: conjuntoId, ...(todosConjuntos ? { todos_conjuntos: true } : {}) });
     }
   }
 
@@ -117,7 +122,7 @@ export function VagasPage() {
     // ignorado o filtro, especialmente quando a Gupy não traz novas vagas.
     setLocal(localidade);
     setPage(1);
-    startRun.mutate({ fontes: sources, ...(localidade ? { localidade } : {}), ...(modalidadeBusca ? { modalidade: modalidadeBusca } : {}), ...(janelaDias ? { janela_dias: Number(janelaDias) } : {}) });
+    startRun.mutate({ fontes: sources, ...(localidade ? { localidade } : {}), ...(modalidadeBusca ? { modalidade: modalidadeBusca } : {}), ...(janelaDias ? { janela_dias: Number(janelaDias) } : {}), ...(sequencia.length ? { conjunto_ids: sequencia } : {}) });
   }
 
   return (
@@ -134,6 +139,9 @@ export function VagasPage() {
         onModalidadeChange={setModalidadeBusca}
         janelaDias={janelaDiasBusca}
         onJanelaDiasChange={setJanelaDias}
+        conjuntos={conjuntos}
+        sequencia={sequencia}
+        onSequenciaChange={(ids) => saveSequencia.mutate(ids)}
         hint={keywords.data?.length || !keywords.isSuccess ? undefined : "Adicione ao menos uma palavra-chave na aba Parâmetros de busca."}
       />
       {startRun.error && <ErrorBox message={startRun.error.message} />}
@@ -149,27 +157,7 @@ export function VagasPage() {
         <h2 className="text-sm font-semibold text-grafite-900">Filtrar vagas encontradas</h2>
         <p className="text-xs text-grafite-500">Só filtra o que já está na lista abaixo; não faz uma nova busca.</p>
       </div>
-      <div className="flex flex-wrap items-center gap-3">
-        {conjuntos.length > 0 && (
-          <label className="flex items-center gap-2 text-sm text-grafite-700">
-            Conjunto
-            <select
-              value={todosConjuntos ? TODOS : (conjuntoMostrado?.id ?? "")}
-              onChange={(event) => {
-                setConjuntoEscolhido(event.target.value === TODOS ? TODOS : Number(event.target.value));
-                setPage(1);
-              }}
-              className={inputClass}
-            >
-              <option value={TODOS}>Todos</option>
-              {conjuntos.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.ativo ? `${item.nome} (ativo)` : item.nome}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div role="tablist" className="flex overflow-hidden rounded-botao border border-linha bg-painel">
           {TABS.map((tab) => (
             <button
@@ -187,9 +175,39 @@ export function VagasPage() {
             </button>
           ))}
         </div>
-        <label className="flex items-center gap-2 text-sm text-grafite-700">
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="button" className={buttonSecondary} onClick={markAllSeen}>
+            Marcar todas como vistas
+          </button>
+          <button type="button" className={buttonSecondary} disabled={clearJobs.isPending || todosConjuntos} title={todosConjuntos ? "Escolha um conjunto para excluir as vagas dele" : undefined} onClick={deleteAll}>
+            Excluir todas as vagas
+          </button>
+        </div>
+      </div>
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(11rem,1fr))] gap-3">
+        {conjuntos.length > 0 && (
+          <label className={campo}>
+            Conjunto
+            <select
+              value={todosConjuntos ? TODOS : (conjuntoMostrado?.id ?? "")}
+              onChange={(event) => {
+                setConjuntoEscolhido(event.target.value === TODOS ? TODOS : Number(event.target.value));
+                setPage(1);
+              }}
+              className={`${inputClass} w-full`}
+            >
+              <option value={TODOS}>Todos</option>
+              {conjuntos.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.ativo ? `${item.nome} (ativo)` : item.nome}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <label className={campo}>
           Fonte
-          <select value={fonte} onChange={(event) => setFonte(event.target.value)} className={inputClass}>
+          <select value={fonte} onChange={(event) => setFonte(event.target.value)} className={`${inputClass} w-full`}>
             <option value="">Todas as fontes</option>
             {SOURCES.map((source) => (
               <option key={source} value={source}>
@@ -198,7 +216,7 @@ export function VagasPage() {
             ))}
           </select>
         </label>
-        <label className="flex items-center gap-2 text-sm text-grafite-700">
+        <label className={campo}>
           Publicadas há no máximo (dias)
           <input
             type="number"
@@ -208,12 +226,25 @@ export function VagasPage() {
               setMaxDias(event.target.value);
               setPage(1);
             }}
-            className={`${inputClass} w-20`}
+            className={`${inputClass} w-full`}
+          />
+        </label>
+        <label className={campo}>
+          Pontuação mínima
+          <input
+            type="number"
+            min={0}
+            value={minPontos}
+            onChange={(event) => {
+              setMinPontos(event.target.value);
+              setPage(1);
+            }}
+            className={`${inputClass} w-full`}
           />
         </label>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(16rem,1fr))] gap-3">
         <input
           aria-label="Buscar vagas"
           placeholder="Título ou empresa"
@@ -222,7 +253,7 @@ export function VagasPage() {
             setQ(event.target.value);
             setPage(1);
           }}
-          className={`${inputClass} w-96`}
+          className={`${inputClass} w-full`}
         />
         <input
           aria-label="Filtrar por cidade, estado ou modalidade"
@@ -232,16 +263,8 @@ export function VagasPage() {
             setLocal(event.target.value);
             setPage(1);
           }}
-          className={`${inputClass} w-72`}
+          className={`${inputClass} w-full`}
         />
-        <div className="ml-auto flex flex-wrap items-center gap-3">
-          <button type="button" className={buttonSecondary} onClick={markAllSeen}>
-            Marcar todas como vistas
-          </button>
-          <button type="button" className={buttonSecondary} disabled={clearJobs.isPending || todosConjuntos} title={todosConjuntos ? "Escolha um conjunto para excluir as vagas dele" : undefined} onClick={deleteAll}>
-            Excluir todas as vagas
-          </button>
-        </div>
       </div>
       </section>
 

@@ -9,10 +9,10 @@ Responder sempre em PT-BR.
 
 ## 2. Antes de agir
 
-1. Consultar `docs/ARCHITECTURE.md` (fonte de verdade: fluxo, contratos, módulos, config, convenções) e
+1. Consultar `docs/ARCHITECTURE.md` (fonte de verdade: fluxo, contratos, módulos, config, convenções, escopo e regras de negócio) e
    `docs/LESSONS.md` (erros conhecidos); mapear dependências cruzadas. Demais docs: `CODE_QUALITY.md`
-   (testes, estilo, limites, git, pronto), `TECH_STACK.md` (libs permitidas e excluídas), `MVP.md` (escopo),
-   `FASES.md` (ordem de construção), `SCANNERS.md` (versão e manutenção dos scanners), `README.md` (intro e execução local).
+   (testes, estilo, limites, git, pronto), `TECH_STACK.md` (libs permitidas e excluídas),
+   `SCANNERS.md` (versão e manutenção dos scanners), `README.md` (intro e execução local).
 2. Nunca ler arquivo inteiro: grep → read do trecho.
 
 ## 3. Método de desenvolvimento: TDD
@@ -85,9 +85,21 @@ reescrever o arquivo):
 - **LESSONS.md** — casos dos critérios do próprio arquivo (toda remoção de feature inclusa), no formato dele.
 - **TECH_STACK.md** — dependência que entra ou sai; decisão em aberto que for resolvida.
 - **SCANNERS.md** e `backend/scanners.toml` — toda mudança em adaptador de fonte (`sources/<fonte>.py`, JS de extração, amostras) sobe a versão do scanner e registra o changelog, na mesma alteração.
-- **FASES.md** — marcar a fase concluída e registrar desvios.
+- **Desvios e validação pendente** — registrar nas seções "Desvios do plano original" e "Validação manual pendente" do ARCHITECTURE.md.
 
-## 7. Prestação de contas
+## 7. Reinício após alterações
+
+Toda alteração de código que impacte funcionalidade (backend, frontend, `config.toml`, schema da API) exige, ao
+final e com a suíte verde, **reiniciar o backend e o frontend** para o usuário já ver o resultado:
+
+- Backend: encerrar só o processo `uvicorn` do projeto e subir de novo com o comando do `README.md`
+  (sem `--reload`). Frontend: `npm run build` (e reiniciar o `npm run dev`, se estiver rodando).
+- Não encerrar o Chrome dedicado nem outros processos; se houver uma busca em andamento, avisar antes, pois
+  reiniciar o backend a interrompe.
+- Reiniciar não é executar busca: nenhuma busca real (§5) é disparada. Relatar o que foi reiniciado.
+- Dispensado em alteração só de documentação, testes ou texto fixo sem efeito em tempo de execução.
+
+## 8. Prestação de contas
 
 Relatar com honestidade: testes que falham (com a saída) e passos pulados. Só dar por concluído quando a
 Definição de Pronto (`CODE_QUALITY.md` §7) valer por inteiro, com o ciclo TDD (§3) cumprido.

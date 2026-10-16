@@ -101,7 +101,7 @@ describe("BuscaPage", () => {
     const card = progress.parentElement?.parentElement;
     expect(card).toHaveClass("border", "border-linha", "bg-painel");
     expect(card).not.toContainElement(screen.getByRole("button", { name: "Marcar todas como vistas" }));
-    expect(screen.getByLabelText("Buscar vagas").parentElement).toContainElement(screen.getByRole("button", { name: "Marcar todas como vistas" }));
+    expect(screen.getByRole("region", { name: "Filtros da lista" })).toContainElement(screen.getByRole("button", { name: "Marcar todas como vistas" }));
     expect(within(progress).getByText(/LinkedIn/)).toHaveClass("text-sinal-fg");
     expect(within(progress).getByText(/buscando/i)).toHaveClass("text-atencao-fg");
     expect(within(progress).getByText(/aguardando/i)).toHaveClass("text-atencao-fg");

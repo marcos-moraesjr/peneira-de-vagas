@@ -1,5 +1,5 @@
 {
-  "_nota": "Estrutura OBSERVADA em 14/10/2026 (EXPLORACAO_PLATAFORMAS.md §2.4), com valores fictícios. Substituir por uma captura real quando a Gupy responder a httpx fora do navegador.",
+  "_nota": "Estrutura OBSERVADA em 14/10/2026 (docs/SCANNERS.md §Gupy), com valores fictícios. Substituir por uma captura real quando a Gupy responder a httpx fora do navegador.",
   "data": [
     {
       "id": 1001,

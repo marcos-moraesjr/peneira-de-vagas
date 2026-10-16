@@ -6,6 +6,7 @@ from ..errors import DomainError, NotFound
 from . import conjuntos, runs
 from .filters import normalize
 from .localizacao import UF_NOMES, split_localidade
+from .run_service import build_filter
 
 
 def cutoff_date(now: str, max_dias: int | None) -> str | None:
@@ -29,9 +30,12 @@ def resolve_conjunto(conn: sqlite3.Connection, conjunto_id: int | None) -> int:
 def _where(
     conjunto_id: int | None, visto: bool | None, fonte: str | None, q: str | None, corte: str | None = None,
     local: str | None = None, modalidade: str | None = None, excluidas: bool = False, candidatadas: bool = False,
+    min_pontos: int | None = None,
 ) -> tuple[str, list]:
     if modalidade and modalidade not in MODALIDADES:
         raise DomainError(f"modalidade={modalidade!r}: esperado um de {list(MODALIDADES)}")
+    if min_pontos is not None and min_pontos < 0:
+        raise DomainError(f"min_pontos={min_pontos}: esperado um inteiro maior ou igual a 0")
     clauses, params = ([], []) if conjunto_id is None else (["conjunto_id=?"], [conjunto_id])  # None: todos os conjuntos
     clauses.append("excluida=?")  # a lista comum esconde as excluídas; `excluidas` mostra só elas
     params.append(int(excluidas))
@@ -54,6 +58,9 @@ def _where(
     if modalidade:
         clauses.append("modalidade=?")
         params.append(modalidade)
+    if min_pontos:
+        clauses.append("pontos>=?")
+        params.append(min_pontos)
     if corte:  # vaga sem data de publicação (LinkedIn/Indeed) nunca é descartada por idade
         clauses.append("(publicada_em IS NULL OR substr(publicada_em, 1, 10) >= ?)")
         params.append(corte)
@@ -101,10 +108,11 @@ def list_jobs(
     ordenar: str | None = None, direcao: str | None = None, corte: str | None = None,
     local: str | None = None, modalidade: str | None = None,
     conjunto_id: int | None = None, todos_conjuntos: bool = False, excluidas: bool = False, candidatadas: bool = False,
+    min_pontos: int | None = None,
 ) -> dict:
     """Vagas do conjunto pedido (padrão: o ativo); `todos_conjuntos` tira o filtro de conjunto."""
     order = "candidatada_em DESC, id DESC" if candidatadas and ordenar is None else _order_by(ordenar, direcao)  # candidaturas: a mais recente primeiro
-    where, params = _where(None if todos_conjuntos else resolve_conjunto(conn, conjunto_id), visto, fonte, q, corte, local, modalidade, excluidas, candidatadas)
+    where, params = _where(None if todos_conjuntos else resolve_conjunto(conn, conjunto_id), visto, fonte, q, corte, local, modalidade, excluidas, candidatadas, min_pontos)
     total = conn.execute(f"SELECT COUNT(*) FROM jobs{where}", params).fetchone()[0]
     rows = conn.execute(
         f"SELECT * FROM jobs{where} ORDER BY {order} LIMIT ? OFFSET ?",
@@ -145,10 +153,29 @@ def clear_all(conn, conjunto_id: int | None = None) -> int:
 def mark_seen(
     conn, fonte: str | None, q: str | None, corte: str | None = None,
     local: str | None = None, modalidade: str | None = None,
-    conjunto_id: int | None = None, todos_conjuntos: bool = False,
+    conjunto_id: int | None = None, todos_conjuntos: bool = False, min_pontos: int | None = None,
 ) -> int:
     """Marca como vistas as ainda não vistas do conjunto pedido (padrão: o ativo; `todos_conjuntos`: de todos) que casam com os filtros."""
-    where, params = _where(None if todos_conjuntos else resolve_conjunto(conn, conjunto_id), False, fonte, q, corte, local, modalidade)
+    where, params = _where(None if todos_conjuntos else resolve_conjunto(conn, conjunto_id), False, fonte, q, corte, local, modalidade, min_pontos=min_pontos)
     cursor = conn.execute(f"UPDATE jobs SET visto=1{where}", params)
     conn.commit()
     return cursor.rowcount
+
+
+def recalcular_pontuacao(conn, settings) -> dict:
+    """Reescreve `pontos` das vagas de todos os conjuntos, cada um com as palavras (busca + ranking + exclusões) do próprio
+    conjunto e os pesos atuais, sobre o título e o trecho gravados. Só muda a pontuação: nenhuma vaga é apagada nem
+    reprovada; recusa durante uma execução."""
+    runs.ensure_idle(conn)
+    mudaram, total = [], 0
+    for conjunto in conn.execute("SELECT id FROM conjuntos").fetchall():
+        _, flt = build_filter(conn, settings, conjunto["id"])
+        rows = conn.execute("SELECT id, titulo, trecho, pontos FROM jobs WHERE conjunto_id=?", (conjunto["id"],)).fetchall()
+        total += len(rows)
+        for row in rows:
+            novo = flt.evaluate(row["titulo"], row["trecho"]).score
+            if novo != row["pontos"]:
+                mudaram.append((novo, row["id"]))
+    conn.executemany("UPDATE jobs SET pontos=? WHERE id=?", mudaram)
+    conn.commit()
+    return {"atualizadas": len(mudaram), "total": total}

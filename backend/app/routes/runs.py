@@ -45,7 +45,7 @@ def start_run(
         if not fontes or unknown:
             raise DomainError(f"fontes={unknown or fontes}: esperado ao menos uma entre {names}")
         sources = [source for source in sources if source.name in fontes]
-    run_id = run_service.start_run(conn, run_settings, sources, now, request.app.state.spawn, request.app.state.manifest)
+    run_id = run_service.start_run(conn, run_settings, sources, now, request.app.state.spawn, request.app.state.manifest, body.conjunto_ids if body else None)
     return RunStarted(id=run_id)
 
 

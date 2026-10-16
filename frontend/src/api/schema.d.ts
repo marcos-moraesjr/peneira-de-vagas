@@ -93,6 +93,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/jobs/recalcular": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Recalcular */
+        post: operations["recalcular_api_jobs_recalcular_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/jobs/{job_id}": {
         parameters: {
             query?: never;
@@ -157,6 +174,24 @@ export interface paths {
         put?: never;
         /** Add Conjunto */
         post: operations["add_conjunto_api_conjuntos_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/conjuntos/sequencia": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Sequencia */
+        get: operations["get_sequencia_api_conjuntos_sequencia_get"];
+        /** Put Sequencia */
+        put: operations["put_sequencia_api_conjuntos_sequencia_put"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -434,6 +469,10 @@ export interface components {
         ConfigNavegador: {
             /** Abas Paralelas */
             abas_paralelas: boolean;
+            /** Max Tentativas Painel */
+            max_tentativas_painel: number;
+            /** Intervalo Tentativa Painel S */
+            intervalo_tentativa_painel_s: number;
         };
         /** ConfigOut */
         ConfigOut: {
@@ -567,6 +606,8 @@ export interface components {
             q?: string | null;
             /** Max Dias */
             max_dias?: number | null;
+            /** Min Pontos */
+            min_pontos?: number | null;
             /** Local */
             local?: string | null;
             /** Modalidade */
@@ -584,6 +625,13 @@ export interface components {
             /** Atualizadas */
             atualizadas: number;
         };
+        /** RecalcularOut */
+        RecalcularOut: {
+            /** Atualizadas */
+            atualizadas: number;
+            /** Total */
+            total: number;
+        };
         /** RunIn */
         RunIn: {
             /** Fontes */
@@ -594,6 +642,8 @@ export interface components {
             modalidade?: string | null;
             /** Janela Dias */
             janela_dias?: number | null;
+            /** Conjunto Ids */
+            conjunto_ids?: number[] | null;
         };
         /** RunOut */
         RunOut: {
@@ -605,6 +655,8 @@ export interface components {
             fim: string | null;
             /** Status */
             status: string;
+            /** Conjunto */
+            conjunto: string;
             /** Fontes */
             fontes: components["schemas"]["RunSourceOut"][];
         };
@@ -668,6 +720,11 @@ export interface components {
             excluida?: boolean | null;
             /** Candidatada */
             candidatada?: boolean | null;
+        };
+        /** SequenciaIO */
+        SequenciaIO: {
+            /** Conjunto Ids */
+            conjunto_ids: number[];
         };
         /** ValidationError */
         ValidationError: {
@@ -879,6 +936,7 @@ export interface operations {
                 todos_conjuntos?: boolean;
                 excluidas?: boolean;
                 candidatadas?: boolean;
+                min_pontos?: number | null;
             };
             header?: never;
             path?: never;
@@ -966,6 +1024,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recalcular_api_jobs_recalcular_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecalcularOut"];
                 };
             };
         };
@@ -1138,6 +1216,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConjuntoOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_sequencia_api_conjuntos_sequencia_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SequenciaIO"];
+                };
+            };
+        };
+    };
+    put_sequencia_api_conjuntos_sequencia_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SequenciaIO"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SequenciaIO"];
                 };
             };
             /** @description Validation Error */

@@ -225,7 +225,9 @@ class BrowserSource:
         gate: VerificationGate | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
         detail_pause: Callable[[], None] | None = None,
+        sleep: Callable[[float], None] = time.sleep,
     ):
+        self._sleep = sleep
         self._site = site
         self._settings = settings
         self._session = session
@@ -342,7 +344,7 @@ class BrowserSource:
                     "Painel da vaga %s em %s não abriu; nova tentativa %d/%d",
                     job.id, self.name, attempt + 2, self._settings.navegador.max_tentativas_painel,
                 )
-                self._scroll_pause()
+                self._sleep(self._settings.navegador.intervalo_tentativa_painel_s)
         if not getattr(self._site, "detail_navigation_fallback", True):
             raise SourceLayoutChanged(
                 f"Não abriu o painel da vaga {job.id} em {self.name} após "

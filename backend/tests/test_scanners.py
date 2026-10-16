@@ -19,7 +19,7 @@ TODAY = date(2026, 10, 20)
 
 
 def make_manifest(explorado_em=date(2026, 10, 14), versao="1.0.0"):
-    info = ScannerInfo("linkedin", versao, explorado_em, "Claude", "docs/EXPLORACAO_PLATAFORMAS.md")
+    info = ScannerInfo("linkedin", versao, explorado_em, "Claude", "docs/SCANNERS.md §LinkedIn")
     return Manifest({"linkedin": info})
 
 
@@ -44,6 +44,7 @@ def test_manifesto_do_projeto_cobre_as_tres_fontes_com_versao_e_data():
     for info in manifest.scanners.values():
         assert info.versao.count(".") == 2 and info.gerado_por and info.referencia
         assert info.explorado_em >= date(2026, 10, 14)
+        assert info.referencia.startswith("docs/SCANNERS.md §")
 
 
 def test_manifesto_com_versao_invalida_informa_valor_e_esperado(tmp_path):
@@ -96,7 +97,7 @@ def test_falhas_seguidas_no_limite_mandam_refazer_com_instrucao_para_o_claude(co
     assert estado["status"] == "refazer"
     instrucao = estado["instrucao"]
     for trecho in ("LinkedIn", "1.0.0", "2026-10-14", "seletor_nao_encontrado", "Nenhum card encontrado",
-                   "docs/EXPLORACAO_PLATAFORMAS.md", "backend/app/sources/linkedin.py", "backend/scanners.toml", "docs/SCANNERS.md", "TDD"):
+                   "docs/SCANNERS.md §LinkedIn", "backend/app/sources/linkedin.py", "backend/scanners.toml", "docs/SCANNERS.md", "TDD"):
         assert trecho in instrucao
 
 
@@ -159,6 +160,8 @@ def test_migracao_v1_para_v2_adiciona_a_coluna_e_faz_copia(conn, settings):
     conn.execute("ALTER TABLE run_sources DROP COLUMN scanner_versao")
     conn.execute("ALTER TABLE jobs DROP COLUMN localidade")  # colunas da migração 3, que também roda neste teste
     conn.execute("ALTER TABLE jobs DROP COLUMN publicada_em")
+    conn.execute("ALTER TABLE runs DROP COLUMN conjunto")  # coluna da migração 13, que também roda neste teste
+    conn.execute("DROP TABLE sequencia_conjuntos")  # tabela da migração 14, que também roda neste teste
     conn.execute("DROP TABLE keywords")  # volta ao esquema 1 (migração 4 também roda neste teste)
     conn.execute("DROP TABLE conjuntos")
     conn.executescript(db.MIGRATIONS[1])
@@ -217,7 +220,7 @@ def test_instrucao_de_documentacao_cobre_todas_as_plataformas_com_versao_e_data(
 def test_instrucao_de_documentacao_traz_termos_destino_e_o_que_registrar():
     texto = scanners.documentation_instruction(full_manifest(), None, ["Engenheiro Mecânico", "Projetista"])
     assert '"Engenheiro Mecânico"' in texto and '"Projetista"' in texto
-    assert "docs/EXPLORACAO_PLATAFORMAS.md" in texto
+    assert "docs/SCANNERS.md" in texto and "EXPLORACAO" not in texto
     for item in ("seletores", "paginação", "ID estável", "filtro de data", "bloqueio"):
         assert item in texto
     assert "verificado" in texto and "não verificado" in texto

@@ -322,3 +322,12 @@ def test_migracao_10_adiciona_excluida_mantendo_as_vagas(conn):
     run_id = db.create_run(conn, ["gupy"], NOW)
     db.insert_new_jobs(conn, [make_job()], {}, run_id, NOW, 1)
     assert conn.execute("SELECT excluida FROM jobs").fetchone()["excluida"] == 0
+
+
+def test_migracao_13_adiciona_conjunto_da_execucao_e_create_run_grava_o_nome(conn):
+    antiga = db.create_run(conn, ["gupy"], NOW)
+    assert conn.execute("SELECT conjunto FROM runs WHERE id=?", (antiga,)).fetchone()["conjunto"] == ""
+    conn.execute("UPDATE runs SET status='concluida'")
+    conn.commit()
+    nova = db.create_run(conn, ["gupy"], NOW, conjunto="Mecânica")
+    assert conn.execute("SELECT conjunto FROM runs WHERE id=?", (nova,)).fetchone()["conjunto"] == "Mecânica"

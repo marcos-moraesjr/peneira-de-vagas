@@ -1,4 +1,4 @@
-"""Adaptador do LinkedIn. Seletores OBSERVADOS no DOM real em 14/10/2026 (EXPLORACAO_PLATAFORMAS.md §2.2); frágeis,
+"""Adaptador do LinkedIn. Seletores OBSERVADOS no DOM real em 14/10/2026 (docs/SCANNERS.md §LinkedIn); frágeis,
 mudam sem aviso. Ao quebrar, a fonte falha com 'seletor_nao_encontrado' em vez de devolver lista vazia.
 
 A renderização é incremental: o <li> já traz o ID, mas título/empresa só aparecem depois de rolar até ele
