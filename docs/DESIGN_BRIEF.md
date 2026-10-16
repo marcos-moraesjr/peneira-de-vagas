@@ -33,7 +33,7 @@ API ("API: ok · banco: ok" / "API indisponível").
 De cima para baixo:
 
 - **Chrome dedicado**: indicador "Chrome dedicado aberto/fechado"; fechado, mostra o botão **Abrir Chrome dedicado** (abre pelo app, sem terminal) e a nota de que só LinkedIn e Indeed precisam dele.
-- **Abas (barra lateral)**: **Busca** (barra de ação, Chrome dedicado, avisos de falha e scanner, conjuntos, palavras-chave e exclusões) e **Vagas** (filtros e lista), além de Execuções, Configurações e Como usar.
+- **Abas (barra lateral)**: **Busca** (barra de ação, Chrome dedicado, avisos de falha e scanner, conjuntos, palavras-chave e exclusões) e **Vagas** (filtros e lista), além de Execuções, Configurações, Logs (fim do log da aplicação, com Atualizar) e Como usar.
 - **Barra de ação**: botão **Buscar agora** e, ao lado, checkboxes de plataforma (LinkedIn · Indeed · Gupy; todas marcadas por padrão, escolha de uma ou mais; sem nenhuma marcada o botão fica desabilitado; desabilitados durante a execução). Antes era uma lista "Plataforma da busca" com uma só opção por vez. Durante a execução vira "Buscando…" (desabilitado) e mostra o andamento por fonte (cada fonte: aguardando · buscando · ok · falha).
 - **Faixa de falhas** (só se a última execução teve falha; âmbar/vermelho): uma linha por fonte com motivo e ação. Exemplos: "LinkedIn: verificação de segurança. Abra o Chrome dedicado e resolva manualmente." · "Chrome dedicado não encontrado. Abra-o com o atalho do projeto."
 - **Aviso de scanner** (abaixo da faixa de falhas): scanner em estado `refazer` aparece como alerta vermelho "O scanner do X (vN) precisa ser refeito" com a mensagem, a instrução pronta (recolhível) e o botão **Copiar instrução para o Claude**; estado `atencao` aparece como nota discreta; em dia, nada. Detalhes em `SCANNERS.md`.
@@ -45,9 +45,7 @@ De cima para baixo:
 ### 2. Execuções (`/execucoes`)
 
 - **Histórico**: uma linha por execução — início, duração, status; expandida mostra uma linha por fonte: status (ok/falha), motivo, lidas, aprovadas, novas.
-- **Refazer a documentação das plataformas**: select "Plataforma" (todas ou uma) + botão **Gerar instrução para refazer a documentação**; mostra a instrução e o botão **Copiar instrução para o Claude**.
 - **Scanners**: tabela com fonte, versão, data da exploração, autor (Claude) e estado (Em dia / Atenção / Refazer); a expansão de cada execução mostra a versão do scanner usada em cada fonte.
-- **Configuração em vigor** (somente leitura): localidades, pesos, limites. Nota: "Para alterar, edite `config.toml`. Palavras-chave e exclusões são editadas na aba Busca."
 - **Estados**: carregando, vazio ("Nenhuma execução ainda"), erro.
 
 ## Estados e feedback a desenhar

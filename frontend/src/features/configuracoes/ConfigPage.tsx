@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { useConfig, useRecalcularPontuacao, useSaveConfig } from "../../api/hooks";
+import { useConfig, useRestaurarPadroes, useSaveConfig } from "../../api/hooks";
 import type { Config } from "../../api/types";
 import { ErrorBox } from "../../components/ErrorBox";
 import { buttonSecondary, card, inputClass } from "../../components/ui";
@@ -68,66 +68,72 @@ const GROUPS: { titulo: string; intro?: string; fields: Field[] }[] = [
     ],
   },
   {
-    titulo: "Ritmo de buscas",
+    titulo: "Ritmo e navegador",
     fields: [
       {
         section: "ritmo",
         key: "pausa_min_s",
         label: "Pausa mínima (s)",
-        kind: "number",
-        step: "any",
+        kind: "slider",
+        min: 0,
+        max: 15,
+        step: "0.25",
         dica: "Menor espera entre uma ação e outra no navegador.",
       },
       {
         section: "ritmo",
         key: "pausa_max_s",
         label: "Pausa máxima (s)",
-        kind: "number",
-        step: "any",
+        kind: "slider",
+        min: 0,
+        max: 15,
+        step: "0.25",
         dica: "Maior espera entre ações; o sistema sorteia uma pausa dentro deste intervalo.",
       },
       {
         section: "ritmo",
         key: "rolagem_min_s",
         label: "Rolagem mínima (s)",
-        kind: "number",
-        step: "any",
+        kind: "slider",
+        min: 0,
+        max: 3,
+        step: "0.05",
         dica: "Menor espera após rolar a lista para carregar o próximo card.",
       },
       {
         section: "ritmo",
         key: "rolagem_max_s",
         label: "Rolagem máxima (s)",
-        kind: "number",
-        step: "any",
+        kind: "slider",
+        min: 0,
+        max: 3,
+        step: "0.05",
         dica: "Maior espera após rolar a lista; mantém a navegação em ritmo humano.",
-      },
-    ],
-  },
-  {
-    titulo: "Navegador",
-    fields: [
-      {
-        section: "navegador",
-        key: "abas_paralelas",
-        label: "Buscar as plataformas ao mesmo tempo",
-        kind: "checkbox",
-        dica: "Uma aba por plataforma, cada uma com as próprias pausas. Desligado: uma plataforma por vez.",
       },
       {
         section: "navegador",
         key: "max_tentativas_painel",
         label: "Tentativas para abrir o painel da vaga",
-        kind: "number",
+        kind: "slider",
+        min: 1,
+        max: 10,
         dica: "Quantas vezes o sistema tenta abrir o painel de uma vaga antes de pular a vaga e seguir para a próxima.",
       },
       {
         section: "navegador",
         key: "intervalo_tentativa_painel_s",
         label: "Intervalo entre tentativas (s)",
-        kind: "number",
-        step: "any",
+        kind: "slider",
+        min: 1,
+        max: 60,
         dica: "Espera depois de um erro ao abrir o painel, antes de tentar de novo. Dá tempo de a página do site se estabilizar.",
+      },
+      {
+        section: "navegador",
+        key: "abas_paralelas",
+        label: "Buscar as plataformas ao mesmo tempo",
+        kind: "checkbox",
+        dica: "Uma aba por plataforma, cada uma com as próprias pausas. Desligado: uma plataforma por vez.",
       },
     ],
   },
@@ -177,7 +183,7 @@ function toConfig(draft: Draft, base: Config): Config {
 
 function ConfigForm({ config }: { config: Config }) {
   const save = useSaveConfig();
-  const recalcular = useRecalcularPontuacao();
+  const restaurar = useRestaurarPadroes();
   const [draft, setDraft] = useState<Draft>(() => toDraft(config));
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -195,6 +201,18 @@ function ConfigForm({ config }: { config: Config }) {
     save.mutate(toConfig(next, config), {
       onSuccess: (result) => {
         setDraft((current) => (current === next ? toDraft(result) : current));
+        setSaved(true);
+      },
+      onError: (failure) => setError(failure.message),
+    });
+  }
+
+  function restaurarPadroes() {
+    if (!window.confirm("Restaurar todos os parâmetros desta tela para os padrões iniciais? Os valores atuais serão perdidos.")) return;
+    setError(null);
+    restaurar.mutate(undefined, {
+      onSuccess: (result) => {
+        setDraft(toDraft(result));
         setSaved(true);
       },
       onError: (failure) => setError(failure.message),
@@ -271,20 +289,14 @@ function ConfigForm({ config }: { config: Config }) {
           </div>
         </section>
       ))}
-      <section className={card} aria-label="Recalcular pontuação">
-        <h2 className="mb-1 text-sm font-semibold text-grafite-900">Recalcular pontuação</h2>
+      <section className={card} aria-label="Padrões iniciais">
+        <h2 className="mb-1 text-sm font-semibold text-grafite-900">Padrões iniciais</h2>
         <p className="mb-3 text-xs text-grafite-500">
-          Reaplica os pesos atuais e as palavras-chave de cada conjunto salvo às vagas já encontradas nele. Só muda a pontuação: nenhuma vaga é apagada.
+          Devolve todos os parâmetros desta tela aos valores que vêm com o app. Palavras-chave, conjuntos e vagas não mudam.
         </p>
-        <button type="button" className={buttonSecondary} disabled={recalcular.isPending} onClick={() => recalcular.mutate()}>
-          Recalcular pontuação
+        <button type="button" className={buttonSecondary} disabled={restaurar.isPending} onClick={restaurarPadroes}>
+          Restaurar padrões iniciais
         </button>
-        {recalcular.isSuccess && (
-          <p role="status" className="mt-2 text-sm text-sinal-fg">
-            {recalcular.data.atualizadas} de {recalcular.data.total} vagas tiveram a pontuação atualizada.
-          </p>
-        )}
-        {recalcular.isError && <ErrorBox message={recalcular.error.message} />}
       </section>
       {error && <ErrorBox message={error} />}
       <p role="status" className="min-h-5 text-sm text-sinal-fg">

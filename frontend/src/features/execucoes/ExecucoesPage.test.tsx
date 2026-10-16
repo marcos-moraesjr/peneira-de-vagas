@@ -4,12 +4,11 @@ import { CONFIG, makeRun, makeScanner, makeSource, mockApi, renderWithClient } f
 import { ExecucoesPage } from "./ExecucoesPage";
 
 describe("ExecucoesPage", () => {
-  it("mostra o histórico descrito após a configuração em vigor", async () => {
+  it("mostra o histórico descrito e não exibe o card de configuração em vigor", async () => {
     mockApi({ "GET /api/config": CONFIG, "GET /api/runs": [makeRun(1, "concluida", [makeSource("gupy")])] });
     renderWithClient(<ExecucoesPage />);
-    const config = await screen.findByRole("heading", { name: "Configuração em vigor" });
-    const history = screen.getByRole("heading", { name: "Histórico de execuções" });
-    expect(config.compareDocumentPosition(history) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await screen.findByRole("heading", { name: "Histórico de execuções" });
+    expect(screen.queryByRole("heading", { name: "Configuração em vigor" })).not.toBeInTheDocument();
     expect(screen.getByText("Consulte as buscas já realizadas e abra uma execução para ver o resultado de cada fonte.")).toBeInTheDocument();
   });
 
@@ -62,14 +61,6 @@ describe("ExecucoesPage", () => {
     mockApi({ "GET /api/config": CONFIG, "GET /api/runs": [] });
     renderWithClient(<ExecucoesPage />);
     expect(await screen.findByText(/nenhuma execução ainda/i)).toBeInTheDocument();
-  });
-
-  it("mostra a configuração em vigor somente leitura e aponta onde editar", async () => {
-    mockApi({ "GET /api/config": CONFIG, "GET /api/runs": [] });
-    renderWithClient(<ExecucoesPage />);
-    expect(await screen.findByText("Brasil")).toBeInTheDocument();
-    expect(screen.getByText(/config\.toml/)).toBeInTheDocument();
-    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });
 
   it("erro de API aparece em linguagem simples", async () => {
@@ -263,55 +254,12 @@ describe("ExecucoesPage — scanners", () => {
   });
 });
 
-describe("ExecucoesPage — refazer a documentação das plataformas", () => {
-  const INSTRUCAO = "Refaça a documentação das plataformas de vagas: LinkedIn, Indeed, Gupy.\nO que fazer...";
-
-  function setup(reply: unknown = { instrucao: INSTRUCAO }) {
-    return mockApi({ "GET /api/config": CONFIG, "GET /api/runs": [], "GET /api/scanners/instrucao": reply });
-  }
-
-  it("o botão gera a instrução para todas as plataformas e mostra o texto", async () => {
-    const user = userEvent.setup();
-    const { calls } = setup();
+describe("ExecucoesPage — sem o painel de refazer a documentação", () => {
+  it("não exibe o painel nem o botão de gerar instrução", async () => {
+    mockApi({ "GET /api/config": CONFIG, "GET /api/runs": [] });
     renderWithClient(<ExecucoesPage />);
-    await user.click(await screen.findByRole("button", { name: "Gerar instrução para refazer a documentação" }));
-    expect(await screen.findByText(/Refaça a documentação das plataformas/)).toBeInTheDocument();
-    expect(calls.find((c) => c.path.startsWith("/api/scanners/instrucao"))?.path).toBe("/api/scanners/instrucao");
-  });
-
-  it("permite escolher uma plataforma só", async () => {
-    const user = userEvent.setup();
-    const { calls } = setup();
-    renderWithClient(<ExecucoesPage />);
-    await user.selectOptions(await screen.findByLabelText("Plataforma"), "gupy");
-    await user.click(screen.getByRole("button", { name: "Gerar instrução para refazer a documentação" }));
-    await screen.findByText(/Refaça a documentação/);
-    expect(calls.find((c) => c.path.startsWith("/api/scanners/instrucao"))?.path).toBe("/api/scanners/instrucao?fonte=gupy");
-  });
-
-  it("copia a instrução gerada para colar no Claude Code", async () => {
-    const user = userEvent.setup();
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
-    setup();
-    renderWithClient(<ExecucoesPage />);
-    await user.click(await screen.findByRole("button", { name: "Gerar instrução para refazer a documentação" }));
-    await user.click(await screen.findByRole("button", { name: "Copiar instrução para o Claude" }));
-    expect(writeText).toHaveBeenCalledWith(INSTRUCAO);
-  });
-
-  it("antes de gerar não mostra instrução nem botão de copiar", async () => {
-    setup();
-    renderWithClient(<ExecucoesPage />);
-    await screen.findByRole("button", { name: "Gerar instrução para refazer a documentação" });
-    expect(screen.queryByRole("button", { name: "Copiar instrução para o Claude" })).not.toBeInTheDocument();
-  });
-
-  it("erro da API aparece em linguagem simples", async () => {
-    const user = userEvent.setup();
-    setup({ status: 422, json: { detail: "Valor inválido: fonte='x'" } });
-    renderWithClient(<ExecucoesPage />);
-    await user.click(await screen.findByRole("button", { name: "Gerar instrução para refazer a documentação" }));
-    expect(await screen.findByText(/Valor inválido: fonte/)).toBeInTheDocument();
+    await screen.findByRole("heading", { name: "Histórico de execuções" });
+    expect(screen.queryByRole("heading", { name: "Refazer a documentação das plataformas" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Gerar instrução para refazer a documentação" })).not.toBeInTheDocument();
   });
 });

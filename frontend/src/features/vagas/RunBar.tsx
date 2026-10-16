@@ -6,6 +6,9 @@ import { timeAgo } from "../../lib/format";
 import { ESTADOS_BRASILEIROS } from "../../lib/estados";
 import { MODALIDADES } from "../../lib/format";
 
+/** Plataformas que só buscam com o Chrome dedicado aberto (a Gupy usa a API e não precisa). */
+const PRECISAM_DO_NAVEGADOR = ["linkedin", "indeed"];
+
 const campo = "flex items-center gap-2 text-sm text-grafite-700";
 const controle = "rounded-botao border border-linha bg-painel px-3 py-2 text-dado text-grafite-900";
 const miniBotao = "rounded px-1 text-grafite-500 hover:bg-linha-2 hover:text-grafite-900 disabled:cursor-not-allowed disabled:opacity-30";
@@ -24,6 +27,35 @@ const STATUS_CLASS: Record<string, string> = {
   falha: "text-erro-fg",
 };
 
+type EstadoConjunto = "sucesso" | "andamento" | "falha" | "pendente";
+
+const ESTADO_CLASSE: Record<EstadoConjunto, string> = {
+  sucesso: "border-sinal-ponto bg-sinal-bg text-sinal-fg",
+  andamento: "border-atencao bg-atencao-bg text-atencao-fg",
+  falha: "border-erro bg-erro-bg text-erro-fg",
+  pendente: "border-linha bg-papel text-grafite-700",
+};
+
+const ESTADO_TITULO: Record<EstadoConjunto, string> = {
+  sucesso: "Concluído",
+  andamento: "Em andamento",
+  falha: "Falhou",
+  pendente: "Aguardando",
+};
+
+/** Estado de cada conjunto da sequência, a partir das execuções mais recentes (uma por conjunto, em ordem).
+ * A última execução localiza o conjunto atual; as anteriores só valem se seguirem a ordem da sequência. */
+function estadosDaSequencia(nomes: string[], runs: Run[]): EstadoConjunto[] {
+  const estados = nomes.map((): EstadoConjunto => "pendente");
+  const atual = runs.length ? nomes.indexOf(runs[0].conjunto) : -1;
+  for (let k = 0; atual >= 0 && k <= atual; k++) {
+    const run = runs[k];
+    if (!run || run.conjunto !== nomes[atual - k]) break;
+    estados[atual - k] = run.status === "executando" ? "andamento" : run.fontes.some((fonte) => fonte.status === "falha") ? "falha" : "sucesso";
+  }
+  return estados;
+}
+
 function newJobsText(run: Run): string {
   const total = run.fontes.reduce((sum, source) => sum + source.novas, 0);
   return `${total} ${total === 1 ? "vaga nova" : "vagas novas"}`;
@@ -31,7 +63,11 @@ function newJobsText(run: Run): string {
 
 type Props = {
   latest: Run | undefined;
+  /** Execuções, da mais recente para a mais antiga; colorem a sequência de conjuntos. */
+  runs: Run[];
   canSearch: boolean;
+  /** Chrome dedicado aberto; `undefined` enquanto não se sabe (não bloqueia). */
+  navegadorAberto?: boolean;
   starting: boolean;
   sources: string[];
   /** `null` = todas as plataformas. */
@@ -49,10 +85,24 @@ type Props = {
   hint?: string;
 };
 
-export function RunStatus({ latest }: { latest: Run | undefined }) {
+type RunStatusProps = {
+  latest: Run | undefined;
+  runs: Run[];
+  /** Nomes dos conjuntos da sequência, em ordem; vazia = só o conjunto ativo. */
+  sequencia: string[];
+};
+
+export function RunStatus({ latest, runs, sequencia }: RunStatusProps) {
   if (latest?.status !== "executando") return null;
+  const posicao = estadosDaSequencia(sequencia, runs).indexOf("andamento");
+  const conjunto = posicao >= 0 ? sequencia[posicao] : latest.conjunto;
   return (
-    <div className="inline-flex">
+    <div className="flex flex-wrap items-center gap-3">
+      {conjunto && (
+        <span className="rounded-botao bg-atencao-bg px-2 py-1 text-[13px] font-semibold text-atencao-fg">
+          {posicao >= 0 && sequencia.length > 1 ? `Buscando agora: ${conjunto} (${posicao + 1} de ${sequencia.length})` : `Buscando agora: ${conjunto}`}
+        </span>
+      )}
       <ul role="status" className="flex flex-wrap items-center gap-3 text-[13px] font-semibold text-grafite-500">
         {latest.fontes.map((source) => (
           <li key={source.fonte} className={`flex items-center gap-2 border-l border-linha pl-3 ${STATUS_CLASS[source.status] ?? "text-grafite-500"}`}>
@@ -67,7 +117,9 @@ export function RunStatus({ latest }: { latest: Run | undefined }) {
 
 export function RunBar({
   latest,
+  runs,
   canSearch,
+  navegadorAberto,
   starting,
   sources,
   onSearch,
@@ -85,6 +137,7 @@ export function RunBar({
   const [selected, setSelected] = useState<string[]>(sources);
   const chosen = sources.filter((name) => selected.includes(name));
   const running = latest?.status === "executando";
+  const bloqueadoPeloNavegador = navegadorAberto === false && chosen.some((name) => PRECISAM_DO_NAVEGADOR.includes(name));
 
   function move(index: number, delta: number) {
     const next = [...sequencia];
@@ -102,6 +155,8 @@ export function RunBar({
     onSequenciaChange(next);
   }
   const fora = conjuntos.filter((item) => !sequencia.includes(item.id));
+  const nomes = sequencia.map((id) => conjuntos.find((item) => item.id === id)?.nome ?? String(id));
+  const estados = estadosDaSequencia(nomes, runs);
 
   function toggle(name: string) {
     setSelected((current) => (current.includes(name) ? current.filter((item) => item !== name) : [...current, name]));
@@ -117,7 +172,7 @@ export function RunBar({
           <button
             type="button"
             className={buttonPrimary}
-            disabled={!canSearch || running || starting || chosen.length === 0}
+            disabled={!canSearch || running || starting || chosen.length === 0 || bloqueadoPeloNavegador}
             onClick={() => onSearch(chosen.length === sources.length ? null : chosen)}
           >
             {running ? "Buscando…" : "Buscar agora"}
@@ -163,6 +218,9 @@ export function RunBar({
             </span>
           )}
           {hint && <span className="text-sm text-atencao-fg">{hint}</span>}
+          {bloqueadoPeloNavegador && (
+            <span className="text-sm text-atencao-fg">Abra o Chrome dedicado para buscar no LinkedIn ou no Indeed, ou desmarque os dois.</span>
+          )}
         </div>
       </div>
       {conjuntos.length > 1 && (
@@ -185,10 +243,13 @@ export function RunBar({
           ) : (
             <ol className="flex min-w-0 flex-1 gap-2 overflow-x-auto pb-1">
               {sequencia.map((id, index) => {
-                const nome = conjuntos.find((item) => item.id === id)?.nome ?? String(id);
+                const nome = nomes[index];
+                const estado = estados[index];
                 return (
                   <li
                     key={id}
+                    data-estado={estado}
+                    title={ESTADO_TITULO[estado]}
                     draggable={!running}
                     onDragStart={(event) => {
                       event.dataTransfer?.setData("text/plain", String(id));
@@ -200,9 +261,9 @@ export function RunBar({
                       soltarEm(index);
                     }}
                     onDragEnd={() => setArrastando(null)}
-                    className={`flex shrink-0 items-center gap-1.5 rounded-botao border border-linha bg-papel px-2 py-1 ${running ? "" : "cursor-grab"} ${arrastando === id ? "opacity-50" : ""}`}
+                    className={`flex shrink-0 items-center gap-1.5 rounded-botao border px-2 py-1 ${ESTADO_CLASSE[estado]} ${running ? "" : "cursor-grab"} ${arrastando === id ? "opacity-50" : ""}`}
                   >
-                    <span className="text-legenda text-grafite-500">{index + 1}.</span>
+                    <span className="text-legenda opacity-70">{index + 1}.</span>
                     <span className="whitespace-nowrap" title={nome}>{nome}</span>
                     <button type="button" className={miniBotao} aria-label={`Subir ${nome}`} disabled={running || index === 0} onClick={() => move(index, -1)}>←</button>
                     <button type="button" className={miniBotao} aria-label={`Descer ${nome}`} disabled={running || index === sequencia.length - 1} onClick={() => move(index, 1)}>→</button>

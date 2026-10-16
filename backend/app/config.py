@@ -88,6 +88,7 @@ class Api:
     jobs_page_size: int
     runs_history_limit: int
     poll_interval_ms: int
+    logs_linhas: int
 
 
 @dataclass(frozen=True)
@@ -195,6 +196,7 @@ def validate(settings: Settings) -> None:
         "janela_dias": settings.busca.janela_dias,
         "trecho_max_chars": settings.filtro.trecho_max_chars,
         "poll_interval_ms": settings.api.poll_interval_ms,
+        "logs_linhas": settings.api.logs_linhas,
         "max_paginas_por_termo": settings.limites.max_paginas_por_termo,
         "jobs_page_size": settings.api.jobs_page_size,
         "gupy.page_size": settings.gupy.page_size,

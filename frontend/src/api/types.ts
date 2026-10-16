@@ -15,4 +15,5 @@ export type KeywordType = "busca" | "ranking" | "exclusao";
 export type SeenFilter = "novas" | "todas" | "excluidas" | "candidatadas";
 export type Scanner = Schemas["ScannerOut"];
 export type Atualizacao = Schemas["AtualizacaoOut"];
+export type Logs = Schemas["LogsOut"];
 export type BrowserStatus = Schemas["BrowserOut"];

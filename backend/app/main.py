@@ -8,21 +8,24 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException
 
 from . import db
 from .config import Settings, load_settings
 from .errors import Conflict, DomainError, NotFound
 from .routes import config as config_routes
-from .routes import atualizacao, browser, conjuntos, health, jobs, keywords, runs, scanners, verificacao
+from .routes import atualizacao, browser, conjuntos, health, jobs, keywords, logs, runs, scanners, verificacao
 from .services import atualizacao as atualizacao_service
 from .services import chrome
 from .services.run_service import spawn_thread
+from .services.logs import ARQUIVO_LOG
 from .services.scanners import Manifest, load_manifest
 from .sources.registry import build_sources
 from .sources.verification import VerificationGate
 
 DEFAULT_CONFIG = Path(__file__).resolve().parents[1] / "config.toml"
 DEFAULT_MANIFEST = DEFAULT_CONFIG.parent / "scanners.toml"
+DEFAULT_VALUES = DEFAULT_CONFIG.parent / "config.default.toml"
 
 
 def utc_now() -> str:
@@ -35,7 +38,7 @@ def setup_logging(settings: Settings) -> None:
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
         handlers=[
-            logging.FileHandler(settings.geral.log_dir / "peneira-de-vagas.log", encoding="utf-8"),
+            logging.FileHandler(settings.geral.log_dir / ARQUIVO_LOG, encoding="utf-8"),
             logging.StreamHandler(),
         ],
     )
@@ -48,6 +51,20 @@ def _handler(status_code: int):
     return handle
 
 
+class _SpaFiles(StaticFiles):
+    """Serve o build do front; caminho de aba (/como-usar, /vagas…) sem arquivo devolve o index.html.
+
+    Não vale para /api nem para caminhos com extensão (arquivo que não existe continua 404)."""
+
+    async def get_response(self, path: str, scope):
+        try:
+            return await super().get_response(path, scope)
+        except HTTPException as error:
+            if error.status_code != 404 or path.startswith("api") or "." in path.rsplit("/", 1)[-1]:
+                raise
+            return await super().get_response("index.html", scope)
+
+
 def create_app(
     settings: Settings | None = None,
     sources_factory: Callable[[], list] | None = None,
@@ -57,6 +74,7 @@ def create_app(
     chrome_probe: Callable[[], bool] | None = None,
     chrome_launcher: Callable[[list[str]], None] | None = None,
     config_path: Path | None = None,
+    defaults_path: Path | None = None,
     app_version: Callable[[], str | None] | None = None,
     latest_fetch: Callable[[str, float], str] | None = None,
 ) -> FastAPI:
@@ -82,6 +100,7 @@ def create_app(
     app.state.gate = VerificationGate()
     app.state.now = now or utc_now
     app.state.config_path = config_path or DEFAULT_CONFIG
+    app.state.defaults_path = defaults_path or DEFAULT_VALUES
     app.state.manifest = manifest or load_manifest(DEFAULT_MANIFEST)
     app.state.chrome_probe = chrome_probe or (lambda: chrome.is_open(settings))
     app.state.chrome_launcher = chrome_launcher or chrome.launch_detached
@@ -90,9 +109,9 @@ def create_app(
 
     for status_code, error in ((422, DomainError), (404, NotFound), (409, Conflict)):
         app.add_exception_handler(error, _handler(status_code))
-    for module in (health, runs, jobs, keywords, conjuntos, scanners, browser, config_routes, verificacao, atualizacao):
+    for module in (health, runs, jobs, keywords, conjuntos, scanners, browser, config_routes, verificacao, atualizacao, logs):
         app.include_router(module.router, prefix="/api")
 
     if (settings.geral.frontend_dist / "index.html").exists():
-        app.mount("/", StaticFiles(directory=settings.geral.frontend_dist, html=True), name="front")
+        app.mount("/", _SpaFiles(directory=settings.geral.frontend_dist, html=True), name="front")
     return app

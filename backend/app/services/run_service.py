@@ -12,7 +12,7 @@ from ..config import Settings
 from ..errors import DomainError
 from ..sources.errors import SourceEmpty, SourceError
 from ..sources.types import Job
-from . import conjuntos, keywords, scanners
+from . import conjuntos, keywords, logs, scanners
 from .filters import Filter, normalize
 from .localizacao import passes_localidade, passes_modalidade
 from .scanners import Manifest
@@ -142,17 +142,18 @@ def execute_run(
     Em sequência por padrão; com `navegador.abas_paralelas` todas rodam ao mesmo tempo, uma aba por fonte."""
     conn = db.connect(settings.geral.db_path)
     try:
-        conjunto_id = conjunto_id or conjuntos.active_id(conn)  # as vagas vão para o conjunto cujas palavras foram lidas agora
-        termos, flt = build_filter(conn, settings, conjunto_id)
-        if settings.navegador.abas_paralelas and len(sources) > 1:
-            _run_sources_in_parallel(settings, run_id, sources, termos, flt, conjunto_id, now)
-        else:
-            for source in sources:
-                _run_isolated(conn, settings, source, termos, flt, conjunto_id, run_id, now)
-        conn.execute("UPDATE runs SET status='concluida', fim=? WHERE id=?", (now(), run_id))
-        conn.commit()
-        if manifest:
-            _warn_scanners_to_redo(conn, settings, manifest, now())
+        with logs.registrar_execucao(settings.geral.log_dir, run_id):
+            conjunto_id = conjunto_id or conjuntos.active_id(conn)  # as vagas vão para o conjunto cujas palavras foram lidas agora
+            termos, flt = build_filter(conn, settings, conjunto_id)
+            if settings.navegador.abas_paralelas and len(sources) > 1:
+                _run_sources_in_parallel(settings, run_id, sources, termos, flt, conjunto_id, now)
+            else:
+                for source in sources:
+                    _run_isolated(conn, settings, source, termos, flt, conjunto_id, run_id, now)
+            conn.execute("UPDATE runs SET status='concluida', fim=? WHERE id=?", (now(), run_id))
+            conn.commit()
+            if manifest:
+                _warn_scanners_to_redo(conn, settings, manifest, now())
     finally:
         conn.close()
 

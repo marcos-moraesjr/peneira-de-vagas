@@ -12,8 +12,11 @@ describe("ComoUsarPage", () => {
       "Abra o Chrome dedicado",
       "Entre nos sites (uma vez)",
       "Cadastre as palavras-chave",
+      "Organize em conjuntos",
       "Busque",
       "Leia os resultados",
+      "Ajuste e acompanhe",
+      "Mantenha atualizado",
     ]);
   });
 
@@ -74,5 +77,30 @@ describe("ComoUsarPage", () => {
   it("explica o aviso de scanner a refazer", () => {
     renderWithClient(<ComoUsarPage />);
     expect(screen.getByText(/Copiar instrução para o Claude/)).toBeInTheDocument();
+  });
+
+  it("explica os conjuntos de palavras-chave e a sequência de buscas", () => {
+    renderWithClient(<ComoUsarPage />);
+    expect(screen.getByText(/Conjuntos de busca/, { selector: "strong" })).toBeInTheDocument();
+    expect(screen.getByText(/Sequência de conjuntos/, { selector: "strong" })).toBeInTheDocument();
+    expect(screen.getByText(/até 6 palavras-chave de busca/)).toBeInTheDocument();
+  });
+
+  it("explica os recortes da busca: estado, modalidade e janela de recência", () => {
+    renderWithClient(<ComoUsarPage />);
+    expect(screen.getByText(/Janela de recência/, { selector: "strong" })).toBeInTheDocument();
+    expect(screen.getByText("Modalidade", { selector: "strong" })).toBeInTheDocument();
+  });
+
+  it("explica as abas da lista, a candidatura e o recálculo de pontuação", () => {
+    renderWithClient(<ComoUsarPage />);
+    expect(screen.getByText("Candidaturas", { selector: "strong" })).toBeInTheDocument();
+    expect(screen.getByText("Excluídas", { selector: "strong" })).toBeInTheDocument();
+    expect(screen.getByText("Recalcular pontuação", { selector: "strong" })).toBeInTheDocument();
+  });
+
+  it("explica como atualizar o programa pelo comando peneira", () => {
+    renderWithClient(<ComoUsarPage />);
+    expect(screen.getByText("peneira atualizar")).toBeInTheDocument();
   });
 });

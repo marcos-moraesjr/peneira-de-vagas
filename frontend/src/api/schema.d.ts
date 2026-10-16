@@ -270,26 +270,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/scanners/instrucao": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Documentation Instruction
-         * @description Instrução pronta para o Claude Code refazer a documentação das plataformas (uma ou todas).
-         */
-        get: operations["documentation_instruction_api_scanners_instrucao_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/browser": {
         parameters: {
             query?: never;
@@ -339,7 +319,7 @@ export interface paths {
         };
         /**
          * Get Config
-         * @description Parâmetros de comportamento em vigor; caminhos, cdp_url e URLs das fontes ficam de fora.
+         * @description Parâmetros de comportamento em vigor.
          */
         get: operations["get_config_api_config_get"];
         /**
@@ -348,6 +328,26 @@ export interface paths {
          */
         put: operations["put_config_api_config_put"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/config/restaurar-padroes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore Defaults
+         * @description Regrava no config.toml os valores editáveis do `config.default.toml` (os padrões que vêm com o app); recusa durante uma execução.
+         */
+        post: operations["restore_defaults_api_config_restaurar_padroes_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -403,6 +403,30 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Logs
+         * @description Fim do log da aplicação, ou o da execução `execucao_id` (`[api] logs_linhas` linhas, as mais recentes por último).
+         */
+        get: operations["get_logs_api_logs_get"];
+        put?: never;
+        post?: never;
+        /**
+         * Clear Logs
+         * @description Esvazia o log da aplicação e apaga os logs de todas as execuções.
+         */
+        delete: operations["clear_logs_api_logs_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -520,11 +544,6 @@ export interface components {
             /** Db */
             db: string;
         };
-        /** InstructionOut */
-        InstructionOut: {
-            /** Instrucao */
-            instrucao: string;
-        };
         /** JobOut */
         JobOut: {
             /** Id */
@@ -597,6 +616,18 @@ export interface components {
             tipo: string;
             /** Criada Em */
             criada_em: string;
+        };
+        /** LogsCleared */
+        LogsCleared: {
+            /** Execucoes Removidas */
+            execucoes_removidas: number;
+        };
+        /** LogsOut */
+        LogsOut: {
+            /** Arquivo */
+            arquivo: string;
+            /** Linhas */
+            linhas: string[];
         };
         /** MarkSeenIn */
         MarkSeenIn: {
@@ -1430,37 +1461,6 @@ export interface operations {
             };
         };
     };
-    documentation_instruction_api_scanners_instrucao_get: {
-        parameters: {
-            query?: {
-                fonte?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["InstructionOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     browser_status_api_browser_get: {
         parameters: {
             query?: never;
@@ -1554,6 +1554,26 @@ export interface operations {
             };
         };
     };
+    restore_defaults_api_config_restaurar_padroes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigOut"];
+                };
+            };
+        };
+    };
     waiting_api_verificacao_get: {
         parameters: {
             query?: never;
@@ -1619,6 +1639,57 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AtualizacaoOut"];
+                };
+            };
+        };
+    };
+    get_logs_api_logs_get: {
+        parameters: {
+            query?: {
+                execucao_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LogsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    clear_logs_api_logs_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LogsCleared"];
                 };
             };
         };

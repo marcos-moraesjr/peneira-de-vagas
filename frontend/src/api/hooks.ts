@@ -1,6 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiSend } from "./client";
-import type { Atualizacao, BrowserStatus, Config, Conjunto, Health, Job, JobsPage, Keyword, KeywordType, Run, Scanner } from "./types";
+import type { Atualizacao, BrowserStatus, Config, Conjunto, Health, Job, JobsPage, Keyword, KeywordType, Logs, Run, Scanner } from "./types";
 
 export function useHealth() {
   return useQuery({ queryKey: ["health"], queryFn: () => apiGet<Health>("/api/health") });
@@ -254,20 +254,19 @@ export function useOpenBrowser() {
   });
 }
 
-/** Instrução para o Claude Code refazer a documentação das plataformas (todas, ou só a `fonte`). */
-export function useDocumentationInstruction() {
-  return useMutation({
-    mutationFn: (fonte: string) =>
-      apiGet<{ instrucao: string }>(`/api/scanners/instrucao${fonte ? `?fonte=${fonte}` : ""}`),
-  });
-}
-
-
 /** Grava a configuração editável; a resposta (valores em vigor) vira o cache de `useConfig`. */
 export function useSaveConfig() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (config: Config) => apiSend<Config>("PUT", "/api/config", config),
+    onSuccess: (config) => client.setQueryData(["config"], config),
+  });
+}
+
+export function useRestaurarPadroes() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiSend<Config>("POST", "/api/config/restaurar-padroes"),
     onSuccess: (config) => client.setQueryData(["config"], config),
   });
 }
@@ -288,5 +287,23 @@ export function useConfirmVerification() {
   return useMutation({
     mutationFn: (fonte: string) => apiSend<void>("POST", `/api/verificacao/${fonte}/confirmar`),
     onSuccess: () => client.invalidateQueries({ queryKey: ["verificacao"] }),
+  });
+}
+
+/** Fim do log da aplicação (ou o da execução `execucaoId`); só relê quando a tela pede (abrir a aba ou Atualizar). */
+export function useLogs(execucaoId?: number) {
+  return useQuery({
+    queryKey: ["logs", execucaoId ?? "geral"],
+    queryFn: () => apiGet<Logs>(execucaoId === undefined ? "/api/logs" : `/api/logs?execucao_id=${execucaoId}`),
+    gcTime: 0,
+  });
+}
+
+/** Esvazia o log da aplicação e apaga os logs das execuções. */
+export function useClearLogs() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiSend<{ execucoes_removidas: number }>("DELETE", "/api/logs"),
+    onSuccess: () => client.invalidateQueries({ queryKey: ["logs"] }),
   });
 }

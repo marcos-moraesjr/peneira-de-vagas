@@ -32,8 +32,8 @@ aceitar_desconhecido = true   # vaga sem localidade/modalidade informada (ou só
 max_paginas_por_termo = 3   # páginas de resultados abertas por palavra-chave em cada fonte (LinkedIn, Indeed e Gupy); mais páginas = mais tempo e mais risco de bloqueio
 
 [ritmo]
-pausa_min_s = 2.5
-pausa_max_s = 5.0
+pausa_min_s = 1.5
+pausa_max_s = 3.0
 rolagem_min_s = 0.25     # pausa ao rolar a lista, card a card
 rolagem_max_s = 0.7
 pausa_detalhe_min_s = 2.0   # pausa depois de abrir o painel de cada vaga (cada abertura gera requisições do site; rápido demais leva a HTTP 429)
@@ -44,7 +44,7 @@ cdp_url = "http://127.0.0.1:9222"   # só localhost: a porta de depuração nunc
 timeout_s = 30
 max_tentativas_abertura = 3 # tentativas para um goto abortado (ERR_ABORTED) antes de falhar a fonte
 max_tentativas_painel = 3 # tentativas para abrir o painel de uma vaga antes de apontar seletor alterado
-intervalo_tentativa_painel_s = 15.0 # espera entre uma tentativa e outra de abrir o painel (dá tempo de a lista do site se estabilizar)
+intervalo_tentativa_painel_s = 10.0 # espera entre uma tentativa e outra de abrir o painel (dá tempo de a lista do site se estabilizar)
 max_falhas_termo_seguidas = 2 # termos seguidos que podem falhar por erro transitório (timeout, 5xx, abortado) antes de encerrar a fonte
 max_falhas_detalhe_seguidas = 3 # vagas seguidas cujo painel pode não abrir (a vaga é pulada) antes de apontar seletor alterado
 probe_timeout_s = 1.5      # espera ao checar se o Chrome dedicado está aberto
@@ -62,6 +62,7 @@ chrome_paths = [
 jobs_page_size = 20
 runs_history_limit = 30
 poll_interval_ms = 100
+logs_linhas = 500
 
 [gupy]
 base_url = "https://portal.gupy.io/api/job-search/jobs"

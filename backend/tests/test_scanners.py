@@ -7,7 +7,6 @@ import pytest
 
 from backend.app import db
 from backend.app.config import ConfigError, settings_from_dict
-from backend.app.errors import DomainError
 from backend.app.services import run_service, scanners
 from backend.app.services.scanners import Manifest, ScannerInfo, load_manifest
 from backend.app.sources.errors import SourceLayoutChanged
@@ -198,58 +197,3 @@ def test_start_run_grava_as_versoes_do_manifesto(conn, settings):
     spawned = []
     run_id = run_service.start_run(conn, settings, [BrokenSource()], lambda: NOW, spawn=spawned.append, manifest=make_manifest(versao="2.0.1"))
     assert conn.execute("SELECT scanner_versao FROM run_sources WHERE run_id=?", (run_id,)).fetchone()[0] == "2.0.1"
-
-
-# ---------- instrução para refazer a documentação das plataformas ----------
-
-def full_manifest():
-    return load_manifest(MANIFEST_PATH)
-
-
-def test_instrucao_de_documentacao_cobre_todas_as_plataformas_com_versao_e_data():
-    manifesto = full_manifest()
-    texto = scanners.documentation_instruction(manifesto, None, ["Engenheiro Mecânico"])
-    for rotulo in ("LinkedIn", "Indeed", "Gupy"):
-        assert rotulo in texto
-    assert all(info.versao in texto for info in manifesto.scanners.values()) and "2026-10-14" in texto
-    assert "Google" not in texto
-    for arquivo in ("backend/app/sources/linkedin.py", "backend/app/sources/indeed.py", "backend/app/sources/gupy.py"):
-        assert arquivo in texto
-
-
-def test_instrucao_de_documentacao_traz_termos_destino_e_o_que_registrar():
-    texto = scanners.documentation_instruction(full_manifest(), None, ["Engenheiro Mecânico", "Projetista"])
-    assert '"Engenheiro Mecânico"' in texto and '"Projetista"' in texto
-    assert "docs/SCANNERS.md" in texto and "EXPLORACAO" not in texto
-    for item in ("seletores", "paginação", "ID estável", "filtro de data", "bloqueio"):
-        assert item in texto
-    assert "verificado" in texto and "não verificado" in texto
-
-
-def test_instrucao_de_documentacao_repete_as_regras_de_seguranca():
-    texto = scanners.documentation_instruction(full_manifest(), None, ["x"])
-    assert "Chrome dedicado" in texto
-    assert "candidatura" in texto and "cookies" in texto and "CAPTCHA" in texto
-    assert "não contorne" in texto.lower() or "sem contornar" in texto.lower()
-
-
-def test_instrucao_de_documentacao_so_documenta_e_pede_as_divergencias_antes_de_mexer_no_codigo():
-    texto = scanners.documentation_instruction(full_manifest(), None, ["x"])
-    assert "Não altere o código" in texto
-    assert "divergências" in texto and "docs/SCANNERS.md" in texto
-
-
-def test_instrucao_de_uma_so_plataforma_nao_menciona_as_outras():
-    texto = scanners.documentation_instruction(full_manifest(), "gupy", ["x"])
-    assert "Gupy" in texto and "backend/app/sources/gupy.py" in texto
-    assert "LinkedIn" not in texto and "Indeed" not in texto
-
-
-def test_instrucao_de_fonte_desconhecida_informa_valor_e_esperado():
-    with pytest.raises(DomainError, match=r"fonte='orkut'.*linkedin"):
-        scanners.documentation_instruction(full_manifest(), "orkut", ["x"])
-
-
-def test_instrucao_sem_palavras_chave_orienta_a_usar_a_do_config():
-    texto = scanners.documentation_instruction(full_manifest(), None, [])
-    assert "nenhuma palavra-chave cadastrada" in texto

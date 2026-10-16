@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { useClearJobs, useConfig, useConjuntos, useJobs, useKeywords, useMarkAllSeen, useRuns, useSetCandidatada, useSetExcluida, useSaveSequencia, useSequencia, useSetSeen, useStartRun } from "../../api/hooks";
+import { useBrowser, useClearJobs, useConfig, useConjuntos, useJobs, useKeywords, useMarkAllSeen, useRecalcularPontuacao, useRuns, useSetCandidatada, useSetExcluida, useSaveSequencia, useSequencia, useSetSeen, useStartRun } from "../../api/hooks";
 import type { SeenFilter } from "../../api/types";
 import { buttonSecondary, inputClass } from "../../components/ui";
 import { SOURCES, sourceLabel } from "../../lib/failures";
@@ -91,6 +91,8 @@ export function VagasPage() {
   const setCandidatada = useSetCandidatada();
   const markAll = useMarkAllSeen();
   const clearJobs = useClearJobs();
+  const recalcular = useRecalcularPontuacao();
+  const browser = useBrowser();
   useReloadJobsWhenRunFinishes(latest?.status);
 
   const items = jobs.data?.items ?? [];
@@ -129,7 +131,9 @@ export function VagasPage() {
     <div className="space-y-3">
       <RunBar
         latest={latest}
+        runs={runs.data ?? []}
         canSearch={(keywords.data?.length ?? 0) > 0}
+        navegadorAberto={browser.data?.aberto}
         starting={startRun.isPending}
         sources={SOURCES}
         onSearch={runSearch}
@@ -145,9 +149,14 @@ export function VagasPage() {
         hint={keywords.data?.length || !keywords.isSuccess ? undefined : "Adicione ao menos uma palavra-chave na aba Parâmetros de busca."}
       />
       {startRun.error && <ErrorBox message={startRun.error.message} />}
+      {recalcular.isError && <ErrorBox message={recalcular.error.message} />}
       <VerificationPrompt running={latest?.status === "executando"} />
       <ChromeStatus>
-        <RunStatus latest={latest} />
+        <RunStatus
+          latest={latest}
+          runs={runs.data ?? []}
+          sequencia={sequencia.map((id) => conjuntos.find((item) => item.id === id)?.nome ?? String(id))}
+        />
       </ChromeStatus>
       <FailureBanner run={latest} onRestart={runSearch} restarting={startRun.isPending} />
       <ScannerBanner />
@@ -156,6 +165,11 @@ export function VagasPage() {
       <div className="flex flex-wrap items-baseline gap-x-3">
         <h2 className="text-sm font-semibold text-grafite-900">Filtrar vagas encontradas</h2>
         <p className="text-xs text-grafite-500">Só filtra o que já está na lista abaixo; não faz uma nova busca.</p>
+        {recalcular.isSuccess && (
+          <p role="status" className="text-xs font-semibold text-sinal-fg">
+            {recalcular.data.atualizadas} de {recalcular.data.total} vagas tiveram a pontuação atualizada.
+          </p>
+        )}
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div role="tablist" className="flex overflow-hidden rounded-botao border border-linha bg-painel">
@@ -176,6 +190,15 @@ export function VagasPage() {
           ))}
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            className={buttonSecondary}
+            disabled={recalcular.isPending}
+            title="Reaplica os pesos atuais e as palavras-chave de cada conjunto às vagas já encontradas. Só muda a pontuação: nenhuma vaga é apagada."
+            onClick={() => recalcular.mutate()}
+          >
+            Recalcular pontuação
+          </button>
           <button type="button" className={buttonSecondary} onClick={markAllSeen}>
             Marcar todas como vistas
           </button>

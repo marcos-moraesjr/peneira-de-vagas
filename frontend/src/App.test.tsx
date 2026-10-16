@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { act, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import App from "./App";
 import { CONFIG, mockApi, renderWithClient } from "./test/mockApi";
@@ -10,6 +10,8 @@ const routes = {
   "GET /api/jobs": { items: [], total: 0 },
   "GET /api/runs": [],
 };
+
+beforeEach(() => window.history.pushState({}, "", "/"));
 
 describe("App", () => {
   it("abre na tela Buscar vagas e alterna para Execuções", async () => {
@@ -94,5 +96,55 @@ describe("App — tema", () => {
     renderWithClient(<App />);
     expect(await screen.findByRole("button", { name: /tema claro/i })).toBeInTheDocument();
     expect(document.documentElement.dataset.theme).toBe("dark");
+  });
+});
+
+describe("App — rotas das abas", () => {
+  afterEach(() => window.history.pushState({}, "", "/"));
+
+  it("clicar numa aba troca o endereço (ex.: /como-usar)", async () => {
+    const user = userEvent.setup();
+    mockApi(routes);
+    renderWithClient(<App />);
+    await user.click(await screen.findByRole("tab", { name: "Como usar" }));
+    expect(window.location.pathname).toBe("/como-usar");
+    await user.click(screen.getByRole("tab", { name: "Parâmetros de busca" }));
+    expect(window.location.pathname).toBe("/busca");
+  });
+
+  it("abrir um endereço de aba mostra essa aba", async () => {
+    window.history.pushState({}, "", "/execucoes");
+    mockApi(routes);
+    renderWithClient(<App />);
+    expect(await screen.findByRole("tab", { name: "Execuções", selected: true })).toBeInTheDocument();
+  });
+
+  it("endereço desconhecido cai em Buscar vagas", async () => {
+    window.history.pushState({}, "", "/nada");
+    mockApi(routes);
+    renderWithClient(<App />);
+    expect(await screen.findByRole("tab", { name: "Buscar vagas", selected: true })).toBeInTheDocument();
+  });
+
+  it("voltar no navegador acompanha o endereço", async () => {
+    const user = userEvent.setup();
+    mockApi(routes);
+    renderWithClient(<App />);
+    await user.click(await screen.findByRole("tab", { name: "Execuções" }));
+    await act(async () => {
+      window.history.pushState({}, "", "/config");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+    expect(await screen.findByRole("tab", { name: "Configurações", selected: true })).toBeInTheDocument();
+  });
+});
+
+describe("App — logs", () => {
+  it("tem a aba Logs na barra lateral", async () => {
+    const user = userEvent.setup();
+    mockApi({ ...routes, "GET /api/logs": { arquivo: "peneira-de-vagas.log", linhas: ["linha do log"] } });
+    renderWithClient(<App />);
+    await user.click(await screen.findByRole("tab", { name: "Logs" }));
+    expect(await screen.findByText("linha do log")).toBeInTheDocument();
   });
 });

@@ -1016,53 +1016,6 @@
         }
       }
     },
-    "/api/scanners/instrucao": {
-      "get": {
-        "summary": "Documentation Instruction",
-        "description": "Instrução pronta para o Claude Code refazer a documentação das plataformas (uma ou todas).",
-        "operationId": "documentation_instruction_api_scanners_instrucao_get",
-        "parameters": [
-          {
-            "name": "fonte",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Fonte"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InstructionOut"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/browser": {
       "get": {
         "summary": "Browser Status",
@@ -1104,7 +1057,7 @@
     "/api/config": {
       "get": {
         "summary": "Get Config",
-        "description": "Parâmetros de comportamento em vigor; caminhos, cdp_url e URLs das fontes ficam de fora.",
+        "description": "Parâmetros de comportamento em vigor.",
         "operationId": "get_config_api_config_get",
         "responses": {
           "200": {
@@ -1150,6 +1103,25 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/config/restaurar-padroes": {
+      "post": {
+        "summary": "Restore Defaults",
+        "description": "Regrava no config.toml os valores editáveis do `config.default.toml` (os padrões que vêm com o app); recusa durante uma execução.",
+        "operationId": "restore_defaults_api_config_restaurar_padroes_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigOut"
                 }
               }
             }
@@ -1219,6 +1191,70 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AtualizacaoOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/logs": {
+      "get": {
+        "summary": "Get Logs",
+        "description": "Fim do log da aplicação, ou o da execução `execucao_id` (`[api] logs_linhas` linhas, as mais recentes por último).",
+        "operationId": "get_logs_api_logs_get",
+        "parameters": [
+          {
+            "name": "execucao_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Execucao Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogsOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Clear Logs",
+        "description": "Esvazia o log da aplicação e apaga os logs de todas as execuções.",
+        "operationId": "clear_logs_api_logs_delete",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogsCleared"
                 }
               }
             }
@@ -1539,19 +1575,6 @@
         ],
         "title": "HealthOut"
       },
-      "InstructionOut": {
-        "properties": {
-          "instrucao": {
-            "type": "string",
-            "title": "Instrucao"
-          }
-        },
-        "type": "object",
-        "required": [
-          "instrucao"
-        ],
-        "title": "InstructionOut"
-      },
       "JobOut": {
         "properties": {
           "id": {
@@ -1760,6 +1783,40 @@
           "criada_em"
         ],
         "title": "KeywordOut"
+      },
+      "LogsCleared": {
+        "properties": {
+          "execucoes_removidas": {
+            "type": "integer",
+            "title": "Execucoes Removidas"
+          }
+        },
+        "type": "object",
+        "required": [
+          "execucoes_removidas"
+        ],
+        "title": "LogsCleared"
+      },
+      "LogsOut": {
+        "properties": {
+          "arquivo": {
+            "type": "string",
+            "title": "Arquivo"
+          },
+          "linhas": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Linhas"
+          }
+        },
+        "type": "object",
+        "required": [
+          "arquivo",
+          "linhas"
+        ],
+        "title": "LogsOut"
       },
       "MarkSeenIn": {
         "properties": {

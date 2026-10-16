@@ -117,6 +117,23 @@ Crie conforme a necessidade; sugestão inicial:
 - **Correção**: scanners LinkedIn `1.8.2` e Indeed `1.9.2` intercalam triagem, detalhe e paginação, mantendo uma aba por fonte e sem abrir detalhes rejeitados.
 - **Risco futuro**: se o fluxo voltar a separar `search` e `enrich`, o sintoma reaparece; manter teste que verifica a ordem página → detalhe → próxima página.
 
+### Remoção: refazer a documentação das plataformas (2026-10-16)
+- **Como funcionava**: painel na aba Execuções (select "Plataforma" + botão "Gerar instrução para refazer a documentação") que chamava
+  `GET /api/scanners/instrucao?fonte=`; o backend montava um texto para colar no Claude Code pedindo para repetir a busca com as
+  palavras-chave cadastradas, registrar URL, seletores, paginação, filtro de data e formato da resposta em `docs/SCANNERS.md`
+  (verificado × não verificado), listar divergências com os adaptadores sem alterar código, e repetia as regras de segurança. Há botão para copiar.
+- **Parâmetros removidos**: rota `/api/scanners/instrucao`, `scanners.documentation_instruction` e `DOC_INSTRUCTION`, schema `InstructionOut`,
+  componente `DocumentationPanel`, hook `useDocumentationInstruction`. A `instrucao` por scanner em `GET /api/scanners` (estado "refazer") continua.
+- **Motivo**: decisão do usuário; o recurso era pouco útil. A documentação segue sendo refeita pelo fluxo normal de scanner quebrado.
+
+### Remoção: card "Configuração em vigor" da aba Execuções (2026-10-16)
+- **Como funcionava**: a aba Execuções exibia, somente leitura, localidades, modalidade, janela padrão, pesos título/descrição,
+  pontuação mínima, páginas por palavra-chave e pausa entre ações (lidos de `GET /api/config`), com a nota "Para alterar,
+  edite config.toml".
+- **Parâmetros removidos**: componente `ConfigView` e o uso de `useConfig` em `ExecucoesPage`; a rota `GET /api/config`
+  continua (usada por outras telas).
+- **Motivo**: decisão do usuário; o card repetia valores do `config.toml` sem ação possível e ocupava a tela.
+
 ### Remoção: copiar perfil do Chrome pessoal (2026-10-14)
 - **Como funcionava**: botão "Copiar perfil" na aba Vagas (`GET /api/browser/profiles`, `POST /api/browser/profile/copy`).
   `chrome_profile.py` lia o `Local State` do Chrome pessoal, copiava a pasta do perfil escolhido (ignorando caches) para
@@ -166,7 +183,7 @@ Crie conforme a necessidade; sugestão inicial:
 - **Antes:** localidade e modalidade da config iam na busca de cada plataforma (`location`/`l`, `f_WT` no LinkedIn, `workplaceType` na Gupy), com uma busca por localidade (e, na Gupy, por modalidade). O Indeed não filtrava modalidade e a Gupy não filtrava localidade; o resultado dependia de como cada plataforma interpreta o filtro (o LinkedIn casa por região, o `l` do Indeed por área).
 - **Depois:** a busca leva só palavra-chave, recência e página. `Job` ganha `modalidade` e um filtro local único (`services/localizacao.py`) decide sobre as vagas listadas, igual para todas as fontes. Vaga com dado desconhecido segue `[filtro] aceitar_desconhecido` (padrão `true`: passa).
 - **Motivo:** decisão do usuário: os filtros de busca das plataformas não são padronizados. **Custo:** a lista traz vagas de qualquer lugar (mais cards lidos, e os detalhes só são abertos para as aprovadas). Limitação conhecida: a localidade é texto livre; "São Paulo" (cidade) casa também o estado.
-- **Tela:** a aba Configurações deixou de editar localidades e modalidade (pedido do usuário); os valores ficam só no `config.toml`, e a tela preserva `busca.localidades`/`modalidade` ao salvar as demais opções. A aba Execuções segue exibindo os valores em vigor.
+- **Tela:** a aba Configurações deixou de editar localidades e modalidade (pedido do usuário); os valores ficam só no `config.toml`, e a tela preserva `busca.localidades`/`modalidade` ao salvar as demais opções. (A aba Execuções exibia os valores em vigor até 2026-10-16; card removido.)
 
 ### Indeed: data de publicação procurada no lugar errado (2026-10-15)
 - **Contexto**: execução real do Indeed; log "33 de 33 vagas abertas no detalhe ficaram sem data de publicação" mesmo após as versões 1.4.0 e 1.5.0.

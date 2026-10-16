@@ -423,6 +423,47 @@ describe("VagasPage — seletor de conjunto", () => {
   });
 });
 
+describe("VagasPage — botão Buscar condicionado ao navegador e às fontes", () => {
+  const abrir = (aberto: boolean) => ({ "GET /api/browser": { aberto } });
+  const buscar = () => screen.getByRole("button", { name: "Buscar agora" });
+
+  it("com o Chrome fechado e LinkedIn/Indeed marcados, o botão fica bloqueado e explica o motivo", async () => {
+    setup({ jobs: [makeJob(1)], extra: abrir(false) });
+    await screen.findByText("Chrome dedicado fechado");
+    expect(buscar()).toBeDisabled();
+    expect(screen.getByText(/Abra o Chrome dedicado para buscar no LinkedIn ou no Indeed/)).toBeInTheDocument();
+  });
+
+  it("com o Chrome fechado, só a Gupy marcada libera o botão", async () => {
+    const user = userEvent.setup();
+    setup({ jobs: [makeJob(1)], extra: abrir(false) });
+    await screen.findByText("Chrome dedicado fechado");
+    await user.click(screen.getByRole("checkbox", { name: "LinkedIn" }));
+    await user.click(screen.getByRole("checkbox", { name: "Indeed" }));
+    expect(buscar()).toBeEnabled();
+    expect(screen.queryByText(/Abra o Chrome dedicado para buscar/)).not.toBeInTheDocument();
+  });
+
+  it("com o Chrome aberto o botão fica liberado", async () => {
+    setup({ jobs: [makeJob(1)], extra: abrir(true) });
+    await screen.findByText("Chrome dedicado aberto");
+    expect(buscar()).toBeEnabled();
+  });
+});
+
+describe("VagasPage — recalcular pontuação", () => {
+  it("o botão fica ao lado de marcar/excluir, recalcula e informa quantas vagas mudaram", async () => {
+    const user = userEvent.setup();
+    const { calls } = setup({ jobs: [makeJob(1)], extra: { "POST /api/jobs/recalcular": { atualizadas: 2, total: 5 } } });
+    const botao = await screen.findByRole("button", { name: "Recalcular pontuação" });
+    expect(botao.parentElement).toContainElement(screen.getByRole("button", { name: "Marcar todas como vistas" }));
+    expect(botao.parentElement).toContainElement(screen.getByRole("button", { name: "Excluir todas as vagas" }));
+    await user.click(botao);
+    expect(await screen.findByText("2 de 5 vagas tiveram a pontuação atualizada.")).toBeInTheDocument();
+    expect(calls.some((c) => c.method === "POST" && c.path === "/api/jobs/recalcular")).toBe(true);
+  });
+});
+
 describe("VagasPage — conjunto da busca", () => {
   const conjuntos = [
     { id: 1, nome: "Mecânica", ativo: true },
@@ -449,6 +490,47 @@ describe("VagasPage — conjunto da busca", () => {
     expect(itens.map((item) => item.textContent)).toEqual([expect.stringContaining("Soldagem"), expect.stringContaining("Mecânica")]);
     await user.click(barra.getByRole("button", { name: "Buscar agora" }));
     await waitFor(() => expect(calls.find((c) => c.method === "POST" && c.path === "/api/runs")?.body).toEqual({ fontes: null, conjunto_ids: [3, 1] }));
+  });
+
+  describe("andamento da sequência", () => {
+    const tres = [...conjuntos, { id: 3, nome: "Soldagem", ativo: false }];
+    const sequencia = { conjunto_ids: [1, 2, 3] };
+    const estados = async () => {
+      const barra = within(await screen.findByRole("region", { name: "Controles da busca" }));
+      const lista = within(await barra.findByRole("list"));
+      return { barra, itens: lista.getAllByRole("listitem").map((item) => item.getAttribute("data-estado")) };
+    };
+
+    it("marca concluído, em andamento e pendente e informa o conjunto em andamento", async () => {
+      const runs = [makeRun(11, "executando", [makeSource("gupy", { status: "buscando" })], "Tecnologia"), makeRun(10, "concluida", [makeSource("gupy")], "Mecânica")];
+      setup({ jobs: [makeJob(1)], runs, extra: { "GET /api/conjuntos": tres, "GET /api/conjuntos/sequencia": sequencia } });
+      const { barra, itens } = await estados();
+      expect(itens).toEqual(["sucesso", "andamento", "pendente"]);
+      const agora = screen.getByText("Buscando agora: Tecnologia (2 de 3)");
+      expect(barra.queryByText("Buscando agora: Tecnologia (2 de 3)")).not.toBeInTheDocument();
+      expect(agora.parentElement).toContainElement(screen.getByRole("status"));
+    });
+
+    it("sem sequência, informa o conjunto em andamento sem a contagem", async () => {
+      const runs = [makeRun(11, "executando", [makeSource("gupy", { status: "buscando" })], "Tecnologia")];
+      setup({ jobs: [makeJob(1)], runs, extra: { "GET /api/conjuntos": tres } });
+      expect(await screen.findByText("Buscando agora: Tecnologia")).toBeInTheDocument();
+    });
+
+    it("marca em vermelho o conjunto cuja execução teve fonte com falha", async () => {
+      const runs = [makeRun(11, "concluida", [makeSource("gupy")], "Tecnologia"), makeRun(10, "concluida", [makeSource("gupy", { status: "falha", motivo: "captcha" })], "Mecânica")];
+      setup({ jobs: [makeJob(1)], runs, extra: { "GET /api/conjuntos": tres, "GET /api/conjuntos/sequencia": sequencia } });
+      const { barra, itens } = await estados();
+      expect(itens).toEqual(["falha", "sucesso", "pendente"]);
+      expect(barra.queryByText(/Buscando agora/)).not.toBeInTheDocument();
+    });
+
+    it("ignora execuções antigas de outra sequência (nomes fora da ordem)", async () => {
+      const runs = [makeRun(11, "concluida", [makeSource("gupy")], "Soldagem"), makeRun(10, "concluida", [makeSource("gupy")], "Mecânica")];
+      setup({ jobs: [makeJob(1)], runs, extra: { "GET /api/conjuntos": tres, "GET /api/conjuntos/sequencia": sequencia } });
+      const { itens } = await estados();
+      expect(itens).toEqual(["pendente", "pendente", "sucesso"]);
+    });
   });
 
   it("remover da sequência a esvazia e a busca volta a usar só o conjunto ativo", async () => {

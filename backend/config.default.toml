@@ -1,0 +1,88 @@
+# Parâmetros do Peneira de Vagas. Palavras-chave e exclusões são editadas na tela
+# (tabela keywords); [padrao] só semeia a tabela na primeira vez.
+# Caminhos relativos partem da raiz do projeto.
+
+[geral]
+db_path = "data/peneira-de-vagas.db"
+backup_dir = "backups"
+frontend_dist = "frontend/dist"
+log_dir = "logs"
+chrome_profile_dir = "data/chrome-profile"  # perfil do Chrome dedicado (nunca o pessoal)
+porta = 8100                        # porta da interface (comando `peneira`); a API só escuta em 127.0.0.1
+
+[padrao]
+palavras_chave = ["Engenheiro Mecânico"]
+exclusoes = []
+
+[busca]
+keyword_max_length = 80
+max_termos_busca = 6  # máximo de palavras-chave de busca por conjunto (cada termo vira uma consulta por fonte; consultas demais levam a bloqueio)
+janela_dias = 3
+localidades = []        # fallback/configuração da busca; a localidade informada na página de Busca sobrescreve esta lista na execução
+modalidade = []         # lista: "remoto", "hibrido", "presencial"; vazia = todas. Filtra as vagas listadas (não vai na busca da plataforma)
+
+[filtro]
+peso_titulo = 3
+peso_descricao = 1
+min_score = 5
+trecho_max_chars = 5000
+aceitar_desconhecido = true   # vaga sem localidade/modalidade informada (ou só "Brasil", ou remota) passa pelo filtro de local e modalidade; false descarta
+
+[limites]
+max_paginas_por_termo = 3   # páginas de resultados abertas por palavra-chave em cada fonte (LinkedIn, Indeed e Gupy); mais páginas = mais tempo e mais risco de bloqueio
+
+[ritmo]
+pausa_min_s = 2.5
+pausa_max_s = 5.0
+rolagem_min_s = 0.25     # pausa ao rolar a lista, card a card
+rolagem_max_s = 0.7
+pausa_detalhe_min_s = 2.0   # pausa depois de abrir o painel de cada vaga (cada abertura gera requisições do site; rápido demais leva a HTTP 429)
+pausa_detalhe_max_s = 3.5
+
+[navegador]
+cdp_url = "http://127.0.0.1:9222"   # só localhost: a porta de depuração nunca sai da máquina
+timeout_s = 30
+max_tentativas_abertura = 3 # tentativas para um goto abortado (ERR_ABORTED) antes de falhar a fonte
+max_tentativas_painel = 3 # tentativas para abrir o painel de uma vaga antes de apontar seletor alterado
+intervalo_tentativa_painel_s = 15.0 # espera entre uma tentativa e outra de abrir o painel (dá tempo de a lista do site se estabilizar)
+max_falhas_termo_seguidas = 2 # termos seguidos que podem falhar por erro transitório (timeout, 5xx, abortado) antes de encerrar a fonte
+max_falhas_detalhe_seguidas = 3 # vagas seguidas cujo painel pode não abrir (a vaga é pulada) antes de apontar seletor alterado
+probe_timeout_s = 1.5      # espera ao checar se o Chrome dedicado está aberto
+abas_paralelas = true     # true: uma aba por fonte, todas ao mesmo tempo (cada aba mantém suas pausas)
+espera_verificacao_s = 600   # tempo que a fonte espera você concluir a verificação (CAPTCHA/Cloudflare) e confirmar; esgotado, a fonte falha
+# Onde procurar o Chrome para o botão "Abrir Chrome dedicado" (o primeiro que existir).
+chrome_paths = [
+  'C:\Program Files\Google\Chrome\Application\chrome.exe',
+  'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe',
+  "/usr/bin/google-chrome",
+  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+]
+
+[api]
+jobs_page_size = 20
+runs_history_limit = 30
+poll_interval_ms = 100
+logs_linhas = 500
+
+[gupy]
+base_url = "https://portal.gupy.io/api/job-search/jobs"
+page_size = 50
+timeout_s = 20
+
+[linkedin]
+base_url = "https://www.linkedin.com/jobs/search/"
+page_size = 25
+
+[indeed]
+base_url = "https://br.indeed.com/jobs"
+page_size = 10
+
+[versionamento]
+falhas_consecutivas = 2   # falhas seguidas de "quebra", na versão atual, para pedir que o scanner seja refeito
+max_idade_dias = 90       # idade (desde a exploração) a partir da qual o scanner pede atenção
+motivos_de_quebra = ["seletor_nao_encontrado", "zero_resultados", "http_erro"]
+
+[atualizacao]
+verificar = true                                    # consulta a última Release no GitHub (só a versão; nenhum dado seu é enviado). false = nunca consulta
+repositorio = "marcos-moraesjr/peneira-de-vagas"    # dono/nome do repositório que publica as Releases
+timeout_s = 5                                       # limite da consulta; falhou ou demorou, a tela só não mostra o aviso

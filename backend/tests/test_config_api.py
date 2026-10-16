@@ -4,6 +4,7 @@ import shutil
 import pytest
 from fastapi.testclient import TestClient
 
+from backend.app.config import load_settings
 from backend.app.main import create_app
 from backend.tests.conftest import CONFIG_PATH
 from backend.tests.test_api import NOW, StubSource, job
@@ -144,3 +145,28 @@ def test_config_antigo_sem_a_chave_nova_do_painel_ainda_grava(settings, arquivo)
         novo["navegador"]["intervalo_tentativa_painel_s"] = 30
         assert client.put("/api/config", json=novo).status_code == 200
     assert "intervalo_tentativa_painel_s = 30" in arquivo.read_text(encoding="utf-8")
+
+
+def test_restaurar_padroes_regrava_os_valores_do_arquivo_de_padroes(settings, arquivo, tmp_path):
+    padroes = tmp_path / "config.default.toml"
+    padroes.write_text(CONFIG_PATH.read_text(encoding="utf-8").replace("min_score = 5", "min_score = 7"), encoding="utf-8")
+    app = create_app(settings, sources_factory=lambda: [StubSource()], now=lambda: NOW, config_path=arquivo, defaults_path=padroes)
+    with TestClient(app) as client:
+        alterado = client.get("/api/config").json()
+        alterado["filtro"]["min_score"] = 99
+        alterado["ritmo"]["pausa_max_s"] = 9.0
+        client.put("/api/config", json=alterado)
+        resposta = client.post("/api/config/restaurar-padroes")
+        em_vigor = client.get("/api/config").json()
+    assert resposta.status_code == 200
+    assert resposta.json() == em_vigor
+    assert em_vigor["filtro"]["min_score"] == 7
+    assert em_vigor["ritmo"]["pausa_max_s"] == load_settings(padroes).ritmo.pausa_max_s != 9.0
+    texto = arquivo.read_text(encoding="utf-8")
+    assert "min_score = 7" in texto and "# pausa ao rolar a lista" in texto
+
+
+def test_restaurar_padroes_durante_uma_busca_devolve_409(settings, arquivo):
+    with _client(settings, arquivo, spawn=lambda fn: None) as client:
+        client.post("/api/runs")
+        assert client.post("/api/config/restaurar-padroes").status_code == 409

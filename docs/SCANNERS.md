@@ -41,13 +41,6 @@ Estado por scanner (`GET /api/scanners`, telas Vagas e Execuções):
 3. Você valida com uma busca real (`Buscar agora`); o estado volta a **Em dia** quando uma execução da nova
    versão tiver sucesso.
 
-**Só atualizar a documentação** (sem esperar quebrar): tela **Execuções → Refazer a documentação das
-plataformas** gera uma instrução que pede ao Claude para repetir a busca, registrar URL, seletores, paginação,
-filtro de data, formato da resposta e sinais de bloqueio (verificado × não verificado), comparar com os adaptadores
-e **listar as divergências sem alterar código**. Se houver, ele pergunta se deve atualizar os scanners (TDD,
-nova versão, changelog). A instrução repete as regras de segurança: só o Chrome dedicado, sem abrir vagas para
-candidatura, sem aceitar cookies nem digitar credenciais, sem resolver CAPTCHA nem contornar bloqueios.
-
 ## Como o usuário comum recebe um scanner corrigido
 
 O usuário do `install.ps1` não tem o repositório: o scanner corrigido chega **numa versão nova do app**.

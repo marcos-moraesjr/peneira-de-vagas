@@ -165,6 +165,7 @@ def test_pausa_de_detalhe_valida_minimo_e_maximo():
         ("busca", "max_termos_busca", 0),
         ("limites", "max_paginas_por_termo", 0),
         ("api", "poll_interval_ms", 0),
+        ("api", "logs_linhas", 0),
         ("filtro", "trecho_max_chars", 0),
         ("filtro", "peso_titulo", -1),
         ("filtro", "peso_descricao", -1),
@@ -213,3 +214,13 @@ def test_modalidade_invalida_informa_valor_e_esperado(valor):
 
 def test_filtro_traz_aceitar_desconhecido_como_booleano():
     assert load_settings(CONFIG_PATH).filtro.aceitar_desconhecido is True
+
+
+def test_arquivo_de_padroes_carrega_e_tem_as_mesmas_secoes_e_chaves_do_config():
+    import tomllib
+
+    pasta = CONFIG_PATH.parent
+    padroes = tomllib.loads((pasta / "config.default.toml").read_text(encoding="utf-8"))
+    atual = tomllib.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+    assert {nome: set(chaves) for nome, chaves in padroes.items()} == {nome: set(chaves) for nome, chaves in atual.items()}
+    load_settings(pasta / "config.default.toml")

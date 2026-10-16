@@ -6,7 +6,7 @@ from ..config import MODALIDADES, Settings
 from ..deps import get_conn, get_now, get_settings
 from ..errors import DomainError
 from ..schemas import RunIn, RunOut, RunsCleared, RunStarted
-from ..services import run_service, runs
+from ..services import logs, run_service, runs
 from ..services.search_query import ESTADOS_BRASIL
 from ..sources.registry import build_sources
 
@@ -59,13 +59,17 @@ def list_runs(
 
 
 @router.delete("/runs", response_model=RunsCleared)
-def clear_runs(conn: sqlite3.Connection = Depends(get_conn)) -> RunsCleared:
-    return RunsCleared(removidas=runs.clear_history(conn))
+def clear_runs(conn: sqlite3.Connection = Depends(get_conn), settings: Settings = Depends(get_settings)) -> RunsCleared:
+    removidas = runs.clear_history(conn)
+    logs.remover_execucoes(settings.geral.log_dir)
+    return RunsCleared(removidas=removidas)
 
 
 @router.delete("/runs/{run_id}", response_model=RunsCleared)
-def delete_run(run_id: int, conn: sqlite3.Connection = Depends(get_conn)) -> RunsCleared:
-    return RunsCleared(removidas=runs.delete_run(conn, run_id))
+def delete_run(run_id: int, conn: sqlite3.Connection = Depends(get_conn), settings: Settings = Depends(get_settings)) -> RunsCleared:
+    removidas = runs.delete_run(conn, run_id)
+    logs.remover_execucao(settings.geral.log_dir, run_id)
+    return RunsCleared(removidas=removidas)
 
 
 @router.get("/runs/{run_id}", response_model=RunOut)

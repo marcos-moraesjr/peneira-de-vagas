@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { useClearRuns, useConfig, useDeleteRun, useDocumentationInstruction, useRuns, useScanners } from "../../api/hooks";
-import type { Config, Run, Scanner } from "../../api/types";
-import { CopyButton } from "../../components/CopyButton";
+import { useClearRuns, useDeleteRun, useRuns, useScanners } from "../../api/hooks";
+import type { Run, Scanner } from "../../api/types";
 import { ErrorBox } from "../../components/ErrorBox";
-import { buttonDanger, buttonSecondary, card, inputClass } from "../../components/ui";
+import { buttonDanger, buttonSecondary, card } from "../../components/ui";
 import { describeFailure, sourceLabel } from "../../lib/failures";
 import { formatDate, formatDateTime, formatDuration } from "../../lib/format";
 
@@ -194,34 +193,6 @@ function RunsTable({ runs, onSelect, onDelete, disabled, onClear, clearDisabled 
   );
 }
 
-function ConfigView({ config }: { config: Config }) {
-  const rows: [string, string][] = [
-    ["Localidades", config.busca.localidades.join(", ") || "qualquer"],
-    ["Modalidade", config.busca.modalidade.join(", ") || "qualquer"],
-    ["Janela padrão da busca", `${config.busca.janela_dias} dias`],
-    ["Pontos por termo no título / na descrição", `${config.filtro.peso_titulo} / ${config.filtro.peso_descricao}`],
-    ["Pontuação mínima", String(config.filtro.min_score)],
-    ["Páginas abertas por palavra-chave (por fonte)", String(config.limites.max_paginas_por_termo)],
-    ["Pausa entre ações", `${config.ritmo.pausa_min_s}–${config.ritmo.pausa_max_s} s`],
-  ];
-  return (
-    <section className={card}>
-      <h2 className="mb-2 text-titulo text-grafite-900">Configuração em vigor</h2>
-      <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-sm">
-        {rows.map(([label, value]) => (
-          <div key={label} className="contents">
-            <dt className="text-grafite-500">{label}</dt>
-            <dd>{value}</dd>
-          </div>
-        ))}
-      </dl>
-      <p className="mt-3 text-xs text-grafite-500">
-        Para alterar, edite config.toml. Palavras-chave e exclusões são editadas na tela Vagas.
-      </p>
-    </section>
-  );
-}
-
 const SCANNER_STATUS: Record<string, string> = { ok: "Em dia", atencao: "Atenção", refazer: "Refazer" };
 
 function ScannersTable({ scanners }: { scanners: Scanner[] }) {
@@ -256,51 +227,8 @@ function ScannersTable({ scanners }: { scanners: Scanner[] }) {
   );
 }
 
-const DOC_SOURCES = ["linkedin", "indeed", "gupy"];
-
-/** Gera a instrução para o Claude Code refazer a documentação das plataformas (todas ou uma). */
-function DocumentationPanel() {
-  const [fonte, setFonte] = useState("");
-  const generate = useDocumentationInstruction();
-  return (
-    <section className={`${card} space-y-3`}>
-      <h2 className="text-titulo text-grafite-900">Refazer a documentação das plataformas</h2>
-      <p className="text-xs text-grafite-500">
-        Gera uma instrução para colar numa sessão do Claude Code neste repositório: ele explora as plataformas de novo
-        e atualiza docs/SCANNERS.md, sem mexer no código.
-      </p>
-      <div className="flex flex-wrap items-center gap-3">
-        <label className="flex items-center gap-2 text-sm text-grafite-700">
-          Plataforma
-          <select value={fonte} onChange={(event) => setFonte(event.target.value)} className={inputClass}>
-            <option value="">Todas as plataformas</option>
-            {DOC_SOURCES.map((source) => (
-              <option key={source} value={source}>
-                {sourceLabel(source)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button type="button" className={buttonSecondary} disabled={generate.isPending} onClick={() => generate.mutate(fonte)}>
-          Gerar instrução para refazer a documentação
-        </button>
-      </div>
-      {generate.error && <ErrorBox message={generate.error.message} />}
-      {generate.data && (
-        <div className="space-y-2">
-          <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded bg-grafite-900 p-3 text-xs text-painel">
-            {generate.data.instrucao}
-          </pre>
-          <CopyButton text={generate.data.instrucao} />
-        </div>
-      )}
-    </section>
-  );
-}
-
 export function ExecucoesPage() {
   const runs = useRuns();
-  const config = useConfig();
   const scanners = useScanners();
   const clear = useClearRuns();
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -313,8 +241,6 @@ export function ExecucoesPage() {
   return (
     <div className="space-y-4">
       {scanners.data && scanners.data.length > 0 && <ScannersTable scanners={scanners.data} />}
-      <DocumentationPanel />
-      {config.data && <ConfigView config={config.data} />}
       {runs.isError && <ErrorBox message="Não foi possível carregar as execuções. Verifique se a API está rodando." />}
       {runs.isLoading && <p className="text-sm text-grafite-500">Carregando execuções…</p>}
       {runs.isSuccess && runs.data.length === 0 && <p className="text-sm text-grafite-500">Nenhuma execução ainda.</p>}

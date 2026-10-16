@@ -79,7 +79,8 @@ export function ComoUsarPage() {
         <Step title="Cadastre as palavras-chave">
           <p>
             Na aba Parâmetros de busca, digite um termo em <strong>Palavras-chave da busca</strong> e tecle Enter: cada uma vira uma
-            busca nas plataformas. Em <strong>Palavras-chave de ranking</strong> ficam os termos que não fazem busca,
+            busca nas plataformas (até 6 palavras-chave de busca por conjunto, porque consultas demais levam a bloqueio).
+            Em <strong>Palavras-chave de ranking</strong> ficam os termos que não fazem busca,
             só pontuam as vagas encontradas. Use <strong>Exclusões</strong> para descartar vagas com certos termos,
             como "estágio". O termo
             casa em qualquer ordem e ignora acento, maiúsculas, plural e gênero. As mudanças valem a partir da próxima
@@ -87,10 +88,26 @@ export function ComoUsarPage() {
           </p>
         </Step>
 
+        <Step title="Organize em conjuntos">
+          <p>
+            As palavras-chave vivem em <strong>Conjuntos de busca</strong> (no topo da aba Parâmetros de busca), por exemplo
+            um por área ou cargo. Só o conjunto ativo é editado e buscado. Crie um conjunto vazio ou copie as palavras de
+            outro, ative, renomeie ou exclua pela tabela. Cada conjunto guarda as próprias vagas e a própria pontuação.
+          </p>
+          <p>
+            Na aba Buscar vagas, a <strong>Sequência de conjuntos</strong> busca vários conjuntos de uma vez, na ordem
+            escolhida (arraste os itens ou use as setas). Cada conjunto vira uma execução no histórico. Vazia, a busca
+            usa só o conjunto ativo. A sequência para se uma fonte for bloqueada por CAPTCHA, login ou erro de HTTP.
+          </p>
+        </Step>
+
         <Step title="Busque">
           <p>
-            Clique em <strong>Buscar agora</strong>. O andamento de cada fonte aparece ao lado do botão (aguardando,
-            buscando, concluída, falhou). Uma busca por vez, em ritmo humano: com as três fontes, leva alguns minutos.
+            Em Buscar vagas, marque as plataformas e, se quiser, restrinja o <strong>Estado</strong>, a{" "}
+            <strong>Modalidade</strong> (remoto, híbrido ou presencial) e a <strong>Janela de recência</strong> (em dias;
+            vale só para aquela busca). Depois clique em <strong>Buscar agora</strong>. O andamento de cada fonte e o
+            conjunto em busca aparecem na tela (aguardando, buscando, concluída, falhou). Uma busca por vez, em ritmo
+            humano: com as três fontes, leva alguns minutos.
             Por padrão as plataformas buscam ao mesmo tempo, cada uma na sua aba (isso muda em Configurações).
             O app não contorna CAPTCHA nem bloqueios: se uma fonte pedir verificação, ela espera na aba aberta. Conclua
             a verificação à mão no Chrome dedicado e clique em <strong>Já concluí a verificação</strong> para a busca
@@ -102,8 +119,40 @@ export function ComoUsarPage() {
           <p>
             A aba <strong>Não lidas</strong> mostra o que você ainda não viu. Clique no título para abrir a vaga original
             (isso a marca como vista). A aba Todas inclui também as já vistas.
-            A Gupy só traz vagas publicadas nos últimos dias (janela configurável). A aba Execuções guarda o histórico e o resultado
-            de cada fonte.
+          </p>
+          <p>
+            Em cada linha, o botão ✓ marca que você se candidatou: a vaga vai para <strong>Candidaturas</strong> e não volta
+            como nova. O botão de excluir manda a vaga para <strong>Excluídas</strong>, de onde dá para restaurá-la. Nos dois
+            casos a vaga continua no banco, então não reaparece como nova nas próximas buscas.
+          </p>
+          <p>
+            Acima da lista, filtre por conjunto, fonte, dias desde a publicação, pontuação mínima, título, empresa ou
+            local, e ordene clicando no cabeçalho das colunas. Esses filtros só mexem na lista; não fazem nova busca.
+            Use <strong>Marcar todas como vistas</strong> para zerar as novas. A Gupy informa a data de publicação e o LinkedIn
+            também; o Indeed não, e por isso suas vagas nunca saem pelo filtro de dias.
+          </p>
+        </Step>
+
+        <Step title="Ajuste e acompanhe">
+          <p>
+            Em Configurações ficam os pontos por palavra-chave no título e na descrição, a pontuação mínima, as páginas
+            abertas por palavra-chave, as pausas e a opção de rodar as plataformas em paralelo. Tudo é salvo ao sair
+            do campo. Ao mudar pesos ou palavras, use <strong>Recalcular pontuação</strong> para reaplicá-los às vagas já
+            encontradas (nenhuma é apagada).
+          </p>
+          <p>
+            A aba Execuções guarda o histórico, o conjunto, o resultado de cada fonte e a versão de cada scanner; dá para
+            excluir uma execução (as vagas ficam) ou limpar o histórico.
+          </p>
+        </Step>
+
+        <Step title="Mantenha atualizado">
+          <p>
+            Quando sai uma versão nova, a aba Buscar vagas avisa. Feche o programa (Ctrl+C no terminal) e rode, num terminal:
+          </p>
+          <Command>peneira atualizar</Command>
+          <p>
+            Seu banco, suas palavras-chave, o config e o perfil do Chrome ficam na sua pasta de dados e não são tocados.
           </p>
         </Step>
       </ol>
@@ -121,7 +170,7 @@ export function ComoUsarPage() {
         <h3 className="text-base font-semibold text-grafite-900">Quando o scanner quebra</h3>
         <p>
           Sites mudam sem aviso. Se uma fonte falhar por layout, zero resultados ou erro de HTTP várias vezes seguidas,
-            a aba Buscar vagas mostra "o scanner precisa ser refeito". Clique em <strong>Copiar instrução para o Claude</strong>{" "}
+          a aba Buscar vagas mostra "o scanner precisa ser refeito". Clique em <strong>Copiar instrução para o Claude</strong>{" "}
           e cole numa sessão do Claude Code neste repositório: ele explora a plataforma de novo e gera a versão
           seguinte do scanner. A aba Execuções mostra a versão de cada scanner.
         </p>

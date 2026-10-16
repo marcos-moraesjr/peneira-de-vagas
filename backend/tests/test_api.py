@@ -375,6 +375,17 @@ def test_serve_o_front_compilado_quando_existe(settings):
         assert test_client.get("/api/health").status_code == 200
 
 
+def test_rota_de_aba_devolve_o_front_mas_api_desconhecida_continua_404(settings):
+    settings.geral.frontend_dist.mkdir(parents=True)
+    (settings.geral.frontend_dist / "index.html").write_text("<html>app</html>", encoding="utf-8")
+    with make_client(settings, [StubSource()]) as test_client:
+        resposta = test_client.get("/como-usar")
+        assert resposta.status_code == 200 and "app" in resposta.text
+        assert test_client.get("/execucoes").status_code == 200
+        assert test_client.get("/api/nao-existe").status_code == 404
+        assert test_client.get("/arquivo-inexistente.js").status_code == 404
+
+
 # ---------- scanners ----------
 
 class BrokenLinkedIn:
@@ -409,18 +420,8 @@ def test_falhas_de_layout_seguidas_mandam_refazer_o_scanner(settings):
     assert run["fontes"][0]["scanner_versao"] == linkedin["versao"]
 
 
-def test_instrucao_de_documentacao_usa_as_palavras_chave_cadastradas(client):
-    corpo = client.get("/api/scanners/instrucao").json()
-    assert '"Engenheiro Mecânico"' in corpo["instrucao"]
-    for rotulo in ("LinkedIn", "Indeed", "Gupy"):
-        assert rotulo in corpo["instrucao"]
-
-
-def test_instrucao_de_documentacao_de_uma_fonte_e_fonte_invalida(client):
-    gupy = client.get("/api/scanners/instrucao?fonte=gupy").json()["instrucao"]
-    assert "Gupy" in gupy and "LinkedIn" not in gupy
-    resposta = client.get("/api/scanners/instrucao?fonte=orkut")
-    assert resposta.status_code == 422 and "orkut" in resposta.json()["detail"]
+def test_rota_de_instrucao_para_refazer_a_documentacao_foi_removida(client):
+    assert client.get("/api/scanners/instrucao").status_code == 404
 
 
 def test_busca_numa_fonte_especifica_roda_so_ela(settings):

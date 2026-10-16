@@ -26,7 +26,9 @@ def settings(tmp_path) -> Settings:
     busca = replace(base.busca, janela_dias=1)
     filtro = replace(base.filtro, min_score=3, trecho_max_chars=4000)
     api = replace(base.api, poll_interval_ms=2000)
-    return base.__class__(**{**base.__dict__, "geral": geral, "busca": busca, "filtro": filtro, "api": api})
+    ritmo = replace(base.ritmo, pausa_min_s=2.5, pausa_max_s=5.0)
+    navegador = replace(base.navegador, intervalo_tentativa_painel_s=15.0)
+    return base.__class__(**{**base.__dict__, "geral": geral, "busca": busca, "filtro": filtro, "api": api, "ritmo": ritmo, "navegador": navegador})
 
 
 @pytest.fixture

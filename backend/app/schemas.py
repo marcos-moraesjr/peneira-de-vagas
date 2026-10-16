@@ -196,10 +196,6 @@ class BrowserOpenOut(BaseModel):
     estado: str
 
 
-class InstructionOut(BaseModel):
-    instrucao: str
-
-
 class AtualizacaoOut(BaseModel):
     estado: str  # desligado | desenvolvimento | indisponivel | atualizado | disponivel
     instalada: str | None = None
@@ -207,3 +203,12 @@ class AtualizacaoOut(BaseModel):
     comando: str | None = None
 
 
+
+
+class LogsOut(BaseModel):
+    arquivo: str
+    linhas: list[str]
+
+
+class LogsCleared(BaseModel):
+    execucoes_removidas: int

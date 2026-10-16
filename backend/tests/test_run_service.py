@@ -462,3 +462,13 @@ def test_start_run_rejeita_sequencia_invalida(conn, settings):
     with pytest.raises(DomainError, match="Vazio"):
         run_service.start_run(conn, settings, [FakeSource()], now, spawn=lambda fn: None, conjunto_ids=[ativo, vazio])
     assert conn.execute("SELECT COUNT(*) FROM runs").fetchone()[0] == 0
+
+
+def test_execute_run_grava_o_log_da_propria_execucao_em_arquivo_separado(conn, settings):
+    primeira = run_all(conn, settings, [FakeSource(error=SourceEmpty("zero"))])
+    segunda = run_all(conn, settings, [FakeSource(name="outra", error=SourceEmpty("zero"))])
+    pasta = settings.geral.log_dir / "execucoes"
+    log1 = (pasta / f"execucao-{primeira}.log").read_text(encoding="utf-8")
+    log2 = (pasta / f"execucao-{segunda}.log").read_text(encoding="utf-8")
+    assert "Fonte fake falhou" in log1 and "Fonte outra" not in log1
+    assert "Fonte outra falhou" in log2 and "Fonte fake" not in log2

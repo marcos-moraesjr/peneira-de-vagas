@@ -1,4 +1,4 @@
-import { fireEvent, screen } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { CONFIG, mockApi, renderWithClient } from "../../test/mockApi";
 import { ConfigPage } from "./ConfigPage";
@@ -13,16 +13,30 @@ describe("ConfigPage", () => {
   it("mostra a configuração em vigor nos campos", async () => {
     setup();
     expect(await screen.findByLabelText("Pontuação mínima para aparecer")).toHaveValue("3");
-    expect(screen.getByLabelText("Pausa máxima (s)")).toHaveValue(6);
+    expect(screen.getByLabelText("Pausa máxima (s)")).toHaveValue("6");
   });
 
   it("nomeia os grupos conforme o propósito e explica ritmo e interface", async () => {
     setup();
-    for (const nome of ["Rankeamento de vagas", "Limites de busca", "Ritmo de buscas", "Interface"]) {
+    for (const nome of ["Rankeamento de vagas", "Limites de busca", "Ritmo e navegador", "Interface"]) {
       expect(await screen.findByRole("region", { name: nome })).toBeInTheDocument();
     }
+    expect(screen.queryByRole("region", { name: "Ritmo de buscas" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Navegador" })).not.toBeInTheDocument();
     expect(screen.getByText("Menor espera entre uma ação e outra no navegador.")).toBeInTheDocument();
     expect(screen.getByText("Quantidade de vagas exibidas por página na lista.")).toBeInTheDocument();
+  });
+
+  it("ritmo e navegador são um só card, com controles deslizantes no lugar de campos de texto", async () => {
+    setup();
+    const card = within(await screen.findByRole("region", { name: "Ritmo e navegador" }));
+    for (const nome of ["Pausa mínima (s)", "Pausa máxima (s)", "Rolagem mínima (s)", "Rolagem máxima (s)", "Tentativas para abrir o painel da vaga", "Intervalo entre tentativas (s)"]) {
+      expect(card.getByRole("slider", { name: nome })).toBeInTheDocument();
+    }
+    expect(card.getByRole("checkbox", { name: /buscar as plataformas ao mesmo tempo/i })).toBeInTheDocument();
+    expect(card.queryByRole("spinbutton")).not.toBeInTheDocument();
+    expect(card.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(screen.getByTestId("valor-ritmo.pausa_min_s")).toHaveTextContent("2");
   });
 
   it("não oferece localidade nem modalidade (o filtro fica só no config.toml)", async () => {
@@ -63,13 +77,26 @@ describe("ConfigPage", () => {
     });
   });
 
-  it("recalcula a pontuação das vagas e informa quantas mudaram", async () => {
+  it("não tem o recalcular pontuação: o botão fica na aba Vagas", async () => {
+    setup();
+    await screen.findByRole("slider", { name: "Pontuação mínima para aparecer" });
+    expect(screen.queryByRole("button", { name: "Recalcular pontuação" })).not.toBeInTheDocument();
+  });
+
+  it("restaurar padrões iniciais pede confirmação, chama a API e mostra os valores devolvidos", async () => {
     const user = userEvent.setup();
-    const api = mockApi({ "GET /api/config": CONFIG, "POST /api/jobs/recalcular": { atualizadas: 2, total: 5 } });
+    const confirmar = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const padroes = { ...CONFIG, filtro: { ...CONFIG.filtro, min_score: 5 } };
+    const api = mockApi({ "GET /api/config": CONFIG, "POST /api/config/restaurar-padroes": padroes });
     renderWithClient(<ConfigPage />);
-    await user.click(await screen.findByRole("button", { name: "Recalcular pontuação" }));
-    expect(await screen.findByText("2 de 5 vagas tiveram a pontuação atualizada.")).toBeInTheDocument();
-    expect(api.calls.some((c) => c.method === "POST" && c.path === "/api/jobs/recalcular")).toBe(true);
+    const botao = await screen.findByRole("button", { name: "Restaurar padrões iniciais" });
+    await user.click(botao);
+    expect(confirmar).toHaveBeenCalledTimes(1);
+    expect(api.calls.some((c) => c.path === "/api/config/restaurar-padroes")).toBe(false);
+    confirmar.mockReturnValue(true);
+    await user.click(botao);
+    await waitFor(() => expect(screen.getByTestId("valor-filtro.min_score")).toHaveTextContent("5"));
+    expect(api.calls.filter((c) => c.method === "POST" && c.path === "/api/config/restaurar-padroes")).toHaveLength(1);
   });
 
   it("não tem botões Salvar nem Descartar: o salvamento é automático", async () => {
@@ -82,7 +109,7 @@ describe("ConfigPage", () => {
   it("sair de um campo sem alterar nada não envia nada", async () => {
     const user = userEvent.setup();
     const { calls } = setup();
-    await user.click(await screen.findByLabelText("Pausa mínima (s)"));
+    await user.click(await screen.findByRole("slider", { name: "Pausa mínima (s)" }));
     await user.tab();
     expect(calls.find((c) => c.method === "PUT")).toBeUndefined();
   });
@@ -99,14 +126,12 @@ describe("ConfigPage", () => {
     expect(put?.body).toEqual({ ...CONFIG, filtro: { ...CONFIG.filtro, min_score: 5 } });
   });
 
-  it("salva ao sair de um campo numérico", async () => {
-    const user = userEvent.setup();
+  it("salva ao soltar o controle deslizante do ritmo", async () => {
     const { calls } = setup();
-    const campo = await screen.findByLabelText("Pausa mínima (s)");
-    await user.clear(campo);
-    await user.type(campo, "4");
+    const campo = await screen.findByRole("slider", { name: "Pausa mínima (s)" });
+    fireEvent.change(campo, { target: { value: "4" } });
     expect(calls.find((c) => c.method === "PUT")).toBeUndefined();
-    await user.tab();
+    fireEvent.keyUp(campo, { key: "ArrowRight" });
     expect(await screen.findByText(/configuração salva/i)).toBeInTheDocument();
     expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ ...CONFIG, ritmo: { ...CONFIG.ritmo, pausa_min_s: 4 } });
   });
@@ -122,18 +147,17 @@ describe("ConfigPage", () => {
   });
 
   it("edita as tentativas e o intervalo de espera para abrir o painel da vaga", async () => {
-    const user = userEvent.setup();
     const { calls } = setup();
-    const tentativas = await screen.findByLabelText(/tentativas para abrir o painel/i);
-    expect(tentativas).toHaveValue(3);
-    await user.clear(tentativas);
-    await user.type(tentativas, "5");
-    const intervalo = screen.getByLabelText(/intervalo entre tentativas/i);
-    expect(intervalo).toHaveValue(15);
-    await user.clear(intervalo);
-    await user.type(intervalo, "20");
-    await user.tab();
+    const tentativas = await screen.findByRole("slider", { name: /tentativas para abrir o painel/i });
+    expect(tentativas).toHaveValue("3");
+    fireEvent.change(tentativas, { target: { value: "5" } });
+    fireEvent.keyUp(tentativas, { key: "ArrowRight" });
     expect(await screen.findByText(/configuração salva/i)).toBeInTheDocument();
+    const intervalo = screen.getByRole("slider", { name: /intervalo entre tentativas/i });
+    expect(intervalo).toHaveValue("15");
+    fireEvent.change(intervalo, { target: { value: "20" } });
+    fireEvent.keyUp(intervalo, { key: "ArrowRight" });
+    await waitFor(() => expect(calls.filter((c) => c.method === "PUT")).toHaveLength(2));
     expect(calls.filter((c) => c.method === "PUT").at(-1)?.body).toEqual({
       ...CONFIG,
       navegador: { ...CONFIG.navegador, max_tentativas_painel: 5, intervalo_tentativa_painel_s: 20 },
@@ -141,13 +165,11 @@ describe("ConfigPage", () => {
   });
 
   it("mostra o erro do backend e mantém o que foi digitado", async () => {
-    const user = userEvent.setup();
     setup({ status: 422, json: { detail: "Config inválida: pausa_min_s=9.0 (esperado <= pausa_max_s=6.0)" } });
-    const campo = await screen.findByLabelText("Pausa mínima (s)");
-    await user.clear(campo);
-    await user.type(campo, "9");
-    await user.tab();
+    const campo = await screen.findByRole("slider", { name: "Pausa mínima (s)" });
+    fireEvent.change(campo, { target: { value: "9" } });
+    fireEvent.keyUp(campo, { key: "ArrowRight" });
     expect(await screen.findByText(/pausa_min_s=9.0/)).toBeInTheDocument();
-    expect(campo).toHaveValue(9);
+    expect(campo).toHaveValue("9");
   });
 });

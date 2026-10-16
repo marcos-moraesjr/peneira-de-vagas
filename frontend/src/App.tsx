@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { useHealth } from "./api/hooks";
 import { ConfigPage } from "./features/configuracoes/ConfigPage";
 import { ExecucoesPage } from "./features/execucoes/ExecucoesPage";
 import { ComoUsarPage } from "./features/como-usar/ComoUsarPage";
+import { LogsPage } from "./features/logs/LogsPage";
 import { BuscaPage } from "./features/vagas/BuscaPage";
 import { VagasPage } from "./features/vagas/VagasPage";
 
@@ -13,9 +14,16 @@ const TABS = [
   { id: "vagas", label: "Buscar vagas" },
   { id: "execucoes", label: "Execuções" },
   { id: "config", label: "Configurações" },
+  { id: "logs", label: "Logs" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
+
+/** A aba vem do caminho (/como-usar, /vagas…); caminho desconhecido abre Buscar vagas. */
+function tabFromPath(path: string): TabId {
+  const slug = path.replace(/^\/+|\/+$/g, "");
+  return TABS.find((item) => item.id === slug)?.id ?? "vagas";
+}
 
 function HealthBadge() {
   const health = useHealth();
@@ -40,7 +48,16 @@ function Logo() {
 }
 
 export default function App() {
-  const [tab, setTab] = useState<TabId>("vagas");
+  const [tab, setTab] = useState<TabId>(() => tabFromPath(window.location.pathname));
+  useEffect(() => {
+    const onPop = () => setTab(tabFromPath(window.location.pathname));
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+  function selectTab(id: TabId) {
+    setTab(id);
+    if (window.location.pathname !== `/${id}`) window.history.pushState({}, "", `/${id}`);
+  }
   return (
     <div className="min-h-screen bg-papel text-grafite-900">
       <header className="fixed inset-y-0 left-0 z-10 flex w-56 flex-col gap-6 border-r border-linha bg-painel px-4 py-5">
@@ -52,7 +69,7 @@ export default function App() {
               role="tab"
               type="button"
               aria-selected={tab === item.id}
-              onClick={() => setTab(item.id)}
+              onClick={() => selectTab(item.id)}
               className={`rounded-botao border-l-2 px-3 py-2 text-left text-corpo font-medium ${tab === item.id ? "border-grafite-900 bg-linha-2 text-grafite-900" : "border-transparent text-grafite-500 hover:text-grafite-900"}`}
             >
               {item.label}
@@ -71,6 +88,7 @@ export default function App() {
           {tab === "execucoes" && <ExecucoesPage />}
           {tab === "config" && <ConfigPage />}
           {tab === "como-usar" && <ComoUsarPage />}
+          {tab === "logs" && <LogsPage />}
         </div>
       </main>
     </div>
