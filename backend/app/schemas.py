@@ -13,6 +13,7 @@ class RunIn(BaseModel):
     modalidade: str | None = None
     janela_dias: int | None = None
     conjunto_ids: list[int] | None = None  # sequência: uma execução por conjunto, na ordem; None = só o ativo
+    retomar_run_id: int | None = None  # retoma as fontes que falharam nesta execução, da página em que pararam; ignora os demais campos, exceto `fontes`
 
 
 class SequenciaIO(BaseModel):

@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from backend.app import db
 from backend.app.main import create_app
 from backend.app.routes import runs as runs_route
+from backend.app.sources.errors import SourceRateLimited
 from backend.app.sources.types import Job
 
 NOW = "2026-10-14T12:00:00+00:00"
@@ -778,3 +779,56 @@ def test_sequencia_rejeita_conjunto_inexistente_ou_repetido(client):
     primeiro = client.get("/api/conjuntos").json()[0]["id"]
     assert client.put("/api/conjuntos/sequencia", json={"conjunto_ids": [999]}).status_code == 404
     assert client.put("/api/conjuntos/sequencia", json={"conjunto_ids": [primeiro, primeiro]}).status_code == 422
+
+
+class FonteQueFalhaUmaVez:
+    """Fonte paginada que cai na segunda página na primeira vez; guarda a configuração e a posição que recebeu."""
+
+    def __init__(self, run_settings=None):
+        self.name = "stub"
+        self.settings = run_settings
+        self.falhou = False
+        self.inicios = []
+
+    def search_and_enrich(self, termos, select_jobs, on_job=None, inicio=(0, 0), on_page=None):
+        self.inicios.append(inicio)
+        if not self.falhou:
+            self.falhou = True
+            for vaga in select_jobs([job("1")]):
+                on_job(vaga)
+            on_page(0, 1)
+            raise SourceRateLimited("HTTP 429", motivo="http_erro")
+        for vaga in select_jobs([job("2")]):
+            on_job(vaga)
+        on_page(1, 0)
+        return [job("2")]
+
+
+def test_retomar_continua_a_mesma_execucao_da_pagina_gravada_com_os_parametros_originais(settings, monkeypatch):
+    fonte = FonteQueFalhaUmaVez()
+    configuracoes = []
+
+    def build(run_settings, gate):
+        configuracoes.append(run_settings.busca)
+        return [fonte]
+
+    monkeypatch.setattr(runs_route, "build_sources", build)
+    with make_client(settings, [fonte]) as test_client:
+        primeira = test_client.post("/api/runs", json={"localidade": "São Paulo", "modalidade": "remoto", "janela_dias": 7}).json()["id"]
+        assert test_client.get(f"/api/runs/{primeira}").json()["fontes"][0]["status"] == "falha"
+
+        # a barra mudou depois da falha: a retomada ignora e refaz a mesma busca
+        resposta = test_client.post("/api/runs", json={"retomar_run_id": primeira, "janela_dias": 1, "localidade": "Bahia"})
+
+        assert (resposta.status_code, resposta.json()["id"]) == (202, primeira)
+        run = test_client.get(f"/api/runs/{primeira}").json()
+    assert fonte.inicios == [(0, 0), (0, 1)]
+    assert (configuracoes[-1].janela_dias, configuracoes[-1].localidades, configuracoes[-1].modalidade) == (7, ["São Paulo"], ["remoto"])
+    assert (run["status"], run["fontes"][0]["status"], run["fontes"][0]["novas"]) == ("concluida", "ok", 2)
+
+
+def test_retomar_execucao_inexistente_ou_sem_falha_e_rejeitado(client):
+    assert client.post("/api/runs", json={"retomar_run_id": 999}).status_code == 404
+    ok = client.post("/api/runs").json()["id"]
+    resposta = client.post("/api/runs", json={"retomar_run_id": ok})
+    assert resposta.status_code == 422

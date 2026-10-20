@@ -169,6 +169,7 @@ Linhas por versão, da mais antiga à mais nova. Convenção: **não verificado*
 | 1.9.1 | 2026-10-15 | Vaga cujo painel não abre é pulada e tentada na próxima execução; `max_falhas_detalhe_seguidas` falhas seguidas (ou nenhuma vaga detalhada) encerram como `seletor_nao_encontrado` |
 | 1.9.2, 1.9.3 | 2026-10-15 | Pausa de detalhe `[ritmo] pausa_detalhe_min_s`–`max_s` (3–6 s) após abrir cada painel (a rajada de cliques antecedia o HTTP 429) e `intervalo_tentativa_painel_s` (15 s) entre tentativas |
 | 1.9.4 | 2026-10-15 | Referência da documentação migrada para este arquivo; sem mudança de comportamento |
+| 1.10.0 | 2026-10-19 | Retomada de onde parou: `search_and_enrich` aceita `inicio` (termo, página) e avisa `on_page` com a próxima posição a cada página concluída; sem mudança de seletores |
 
 ### Indeed
 
@@ -184,6 +185,7 @@ Linhas por versão, da mais antiga à mais nova. Convenção: **não verificado*
 | 1.10.0–1.10.2 | 2026-10-15 | Descrição lida no painel `DESKTOP_EMBEDDED` (clique em `a[data-jk]`, `.simple-job-description-html`), sem `/viewjob`; data deixa de ser coletada; abertura do painel repetida até `max_tentativas_painel`; `EXTRACT_JS` ignora as iscas invisíveis. Observado no DOM real (15 vagas lidas, 1 isca excluída) |
 | 1.11.0–1.11.3 | 2026-10-15 | Igual ao LinkedIn: termos com falha transitória pulados, 401/403/429 encerram a fonte preservando o parcial, painel que não abre não derruba a fonte, pausa de detalhe e 15 s entre tentativas |
 | 1.11.4 | 2026-10-15 | Referência da documentação migrada para este arquivo; sem mudança de comportamento |
+| 1.12.0 | 2026-10-19 | Retomada de onde parou (igual ao LinkedIn 1.10.0); sem mudança de seletores |
 
 ### Gupy
 
@@ -197,6 +199,7 @@ Linhas por versão, da mais antiga à mais nova. Convenção: **não verificado*
 | 1.5.1, 1.5.2 | 2026-10-15 | Explicita que a API não suporta localidade (filtro local); modalidade canônica traduzida para `workplaceType` |
 | 1.6.0 | 2026-10-15 | Aplica `[busca] janela_dias` a `publishedDate` antes da deduplicação; vaga sem `publishedDate` permanece, para não gerar falso negativo |
 | 1.6.1 | 2026-10-15 | Referência da documentação migrada para este arquivo; sem mudança de comportamento |
+| 1.7.0 | 2026-10-19 | Entrega as vagas página a página (`search_and_enrich`) e retoma de `inicio` (termo, página), avisando `on_page`; mesmos parâmetros e endpoint |
 
 A fonte **Google** (0.1.0–0.3.0, seletores nunca observados) foi removida em 15/10/2026 a pedido do usuário:
 código, `[google]` da config, amostras e testes apagados; execuções antigas com `fonte = google` seguem no banco.

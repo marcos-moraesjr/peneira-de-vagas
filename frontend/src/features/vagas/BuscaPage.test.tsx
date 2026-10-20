@@ -141,7 +141,7 @@ describe("BuscaPage", () => {
     expect(dialog).toHaveTextContent("Page.goto: Navigation interrupted");
   });
 
-  it("falha de fonte oferece retomada, que busca de novo só nas fontes que falharam", async () => {
+  it("falha de fonte oferece retomada, que pede ao backend para continuar a mesma execução de onde parou", async () => {
     const user = userEvent.setup();
     const { calls } = setup({
       runs: [
@@ -153,7 +153,7 @@ describe("BuscaPage", () => {
       ],
     });
     await user.click(await screen.findByRole("button", { name: "Retomar de onde parou" }));
-    await waitFor(() => expect(calls.find((c) => c.method === "POST" && c.path === "/api/runs")?.body).toEqual({ fontes: ["linkedin", "indeed"] }));
+    await waitFor(() => expect(calls.find((c) => c.method === "POST" && c.path === "/api/runs")?.body).toEqual({ retomar_run_id: 5 }));
   });
 
   it("sem falha ou com busca em andamento não há botão de retomada", async () => {

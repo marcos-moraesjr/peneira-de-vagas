@@ -72,7 +72,7 @@ def test_fonte_paginada_enriquece_durante_a_busca(conn, settings):
     eventos = []
 
     class FontePaginada(FakeSource):
-        def search_and_enrich(self, termos, select_jobs, on_job=None):
+        def search_and_enrich(self, termos, select_jobs, on_job=None, inicio=(0, 0), on_page=None):
             eventos.append("pagina")
             selecionadas = select_jobs(self._jobs)
             eventos.append("detalhe")
@@ -388,7 +388,7 @@ def test_mesma_vaga_em_outro_conjunto_e_gravada_de_novo_e_o_detalhe_e_aberto(con
 
 def test_limitacao_de_taxa_marca_falha_mas_preserva_o_que_ja_foi_lido(conn, settings):
     class LimitadaNaSegundaPagina(FakeSource):
-        def search_and_enrich(self, termos, select_jobs, on_job=None):
+        def search_and_enrich(self, termos, select_jobs, on_job=None, inicio=(0, 0), on_page=None):
             for vaga in select_jobs(self._jobs):
                 on_job(vaga)
             raise SourceRateLimited("HTTP 429", motivo="http_erro")
@@ -472,3 +472,81 @@ def test_execute_run_grava_o_log_da_propria_execucao_em_arquivo_separado(conn, s
     log2 = (pasta / f"execucao-{segunda}.log").read_text(encoding="utf-8")
     assert "Fonte fake falhou" in log1 and "Fonte outra" not in log1
     assert "Fonte outra falhou" in log2 and "Fonte fake" not in log2
+
+
+class FonteComPosicao(FakeSource):
+    """Lê páginas em sequência: avisa cada página concluída e falha na página indicada (uma vez)."""
+
+    def __init__(self, falha_em=None, **kwargs):
+        super().__init__(**kwargs)
+        self.falha_em = falha_em
+        self.inicios = []
+
+    def search_and_enrich(self, termos, select_jobs, on_job=None, inicio=(0, 0), on_page=None):
+        self.inicios.append(inicio)
+        termo, pagina = inicio
+        while pagina < 3:
+            if (termo, pagina) == self.falha_em:
+                self.falha_em = None
+                raise SourceRateLimited("HTTP 429", motivo="http_erro")
+            for vaga in select_jobs([job(f"{termo}-{pagina}", trecho="engenheiro mecânico")]):
+                on_job(vaga)
+            pagina += 1
+            if on_page:
+                on_page(termo, pagina)
+        return [job("lidas")] * 3
+
+
+def test_cada_pagina_concluida_grava_a_proxima_posicao_e_ela_sobrevive_a_falha(conn, settings):
+    fonte = FonteComPosicao(falha_em=(0, 2))
+    run_id = run_all(conn, settings, [fonte])
+    linha = sources_of(conn, run_id)["fake"]
+    assert linha["status"] == "falha"
+    assert (linha["termo_pos"], linha["pagina_pos"]) == (0, 2)
+
+
+def _retomar(conn, settings, fontes, run_id):
+    return run_service.resume_run(conn, settings, fontes, now, run_id, spawn=lambda fn: fn())
+
+
+def test_retomar_continua_da_posicao_gravada_na_mesma_execucao_e_soma_os_contadores(conn, settings):
+    fonte = FonteComPosicao(falha_em=(0, 2))
+    run_id = run_all(conn, settings, [fonte])
+
+    assert _retomar(conn, settings, [fonte], run_id) == run_id
+
+    assert fonte.inicios == [(0, 0), (0, 2)]  # não recomeçou do início
+    linha = sources_of(conn, run_id)["fake"]
+    assert (linha["status"], linha["motivo"], linha["detalhe"]) == ("ok", None, None)
+    assert (linha["aprovadas"], linha["novas"]) == (3, 3)  # 2 antes da falha + 1 depois
+    assert conn.execute("SELECT status FROM runs WHERE id=?", (run_id,)).fetchone()[0] == "concluida"
+    assert conn.execute("SELECT COUNT(*) FROM runs").fetchone()[0] == 1
+
+
+def test_retomar_nao_toca_nas_fontes_que_ja_deram_certo(conn, settings):
+    boa = FakeSource(name="boa", jobs=[job("9", trecho="engenheiro mecânico")])
+    ruim = FonteComPosicao(falha_em=(0, 1))
+    ruim.name = "ruim"
+    run_id = run_all(conn, settings, [boa, ruim])
+
+    _retomar(conn, settings, [ruim], run_id)
+
+    assert boa.search_calls == [["Engenheiro Mecânico"]]  # só a busca original
+    assert sources_of(conn, run_id)["boa"]["status"] == "ok"
+
+
+def test_retomar_rejeita_execucao_inexistente_sem_falha_ou_com_outra_em_andamento(conn, settings):
+    boa = FakeSource(jobs=[job("1", trecho="engenheiro mecânico")])
+    run_ok = run_all(conn, settings, [boa])
+    with pytest.raises(NotFound):
+        _retomar(conn, settings, [boa], 999)
+    with pytest.raises(DomainError):  # a fonte não falhou: nada a retomar
+        _retomar(conn, settings, [boa], run_ok)
+
+    ruim = FonteComPosicao(falha_em=(0, 1))
+    run_ruim = run_all(conn, settings, [ruim])
+    aberta = db.create_run(conn, ["fake"], NOW)
+    with pytest.raises(Conflict):
+        _retomar(conn, settings, [ruim], run_ruim)
+    assert conn.execute("SELECT status FROM runs WHERE id=?", (run_ruim,)).fetchone()[0] == "concluida"
+    assert aberta

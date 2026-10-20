@@ -249,11 +249,16 @@ class BrowserSource:
         termos: list[str],
         select_jobs: Callable[[list[Job]], list[Job]],
         on_job: Callable[[Job], None] | None = None,
+        inicio: tuple[int, int] = (0, 0),
+        on_page: Callable[[int, int], None] | None = None,
     ) -> list[Job]:
         """Busca por páginas e abre os detalhes elegíveis antes da próxima página.
 
         `select_jobs` recebe somente vagas novas da página; a fonte mantém a mesma aba
         para a busca e para os detalhes, reduzindo a espera visível no navegador.
+
+        Retomada: `inicio` = (índice do termo, página) a abrir primeiro, sem reabrir o que já foi lido;
+        `on_page(termo, pagina)` recebe a **próxima** posição depois de cada página concluída (detalhes inclusos).
         """
         found: dict[str, Job] = {}
         enriched = []
@@ -264,7 +269,7 @@ class BrowserSource:
                 on_job(job)
 
         with self._session() as navigator:
-            self._search_terms(navigator, termos, found, select_jobs, deliver)
+            self._search_terms(navigator, termos, found, select_jobs, deliver, inicio, on_page)
         self._warn_missing_publication(enriched)
         return list(found.values())
 
@@ -378,15 +383,21 @@ class BrowserSource:
         found: dict[str, Job],
         select_jobs: Callable[[list[Job]], list[Job]] | None = None,
         on_job: Callable[[Job], None] | None = None,
+        inicio: tuple[int, int] = (0, 0),
+        on_page: Callable[[int, int], None] | None = None,
     ) -> None:
         """Um termo que falha por erro transitório (timeout, 5xx, abertura abortada) é pulado e a busca segue com o
         próximo; `max_falhas_termo_seguidas` falhas seguidas indicam problema da fonte e a encerram. Limitação de taxa
         (`SourceRateLimited`), bloqueio e seletor alterado nunca são pulados: encerram a fonte na hora."""
         failures = 0
         last_error: SourceUnavailable | None = None
-        for termo in termos:
+        first_term, first_page = inicio
+        for index, termo in enumerate(termos):
+            if index < first_term:
+                continue
+            page_hook = (lambda page, i=index: on_page(i, page)) if on_page else None
             try:
-                self._search_term(navigator, termo, found, select_jobs, on_job)
+                self._search_term(navigator, termo, found, select_jobs, on_job, first_page if index == first_term else 0, page_hook)
             except SourceRateLimited:
                 raise
             except SourceUnavailable as error:
@@ -398,6 +409,8 @@ class BrowserSource:
                 self._pause()
             else:
                 failures = 0
+            if on_page:
+                on_page(index + 1, 0)
         if last_error and not found:
             raise last_error
 
@@ -408,11 +421,15 @@ class BrowserSource:
         found: dict[str, Job],
         select_jobs: Callable[[list[Job]], list[Job]] | None = None,
         on_job: Callable[[Job], None] | None = None,
+        first_page: int = 0,
+        on_page: Callable[[int], None] | None = None,
     ) -> None:
-        """Abre até `max_paginas_por_termo` páginas de resultados do termo; para antes se a página vier vazia
-        ou só repetir vagas que este termo já viu. Vaga já achada por outro termo fica com o primeiro."""
+        """Abre até `max_paginas_por_termo` páginas de resultados do termo, a partir de `first_page`; para antes se a
+        página vier vazia ou só repetir vagas que este termo já viu. Vaga já achada por outro termo fica com o primeiro.
+        `on_page` recebe o número da próxima página depois de concluir cada uma (a última do termo não avisa)."""
         seen: set[str] = set()
-        for page_number in range(self._settings.limites.max_paginas_por_termo):
+        max_pages = self._settings.limites.max_paginas_por_termo
+        for page_number in range(first_page, max_pages):
             start = page_number * self._site.page_size
             self._open_checked(navigator, self._site.search_url(termo, start), "busca")
             raws = self._read_cards(navigator)
@@ -432,6 +449,8 @@ class BrowserSource:
             if select_jobs:
                 selected = select_jobs(page)
                 self._enrich_jobs(navigator, selected, self._settings.filtro.trecho_max_chars, on_job)
+            if on_page and page_number + 1 < max_pages:
+                on_page(page_number + 1)
 
     def _read_cards(self, navigator: Navigator) -> list[dict]:
         if self._site.lazy_cards:

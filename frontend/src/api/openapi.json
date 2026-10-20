@@ -1999,6 +1999,17 @@
               }
             ],
             "title": "Conjunto Ids"
+          },
+          "retomar_run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retomar Run Id"
           }
         },
         "type": "object",

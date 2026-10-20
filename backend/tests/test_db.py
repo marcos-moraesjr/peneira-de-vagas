@@ -331,3 +331,18 @@ def test_migracao_13_adiciona_conjunto_da_execucao_e_create_run_grava_o_nome(con
     conn.commit()
     nova = db.create_run(conn, ["gupy"], NOW, conjunto="Mecânica")
     assert conn.execute("SELECT conjunto FROM runs WHERE id=?", (nova,)).fetchone()["conjunto"] == "Mecânica"
+
+
+def test_migracao_15_create_run_grava_os_parametros_da_busca_e_a_fonte_nasce_sem_posicao(conn):
+    parametros = {"conjunto_id": 1, "localidade": "SP", "modalidade": "remoto", "janela_dias": 5}
+    run_id = db.create_run(conn, ["gupy"], NOW, parametros=parametros)
+    run = conn.execute("SELECT conjunto_id, localidade, modalidade, janela_dias FROM runs WHERE id=?", (run_id,)).fetchone()
+    assert dict(run) == parametros
+    fonte = conn.execute("SELECT termo_pos, pagina_pos FROM run_sources WHERE run_id=?", (run_id,)).fetchone()
+    assert (fonte["termo_pos"], fonte["pagina_pos"]) == (0, 0)
+
+
+def test_execucao_sem_parametros_fica_com_eles_nulos(conn):
+    run_id = db.create_run(conn, ["gupy"], NOW)
+    run = conn.execute("SELECT conjunto_id, localidade, modalidade, janela_dias FROM runs WHERE id=?", (run_id,)).fetchone()
+    assert dict(run) == {"conjunto_id": None, "localidade": None, "modalidade": None, "janela_dias": None}

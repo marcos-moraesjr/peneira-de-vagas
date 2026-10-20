@@ -3,19 +3,19 @@
 # registre no changelog de docs/SCANNERS.md. Regras de versão e procedimento: docs/SCANNERS.md.
 
 [linkedin]
-versao = "1.9.4"
+versao = "1.10.0"
 explorado_em = "2026-10-14"
 gerado_por = "Claude"
 referencia = "docs/SCANNERS.md §LinkedIn"
 
 [indeed]
-versao = "1.11.4"
+versao = "1.12.0"
 explorado_em = "2026-10-15"
 gerado_por = "Claude"
 referencia = "docs/SCANNERS.md §Indeed"
 
 [gupy]
-versao = "1.6.1"
+versao = "1.7.0"
 explorado_em = "2026-10-14"
 gerado_por = "Claude"
 referencia = "docs/SCANNERS.md §Gupy"

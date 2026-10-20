@@ -4,7 +4,7 @@ import { describeFailure, sourceLabel } from "../../lib/failures";
 import { buttonSecondary, card } from "../../components/ui";
 
 /** Falha de fonte nunca vira lista vazia: aparece aqui com a causa e permite retomá-la. */
-export function FailureBanner({ run, onRestart, restarting }: { run: Run | undefined; onRestart: (fontes: string[]) => void; restarting: boolean }) {
+export function FailureBanner({ run, onResume, resuming }: { run: Run | undefined; onResume: (runId: number) => void; resuming: boolean }) {
   const failures = run?.fontes.filter((source) => source.status === "falha") ?? [];
   const [selectedFonte, setSelectedFonte] = useState<string | null>(null);
   if (failures.length === 0) return null;
@@ -29,8 +29,8 @@ export function FailureBanner({ run, onRestart, restarting }: { run: Run | undef
             );
           })}
         </div>
-        {!running && (
-          <button type="button" className={buttonSecondary} disabled={restarting} onClick={() => onRestart(failures.map((source) => source.fonte))}>
+        {!running && run && (
+          <button type="button" className={buttonSecondary} disabled={resuming} onClick={() => onResume(run.id)}>
             Retomar de onde parou
           </button>
         )}

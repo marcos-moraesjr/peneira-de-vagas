@@ -100,7 +100,7 @@ export function useRuns() {
 export function useStartRun() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (input: { fontes: string[] | null; localidade?: string; modalidade?: string; janela_dias?: number; conjunto_ids?: number[] }) => apiSend<{ id: number }>("POST", "/api/runs", input),
+    mutationFn: (input: { fontes?: string[] | null; retomar_run_id?: number; localidade?: string; modalidade?: string; janela_dias?: number; conjunto_ids?: number[] }) => apiSend<{ id: number }>("POST", "/api/runs", input),
     onSuccess: () => client.invalidateQueries({ queryKey: ["runs"] }),
   });
 }

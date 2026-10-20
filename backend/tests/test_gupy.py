@@ -224,3 +224,42 @@ def test_enrich_entrega_cada_vaga_ao_callback(settings):
     entregues = []
     make_source(settings, lambda r: None).enrich(jobs, on_job=entregues.append)
     assert entregues == jobs
+
+
+def _paginas_de_um_item(vistos):
+    def handler(request):
+        termo, offset = request.url.params["jobName"], int(request.url.params["offset"])
+        vistos.append((termo, offset))
+        item = {**SAMPLE["data"][0], "id": 2000 + offset}
+        return httpx.Response(200, json={"data": [item], "pagination": {"total": 3}})
+
+    return handler
+
+
+def _gupy_de_uma_vaga_por_pagina(settings, vistos):
+    pequena = replace(settings, gupy=replace(settings.gupy, page_size=1), limites=replace(settings.limites, max_paginas_por_termo=3))
+    return make_source(pequena, _paginas_de_um_item(vistos))
+
+
+def test_busca_paginada_comeca_na_posicao_gravada_sem_repetir_termos_nem_paginas(settings):
+    vistos = []
+    source = _gupy_de_uma_vaga_por_pagina(settings, vistos)
+    recebidas = []
+
+    source.search_and_enrich(["a", "b"], lambda jobs: jobs, on_job=recebidas.append, inicio=(1, 1))
+
+    assert vistos == [("b", 1), ("b", 2)]
+    assert [job.id for job in recebidas] == ["2001", "2002"]
+
+
+def test_busca_paginada_avisa_a_proxima_posicao_depois_de_entregar_cada_pagina(settings):
+    vistos, avisos = [], []
+    source = _gupy_de_uma_vaga_por_pagina(settings, vistos)
+    entregues = []
+
+    source.search_and_enrich(
+        ["a", "b"], lambda jobs: jobs, on_job=entregues.append, on_page=lambda termo, pagina: avisos.append((termo, pagina, len(entregues)))
+    )
+
+    assert [(termo, pagina) for termo, pagina, _ in avisos] == [(0, 1), (0, 2), (1, 0), (1, 1), (1, 2), (2, 0)]
+    assert avisos[0][2] == 1  # a página 0 já foi entregue quando a posição é gravada

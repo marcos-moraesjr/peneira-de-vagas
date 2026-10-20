@@ -78,6 +78,9 @@ def test_localidade_canonica_vira_location_no_linkedin_e_l_no_indeed(settings):
     "url,title,text,motivo",
     [
         ("https://br.indeed.com/jobs?q=x", "Just a moment...", "", "cloudflare"),
+        ("https://br.indeed.com/cdn-cgi/challenge-platform/h/g/orchestrate/chl_page/v1", "Indeed", "", "cloudflare"),
+        ("https://br.indeed.com/jobs?__cf_chl_rt_tk=abc", "Indeed", "", "cloudflare"),
+        ("https://br.indeed.com/jobs?q=x", "Indeed", "Enable JavaScript and cookies to continue", "cloudflare"),
         ("https://br.indeed.com/jobs?q=x", "Um momento…", "", "cloudflare"),
         ("https://br.indeed.com/jobs?q=x", "Indeed", "Verifique se você é humano", "cloudflare"),
         ("https://br.indeed.com/jobs?q=x", "Indeed", "Additional Verification Required", "captcha"),

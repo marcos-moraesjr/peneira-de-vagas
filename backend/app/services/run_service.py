@@ -12,7 +12,7 @@ from ..config import Settings
 from ..errors import DomainError
 from ..sources.errors import SourceEmpty, SourceError
 from ..sources.types import Job
-from . import conjuntos, keywords, logs, scanners
+from . import conjuntos, keywords, logs, runs, scanners
 from .filters import Filter, normalize
 from .localizacao import passes_localidade, passes_modalidade
 from .scanners import Manifest
@@ -79,9 +79,12 @@ def _pre_approve(jobs: list[Job], flt: Filter, settings: Settings) -> list[Job]:
 
 def _run_source(conn, settings, source: Source, termos, flt, conjunto_id: int, run_id: int, now: str) -> None:
     local_filter = getattr(source, "local_filter", True)
-    lidas = 0
-    aprovadas = 0
-    novas = 0
+    # retomada: contadores e posição já gravados na linha da fonte (zeros numa execução nova)
+    saved = conn.execute(
+        "SELECT lidas, aprovadas, novas, termo_pos, pagina_pos FROM run_sources WHERE run_id=? AND fonte=?", (run_id, source.name)
+    ).fetchone()
+    lidas_antes = saved["lidas"]
+    lidas, aprovadas, novas = 0, saved["aprovadas"], saved["novas"]
 
     def save(job: Job) -> None:
         """Avalia a vaga com o detalhe (pontuação completa) e grava assim que ele é lido, para aparecer na lista antes de a fonte terminar."""
@@ -99,25 +102,32 @@ def _run_source(conn, settings, source: Source, termos, flt, conjunto_id: int, r
         aprovadas += len(candidates) - len(unknown)
         return unknown
 
+    def checkpoint(termo: int, pagina: int) -> None:
+        """Próxima posição a abrir, gravada a cada página concluída: é daqui que a retomada recomeça."""
+        _update_source(conn, run_id, source.name, termo_pos=termo, pagina_pos=pagina)
+
     search_and_enrich = getattr(source, "search_and_enrich", None)
     try:
         if callable(search_and_enrich):
-            jobs = search_and_enrich(termos, select_page, on_job=save)
+            jobs = search_and_enrich(
+                termos, select_page, on_job=save, inicio=(saved["termo_pos"], saved["pagina_pos"]), on_page=checkpoint
+            )
         else:
             jobs = source.search(termos)
             if not jobs:
                 raise SourceEmpty("A fonte não devolveu nenhuma vaga")
             candidates = _pre_approve(jobs, flt, settings) if local_filter else jobs
             unknown = db.filter_unknown(conn, candidates, conjunto_id)
-            aprovadas = len(candidates) - len(unknown)
+            aprovadas += len(candidates) - len(unknown)
             source.enrich(unknown, on_job=save)
     except SourceError:
         # o que já foi lido e gravado antes da falha continua contado na linha da fonte
-        _update_source(conn, run_id, source.name, lidas=lidas, aprovadas=aprovadas, novas=novas)
+        _update_source(conn, run_id, source.name, lidas=lidas_antes + lidas, aprovadas=aprovadas, novas=novas)
         raise
-    if not jobs:
+    total_lidas = lidas_antes + (lidas if callable(search_and_enrich) else len(jobs))
+    if not total_lidas:  # na retomada, `jobs` só traz o trecho refeito; vazio de verdade é nada lido em nenhum momento
         raise SourceEmpty("A fonte não devolveu nenhuma vaga")
-    _update_source(conn, run_id, source.name, status="ok", lidas=len(jobs), aprovadas=aprovadas, novas=novas)
+    _update_source(conn, run_id, source.name, status="ok", lidas=total_lidas, aprovadas=aprovadas, novas=novas)
 
 
 def _warn_scanners_to_redo(conn: sqlite3.Connection, settings: Settings, manifest: Manifest, now: str) -> None:
@@ -203,6 +213,7 @@ def execute_sequence(
     sources: list[Source],
     now: Callable[[], str],
     manifest: Manifest | None = None,
+    parametros: dict | None = None,
 ) -> None:
     """Roda um conjunto por execução, na ordem pedida; cada um tem a própria linha no histórico."""
     conn = db.connect(settings.geral.db_path)
@@ -211,7 +222,7 @@ def execute_sequence(
             if position:
                 run_id = db.create_run(
                     conn, [source.name for source in sources], now(), manifest.versions() if manifest else None,
-                    conjuntos.name_of(conn, conjunto_id),
+                    conjuntos.name_of(conn, conjunto_id), {**(parametros or {}), "conjunto_id": conjunto_id},
                 )
             execute_run(settings, run_id, sources, now, manifest, conjunto_id)
             if _blocked(conn, run_id):
@@ -229,10 +240,12 @@ def start_run(
     spawn: Callable[[Callable[[], None]], None] = spawn_thread,
     manifest: Manifest | None = None,
     conjunto_ids: list[int] | None = None,
+    parametros: dict | None = None,
 ) -> int:
     """Valida, abre a execução (uma por vez) e a dispara em segundo plano, gravando a versão de cada scanner.
 
-    Com `conjunto_ids`, roda uma execução por conjunto, em sequência; devolve o id da primeira."""
+    Com `conjunto_ids`, roda uma execução por conjunto, em sequência; devolve o id da primeira.
+    `parametros` (`localidade`, `modalidade`, `janela_dias`) ficam gravados na execução, junto com o conjunto, para a retomada."""
     ids = conjunto_ids or [conjuntos.active_id(conn)]
     if len(set(ids)) != len(ids):
         raise DomainError("Conjunto repetido na sequência")
@@ -240,6 +253,30 @@ def start_run(
         if not keywords.list_all(conn, "busca", conjunto_id):
             raise DomainError(f"Adicione ao menos uma palavra-chave para buscar no conjunto {conjuntos.name_of(conn, conjunto_id)!r}")
     versions = manifest.versions() if manifest else None
-    run_id = db.create_run(conn, [source.name for source in sources], now(), versions, conjuntos.name_of(conn, ids[0]))
-    spawn(lambda: execute_sequence(settings, run_id, ids, sources, now, manifest))
+    run_id = db.create_run(
+        conn, [source.name for source in sources], now(), versions, conjuntos.name_of(conn, ids[0]), {**(parametros or {}), "conjunto_id": ids[0]}
+    )
+    spawn(lambda: execute_sequence(settings, run_id, ids, sources, now, manifest, parametros))
+    return run_id
+
+
+def resume_run(
+    conn: sqlite3.Connection,
+    settings: Settings,
+    sources: list[Source],
+    now: Callable[[], str],
+    run_id: int,
+    spawn: Callable[[Callable[[], None]], None] = spawn_thread,
+    manifest: Manifest | None = None,
+) -> int:
+    """Retoma, na mesma execução, as fontes (entre `sources`) que falharam: cada uma continua da página em que parou,
+    com os contadores já somados. Fontes que terminaram bem não são tocadas. `404` se a execução não existe, `422` se
+    nenhuma das fontes falhou, `409` se há outra em andamento."""
+    run = runs.get_run(conn, run_id)
+    failed = {row["fonte"] for row in run["fontes"] if row["status"] == "falha"}
+    to_resume = [source for source in sources if source.name in failed]
+    if not to_resume:
+        raise DomainError("Nenhuma das fontes pedidas falhou nesta execução: não há o que retomar")
+    db.reopen_run(conn, run_id, [source.name for source in to_resume])
+    spawn(lambda: execute_run(settings, run_id, to_resume, now, manifest, run["conjunto_id"]))
     return run_id

@@ -40,7 +40,7 @@ class GupySource:
     def search(self, termos: list[str]) -> list[Job]:
         client = self._client or httpx.Client(timeout=self._settings.gupy.timeout_s)
         try:
-            return self._collect(client, termos)
+            return self._collect_by_page(client, termos, lambda page: [], None, (0, 0), None)
         finally:
             if self._client is None:
                 client.close()
@@ -52,13 +52,44 @@ class GupySource:
                 on_job(job)
         return jobs
 
-    def _collect(self, client: httpx.Client, termos: list[str]) -> list[Job]:
+    def search_and_enrich(
+        self,
+        termos: list[str],
+        select_jobs: Callable[[list[Job]], list[Job]],
+        on_job: Callable[[Job], None] | None = None,
+        inicio: tuple[int, int] = (0, 0),
+        on_page: Callable[[int, int], None] | None = None,
+    ) -> list[Job]:
+        """Página a página: entrega as vagas novas de cada página antes de pedir a próxima, para a retomada.
+
+        `inicio` = (índice do termo, página) a pedir primeiro; `on_page(termo, pagina)` recebe a **próxima**
+        posição depois de cada página entregue."""
+        client = self._client or httpx.Client(timeout=self._settings.gupy.timeout_s)
+        try:
+            return self._collect_by_page(client, termos, select_jobs, on_job, inicio, on_page)
+        finally:
+            if self._client is None:
+                client.close()
+
+    def _collect_by_page(self, client, termos, select_jobs, on_job, inicio, on_page) -> list[Job]:
         cutoff = self._clock() - timedelta(days=self._settings.busca.janela_dias)
+        max_pages = self._settings.limites.max_paginas_por_termo
+        first_term, first_page = inicio
         found: dict[str, Job] = {}
-        for termo in termos:
-            for job in self._pages(client, termo):
-                if self._inside_recency_window(job, cutoff) and job.id not in found:
-                    found[job.id] = replace(job, palavra_chave=termo)
+        for index, termo in enumerate(termos):
+            if index < first_term:
+                continue
+            for page_number, jobs in self._pages(client, termo, first_page if index == first_term else 0):
+                page = []
+                for job in jobs:
+                    if self._inside_recency_window(job, cutoff) and job.id not in found:
+                        found[job.id] = replace(job, palavra_chave=termo)
+                        page.append(found[job.id])
+                self.enrich(select_jobs(page), on_job)
+                if on_page and page_number + 1 < max_pages:
+                    on_page(index, page_number + 1)
+            if on_page:
+                on_page(index + 1, 0)
         return list(found.values())
 
     def _inside_recency_window(self, job: Job, cutoff: datetime) -> bool:
@@ -78,14 +109,14 @@ class GupySource:
             cutoff = cutoff.replace(tzinfo=timezone.utc)
         return published >= cutoff
 
-    def _pages(self, client: httpx.Client, termo: str):
-        """Pede até `max_paginas_por_termo` páginas da API; para antes se acabarem as vagas do termo."""
-        offset = 0
-        for _ in range(self._settings.limites.max_paginas_por_termo):
+    def _pages(self, client: httpx.Client, termo: str, first_page: int = 0):
+        """Pede até `max_paginas_por_termo` páginas da API (a partir de `first_page`) e entrega `(página, vagas)`;
+        para antes se acabarem as vagas do termo."""
+        offset = first_page * self._settings.gupy.page_size
+        for page_number in range(first_page, self._settings.limites.max_paginas_por_termo):
             payload = self._request(client, termo, offset)
             items = payload["data"]
-            for item in items:
-                yield self._to_job(item)
+            yield page_number, [self._to_job(item) for item in items]
             offset += len(items)
             total = (payload.get("pagination") or {}).get("total", 0)
             if not items or offset >= total:

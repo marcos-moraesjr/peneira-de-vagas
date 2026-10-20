@@ -15,7 +15,14 @@ from .types import Job
 CARD_SELECTOR = "div.job_seen_beacon"
 EMPTY_MARKERS = ("nao encontrou nenhum resultado", "did not match any jobs", "nenhuma vaga")
 CLOUDFLARE_TITLES = ("just a moment", "um momento", "attention required")
-CLOUDFLARE_TEXTS = ("verifique que voce e humano", "verifique se voce e humano", "verify you are human", "checking your browser")
+CLOUDFLARE_TEXTS = (
+    "verifique que voce e humano",
+    "verifique se voce e humano",
+    "verify you are human",
+    "checking your browser",
+    "enable javascript and cookies to continue",
+)
+CLOUDFLARE_URL_MARKERS = ("/cdn-cgi/", "__cf_chl_")
 CAPTCHA_TEXTS = ("additional verification required", "captcha")
 
 EXTRACT_JS = """() => {
@@ -78,7 +85,11 @@ class IndeedSite:
         title_n, text_n = normalize(title), normalize(text)
         if "/auth" in url:
             return "login"
-        if title_n.startswith(CLOUDFLARE_TITLES) or any(marker in text_n for marker in CLOUDFLARE_TEXTS):
+        if (
+            any(marker in url.lower() for marker in CLOUDFLARE_URL_MARKERS)
+            or title_n.startswith(CLOUDFLARE_TITLES)
+            or any(marker in text_n for marker in CLOUDFLARE_TEXTS)
+        ):
             return "cloudflare"
         if any(marker in text_n for marker in CAPTCHA_TEXTS):
             return "captcha"

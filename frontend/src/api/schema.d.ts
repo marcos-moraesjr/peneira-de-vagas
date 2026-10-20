@@ -675,6 +675,8 @@ export interface components {
             janela_dias?: number | null;
             /** Conjunto Ids */
             conjunto_ids?: number[] | null;
+            /** Retomar Run Id */
+            retomar_run_id?: number | null;
         };
         /** RunOut */
         RunOut: {

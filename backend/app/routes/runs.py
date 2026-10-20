@@ -13,6 +13,35 @@ from ..sources.registry import build_sources
 router = APIRouter()
 
 
+def _com_parametros(settings: Settings, localidade: str | None, modalidade: str | None, janela_dias: int | None) -> Settings:
+    """Valida e aplica os parâmetros da busca sobre a config (`None` = valor da config)."""
+    if localidade is not None:
+        localidade = localidade.strip()
+        if localidade and localidade not in ESTADOS_BRASIL:
+            raise DomainError(f"localidade={localidade!r}: esperado um estado brasileiro da lista oficial")
+        settings = replace(settings, busca=replace(settings.busca, localidades=[localidade] if localidade else []))
+    if modalidade is not None:
+        modalidade = modalidade.strip()
+        if modalidade and modalidade not in MODALIDADES:
+            raise DomainError(f"modalidade={modalidade!r}: esperado um de {list(MODALIDADES)}")
+        settings = replace(settings, busca=replace(settings.busca, modalidade=[modalidade] if modalidade else []))
+    if janela_dias is not None:
+        if janela_dias < 1:
+            raise DomainError(f"janela_dias={janela_dias}: esperado um inteiro maior ou igual a 1")
+        settings = replace(settings, busca=replace(settings.busca, janela_dias=janela_dias))
+    return settings
+
+
+def _fontes_pedidas(sources: list, fontes: list[str] | None) -> list:
+    if fontes is None:
+        return sources
+    names = [source.name for source in sources]
+    unknown = [fonte for fonte in fontes if fonte not in names]
+    if not fontes or unknown:
+        raise DomainError(f"fontes={unknown or fontes}: esperado ao menos uma entre {names}")
+    return [source for source in sources if source.name in fontes]
+
+
 @router.post("/runs", response_model=RunStarted, status_code=202)
 def start_run(
     request: Request,
@@ -21,31 +50,34 @@ def start_run(
     settings: Settings = Depends(get_settings),
     now=Depends(get_now),
 ) -> RunStarted:
-    run_settings = settings
-    custom_search = bool(body and (body.localidade is not None or body.modalidade is not None or body.janela_dias is not None))
-    if body and body.localidade is not None:
-        localidade = body.localidade.strip()
-        if localidade and localidade not in ESTADOS_BRASIL:
-            raise DomainError(f"localidade={localidade!r}: esperado um estado brasileiro da lista oficial")
-        run_settings = replace(run_settings, busca=replace(run_settings.busca, localidades=[localidade] if localidade else []))
-    if body and body.modalidade is not None:
-        modalidade = body.modalidade.strip()
-        if modalidade and modalidade not in MODALIDADES:
-            raise DomainError(f"modalidade={modalidade!r}: esperado um de {list(MODALIDADES)}")
-        run_settings = replace(run_settings, busca=replace(run_settings.busca, modalidade=[modalidade] if modalidade else []))
-    if body and body.janela_dias is not None:
-        if body.janela_dias < 1:
-            raise DomainError(f"janela_dias={body.janela_dias}: esperado um inteiro maior ou igual a 1")
-        run_settings = replace(run_settings, busca=replace(run_settings.busca, janela_dias=body.janela_dias))
+    if body and body.retomar_run_id is not None:
+        return _resume_run(request, body, conn, settings, now)
+    parametros = {
+        "localidade": body.localidade.strip() if body and body.localidade is not None else None,
+        "modalidade": body.modalidade.strip() if body and body.modalidade is not None else None,
+        "janela_dias": body.janela_dias if body else None,
+    }
+    run_settings = _com_parametros(settings, **parametros)
+    custom_search = any(value is not None for value in parametros.values())
     sources = build_sources(run_settings, request.app.state.gate) if custom_search else request.app.state.sources_factory()
-    fontes = body.fontes if body else None
-    if fontes is not None:
-        names = [source.name for source in sources]
-        unknown = [fonte for fonte in fontes if fonte not in names]
-        if not fontes or unknown:
-            raise DomainError(f"fontes={unknown or fontes}: esperado ao menos uma entre {names}")
-        sources = [source for source in sources if source.name in fontes]
-    run_id = run_service.start_run(conn, run_settings, sources, now, request.app.state.spawn, request.app.state.manifest, body.conjunto_ids if body else None)
+    sources = _fontes_pedidas(sources, body.fontes if body else None)
+    run_id = run_service.start_run(
+        conn, run_settings, sources, now, request.app.state.spawn, request.app.state.manifest,
+        body.conjunto_ids if body else None, parametros,
+    )
+    return RunStarted(id=run_id)
+
+
+def _resume_run(request: Request, body: RunIn, conn: sqlite3.Connection, settings: Settings, now) -> RunStarted:
+    """Retoma a execução que falhou com os parâmetros gravados nela (a barra de busca pode ter mudado desde então)."""
+    saved = runs.get_run(conn, body.retomar_run_id)
+    run_settings = _com_parametros(settings, saved["localidade"], saved["modalidade"], saved["janela_dias"])
+    custom_search = any(saved[key] is not None for key in ("localidade", "modalidade", "janela_dias"))
+    sources = build_sources(run_settings, request.app.state.gate) if custom_search else request.app.state.sources_factory()
+    sources = _fontes_pedidas(sources, body.fontes)
+    run_id = run_service.resume_run(
+        conn, run_settings, sources, now, body.retomar_run_id, request.app.state.spawn, request.app.state.manifest
+    )
     return RunStarted(id=run_id)
 
 

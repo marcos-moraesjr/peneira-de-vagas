@@ -179,11 +179,22 @@ CREATE TABLE sequencia_conjuntos (
 );
 """
 
+# V15: retomada de onde parou. A execução guarda os parâmetros da busca (a retomada refaz a mesma busca, mesmo que a
+# barra mude depois; nulo = valor da config) e cada fonte guarda a próxima posição a abrir (termo e página, base 0).
+_MIGRATION_V15 = """
+ALTER TABLE runs ADD COLUMN conjunto_id INTEGER;
+ALTER TABLE runs ADD COLUMN localidade TEXT;
+ALTER TABLE runs ADD COLUMN modalidade TEXT;
+ALTER TABLE runs ADD COLUMN janela_dias INTEGER;
+ALTER TABLE run_sources ADD COLUMN termo_pos INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE run_sources ADD COLUMN pagina_pos INTEGER NOT NULL DEFAULT 0;
+"""
+
 # Versão do esquema → script. Banco existente é copiado para backup_dir antes de qualquer migração.
 MIGRATIONS = {
     1: _SCHEMA_V1, 2: _MIGRATION_V2, 3: _MIGRATION_V3, 4: _MIGRATION_V4,
     5: _MIGRATION_V5, 6: _MIGRATION_V6, 7: _MIGRATION_V7, 8: _MIGRATION_V8, 9: _MIGRATION_V9,
-    10: _MIGRATION_V10, 11: _MIGRATION_V11, 12: _MIGRATION_V12, 13: _MIGRATION_V13, 14: _MIGRATION_V14,
+    10: _MIGRATION_V10, 11: _MIGRATION_V11, 12: _MIGRATION_V12, 13: _MIGRATION_V13, 14: _MIGRATION_V14, 15: _MIGRATION_V15,
 }
 SCHEMA_VERSION = max(MIGRATIONS)
 
@@ -252,16 +263,21 @@ def init_db(conn: sqlite3.Connection, settings: Settings, now: str = "1970-01-01
 
 
 def create_run(
-    conn: sqlite3.Connection, fontes: list[str], now: str, versions: dict[str, str] | None = None, conjunto: str = ""
+    conn: sqlite3.Connection, fontes: list[str], now: str, versions: dict[str, str] | None = None,
+    conjunto: str = "", parametros: dict | None = None,
 ) -> int:
-    """Abre uma execução (uma por vez), gravando o nome do conjunto e a versão do scanner de cada fonte."""
+    """Abre uma execução (uma por vez), gravando o nome do conjunto, a versão do scanner de cada fonte e os
+    parâmetros da busca (`conjunto_id`, `localidade`, `modalidade`, `janela_dias`) para a retomada."""
+    parametros = parametros or {}
     versions = versions or {}
     conn.execute("BEGIN IMMEDIATE")
     try:
         if conn.execute("SELECT 1 FROM runs WHERE status='executando'").fetchone():
             raise Conflict("Já existe uma execução em andamento")
         run_id = conn.execute(
-            "INSERT INTO runs (inicio, status, conjunto) VALUES (?, 'executando', ?)", (now, conjunto)
+            "INSERT INTO runs (inicio, status, conjunto, conjunto_id, localidade, modalidade, janela_dias) "
+            "VALUES (?, 'executando', ?, ?, ?, ?, ?)",
+            (now, conjunto, *(parametros.get(k) for k in ("conjunto_id", "localidade", "modalidade", "janela_dias"))),
         ).lastrowid
         conn.executemany(
             "INSERT INTO run_sources (run_id, fonte, status, scanner_versao) VALUES (?, ?, 'aguardando', ?)",
@@ -272,6 +288,24 @@ def create_run(
         conn.rollback()
         raise
     return run_id
+
+
+def reopen_run(conn: sqlite3.Connection, run_id: int, fontes: list[str]) -> None:
+    """Reabre a execução para retomar as fontes que falharam (uma execução por vez): elas voltam a 'aguardando', sem o
+    motivo da falha e **com** os contadores e a posição gravados."""
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        if conn.execute("SELECT 1 FROM runs WHERE status='executando'").fetchone():
+            raise Conflict("Já existe uma execução em andamento")
+        conn.execute("UPDATE runs SET status='executando', fim=NULL WHERE id=?", (run_id,))
+        conn.executemany(
+            "UPDATE run_sources SET status='aguardando', motivo=NULL, detalhe=NULL WHERE run_id=? AND fonte=?",
+            [(run_id, fonte) for fonte in fontes],
+        )
+        conn.commit()
+    except BaseException:
+        conn.rollback()
+        raise
 
 
 def close_stale_runs(conn: sqlite3.Connection, now: str) -> None:

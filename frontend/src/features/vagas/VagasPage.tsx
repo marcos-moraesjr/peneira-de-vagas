@@ -158,7 +158,7 @@ export function VagasPage() {
           sequencia={sequencia.map((id) => conjuntos.find((item) => item.id === id)?.nome ?? String(id))}
         />
       </ChromeStatus>
-      <FailureBanner run={latest} onRestart={runSearch} restarting={startRun.isPending} />
+      <FailureBanner run={latest} onResume={(runId) => startRun.mutate({ retomar_run_id: runId })} resuming={startRun.isPending} />
       <ScannerBanner />
       <UpdateNotice />
       <section aria-label="Filtros da lista" className="space-y-2 rounded-painel border border-linha bg-painel px-4 py-3">

@@ -279,6 +279,43 @@ def test_busca_abre_o_detalhe_de_cada_pagina_antes_de_continuar_a_paginar(settin
     ]
 
 
+def test_busca_comeca_na_posicao_gravada_sem_reabrir_termos_nem_paginas_anteriores(settings):
+    nav = FakeNavigator(
+        {
+            "https://site/?q=b&start=2": {"raw": [card(3)]},
+            "https://site/?q=b&start=4": {"raw": []},
+        },
+        details={"https://site/job/3": {"detail": "descrição"}},
+    )
+    source, *_ = make_source(settings, nav)
+
+    source.search_and_enrich(["a", "b"], lambda jobs: jobs, inicio=(1, 1))
+
+    assert nav.opened == ["https://site/?q=b&start=2", "https://site/job/3", "https://site/?q=b&start=4"]
+
+
+def test_busca_avisa_a_proxima_posicao_a_cada_pagina_concluida_depois_dos_detalhes(settings):
+    nav = FakeNavigator(
+        {
+            "https://site/?q=a&start=0": {"raw": [card(1)]},
+            "https://site/?q=a&start=2": {"raw": []},
+            "https://site/?q=b&start=0": {"raw": [card(2)]},
+            "https://site/?q=b&start=2": {"raw": [card(3)]},
+            "https://site/?q=b&start=4": {"raw": [card(4)]},
+        },
+    )
+    source, *_ = make_source(settings, nav)
+    avisos = []
+
+    source.search_and_enrich(
+        ["a", "b"], lambda jobs: jobs, on_page=lambda termo, pagina: avisos.append((termo, pagina, len(nav.opened)))
+    )
+
+    # página 0 de "a" (+ detalhe), "a" acaba na página vazia; "b" lê as 3 páginas permitidas e passa do último termo
+    assert [(termo, pagina) for termo, pagina, _ in avisos] == [(0, 1), (1, 0), (1, 1), (1, 2), (2, 0)]
+    assert avisos[0][2] == 2  # aviso só depois de abrir o detalhe da vaga 1
+
+
 def with_localidades(settings, localidades):
     busca = settings.busca.__class__(**{**settings.busca.__dict__, "localidades": localidades})
     return settings.__class__(**{**settings.__dict__, "busca": busca})

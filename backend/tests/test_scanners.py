@@ -161,6 +161,10 @@ def test_migracao_v1_para_v2_adiciona_a_coluna_e_faz_copia(conn, settings):
     conn.execute("ALTER TABLE jobs DROP COLUMN publicada_em")
     conn.execute("ALTER TABLE runs DROP COLUMN conjunto")  # coluna da migração 13, que também roda neste teste
     conn.execute("DROP TABLE sequencia_conjuntos")  # tabela da migração 14, que também roda neste teste
+    for coluna in ("conjunto_id", "localidade", "modalidade", "janela_dias"):  # colunas da migração 15, que também roda neste teste
+        conn.execute(f"ALTER TABLE runs DROP COLUMN {coluna}")
+    conn.execute("ALTER TABLE run_sources DROP COLUMN termo_pos")
+    conn.execute("ALTER TABLE run_sources DROP COLUMN pagina_pos")
     conn.execute("DROP TABLE keywords")  # volta ao esquema 1 (migração 4 também roda neste teste)
     conn.execute("DROP TABLE conjuntos")
     conn.executescript(db.MIGRATIONS[1])
