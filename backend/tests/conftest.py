@@ -5,6 +5,7 @@ import pytest
 
 from backend.app.config import Settings, load_settings
 from backend.app.db import connect, init_db
+from backend.tests.api_support import StubSource, job, make_client
 
 CONFIG_PATH = Path(__file__).resolve().parents[1] / "config.toml"
 
@@ -52,3 +53,10 @@ def abrir_conexao():
     yield _abrir
     for connection in abertas:
         connection.close()
+
+
+@pytest.fixture
+def client(settings):
+    sources = [StubSource(jobs=[job("1"), job("2", "Engenheiro Mecânico Sênior", empresa="Zeta Indústria")])]
+    with make_client(settings, sources) as test_client:
+        yield test_client

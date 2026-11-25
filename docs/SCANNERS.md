@@ -65,7 +65,7 @@ com hash aleatório, mas nenhum é garantido. O alerta "zero vagas lidas" é a d
 | --- | --- | --- | --- |
 | Canal | Navegador (CDP) | Navegador (CDP) | HTTP (`httpx`) |
 | Volume observado | 53 resultados em 24h (3 páginas, 25 por página) | 15–16 cards por página, 5 páginas | 20 vagas no total |
-| ID estável | `data-occludable-job-id` no `<li>` | `data-jk` no link do título | `id` numérico |
+| ID estável | `componentkey="job-card-component-ref-<id>"` no card | `data-jk` no link do título | `id` numérico |
 | Data da vaga | texto relativo, só no detalhe | não há no card nem no painel | `publishedDate` ISO |
 | Filtro de recência | `f_TPR=r86400` (confirmado) | `fromage=1` (**não confirmado**) | não existe; filtro local (`janela_dias`) |
 | Paginação | `start=` (25 em 25) | `start=` (10 em 10) | `limit` + `offset` |
@@ -78,28 +78,27 @@ dedicado, login manual e porta de depuração: ver `ARCHITECTURE.md` e `TECH_STA
 
 - **Busca:** `https://www.linkedin.com/jobs/search/?keywords=<termo>&f_TPR=r86400` (o site acrescenta
   `currentJobId`). A localidade vai em `location` e a modalidade em `f_WT` (`1` remoto, `2` presencial, `3` híbrido).
-- **Cards:** 25 `li[data-occludable-job-id]` por página, com os 25 IDs já no DOM antes de renderizar (dá para
-  deduplicar antes de ler o card). A renderização é **incremental** (7–11 completos ao carregar, ~16 após rolar):
+- **Cards:** `div[componentkey^="job-card-component-ref-"]` (layout de 15/11/2026: sem `<li>`, sem link
+  `/jobs/view/` e sem classes estáveis), com o ID já no DOM antes de renderizar. A renderização é **incremental** (7–11 completos ao carregar, ~16 após rolar):
   a leitura acontece enquanto rola. Não há `<time>` no card; "Promovida", "Visualizado" e "Candidatura simplificada"
   aparecem só no texto.
 
   | Dado | Seletor |
   | --- | --- |
-  | ID | `data-occludable-job-id` do `<li>` (comparado direto, sem interpolar em seletor CSS) |
-  | Link | `a[href*="/jobs/view/"]` |
-  | Título | `a[href*="/jobs/view/"] strong` |
-  | Empresa | `.artdeco-entity-lockup__subtitle` |
-  | Local/modalidade | `.artdeco-entity-lockup__caption` |
+  | ID | sufixo do `componentkey` do card (comparado direto, sem interpolar em seletor CSS) |
+  | Link | montado: `https://www.linkedin.com/jobs/view/<id>/` |
+  | Título | último `<span>` do `p` em `div[data-display-contents="true"] > p` (o 1º é o selo "Selecionada… (vaga verificada)") |
+  | Empresa | `p` do `div` irmão seguinte ao do título |
+  | Local/modalidade | `p` filho direto do bloco que contém o título |
 
 - **Contagem:** `.jobs-search-results-list__title-heading`. **Paginação:** `.jobs-search-pagination`, botões por
   `aria-label` ("Página N", "Ver próxima página").
-- **Detalhe (painel lateral):** abre-se clicando no título (`strong`), não no `<a>` (o link do card selecionado
-  fica `disabled`). Descrição em `data-testid="expandable-text-box"` (`textContent`, sem clicar em "mais"). A data
-  está em `.job-details-jobs-unified-top-card__tertiary-description-container` ("Santana de Parnaíba, São Paulo ·
-  Anunciada novamente há 8 horas · 95 candidaturas"); a fonte tenta cada seletor em ordem e, sem data, procura no
+- **Detalhe (painel lateral):** abre-se clicando em `[role="button"]` do card. Descrição em `data-testid="expandable-text-box"` (`textContent`, sem clicar em "mais"). A data
+  está em `p:has(> span > strong)` ("Curitiba, Paraná, Brasil · há 2 dias · 11 candidaturas"); a fonte tenta cada seletor em ordem e, sem data, procura no
   texto da página uma linha que seja inteira a data. "Anunciada novamente" é repostagem, não vaga nova.
 - **Não verificado:** perfil sem login, `f_WT` com vários valores, `location` com estado inteiro, formato da data
   com a interface em inglês ou sem "há".
+| 1.11.0 | 2026-11-15 | Layout novo do LinkedIn: cards por `componentkey^="job-card-component-ref-"` (sumiram `li[data-occludable-job-id]`, `a[href*="/jobs/view/"]` e as classes `artdeco-*`); título/empresa/local por estrutura, clique no painel por `[role="button"]`, data do detalhe por `p:has(> span > strong)`; link montado pelo ID |
 
 ### Indeed
 
@@ -170,6 +169,7 @@ Linhas por versão, da mais antiga à mais nova. Convenção: **não verificado*
 | 1.9.2, 1.9.3 | 2026-10-15 | Pausa de detalhe `[ritmo] pausa_detalhe_min_s`–`max_s` (3–6 s) após abrir cada painel (a rajada de cliques antecedia o HTTP 429) e `intervalo_tentativa_painel_s` (15 s) entre tentativas |
 | 1.9.4 | 2026-10-15 | Referência da documentação migrada para este arquivo; sem mudança de comportamento |
 | 1.10.0 | 2026-10-19 | Retomada de onde parou: `search_and_enrich` aceita `inicio` (termo, página) e avisa `on_page` com a próxima posição a cada página concluída; sem mudança de seletores |
+| 1.10.1 | 2026-11-11 | Página pública deslogada (linhas "Cadastre-se agora"/"Join now", sem redirecionar a `/login`) passa a falhar como `login`, não `seletor_nao_encontrado`; observado no DOM real: perfil dedicado sem sessão |
 
 ### Indeed
 

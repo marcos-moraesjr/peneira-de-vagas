@@ -1,8 +1,8 @@
-"""Adaptador do LinkedIn. Seletores OBSERVADOS no DOM real em 14/10/2026 (docs/SCANNERS.md §LinkedIn); frágeis,
+"""Adaptador do LinkedIn. Seletores OBSERVADOS no DOM real em 15/11/2026 (docs/SCANNERS.md §LinkedIn); frágeis,
 mudam sem aviso. Ao quebrar, a fonte falha com 'seletor_nao_encontrado' em vez de devolver lista vazia.
 
-A renderização é incremental: o <li> já traz o ID, mas título/empresa só aparecem depois de rolar até ele
-(por isso lazy_cards=True). As classes dos contêineres têm hash aleatório e não são usadas.
+Layout atual: cada card é um div[componentkey="job-card-component-ref-<id>"] (sem <li>, sem link /jobs/view/ e
+sem classes estáveis, que têm hash). O card só traz título/empresa depois de renderizar (lazy_cards=True).
 """
 from datetime import datetime
 from urllib.parse import urlencode
@@ -15,34 +15,41 @@ from .relative_date import parse_relative_date
 from .types import Job
 
 SECONDS_PER_HOUR = 3600
-CARD_SELECTOR = "li[data-occludable-job-id]"
+CARD_PREFIX = "job-card-component-ref-"
+CARD_SELECTOR = f'[componentkey^="{CARD_PREFIX}"]'
+# Linhas do cabeçalho da página pública (sem sessão): o LinkedIn serve a busca sem redirecionar para /login.
+LOGGED_OUT_LINES = ("cadastre se agora", "join now")
 EMPTY_MARKERS = ("nenhuma vaga correspondente", "no matching jobs", "nenhum resultado")
 
-# Na página de detalhe: "Cidade · Anunciada novamente há 8 horas · 95 candidaturas" (observado em 14/10/2026).
-PUBLISHED_SELECTORS = [".job-details-jobs-unified-top-card__tertiary-description-container"]
+# Na página de detalhe: "Cidade · há 2 dias · 11 candidaturas" (observado em 15/11/2026), num <p> com <span><strong>.
+PUBLISHED_SELECTORS = ["p:has(> span > strong)"]
 
 OPEN_DETAIL_JS = """() => {
   const jobId = __JOB_ID__;
-  const card = [...document.querySelectorAll('li[data-occludable-job-id]')]
-    .find((item) => item.getAttribute('data-occludable-job-id') === jobId);
+  const card = document.querySelector('[componentkey="job-card-component-ref-' + jobId + '"]');
   if (!card) return false;
-  const title = card.querySelector('a[href*="/jobs/view/"] strong')
-    || card.querySelector('a[href*="/jobs/view/"]');
-  if (!title) return false;
-  title.click();
+  const target = card.querySelector('[role="button"]') || card;
+  target.click();
   return true;
 }"""
 
 
 EXTRACT_JS = """() => {
+  const prefix = 'job-card-component-ref-';
   const clean = (t) => (t || '').replace(/\\s+/g, ' ').trim();
-  const text = (root, selector) => { const e = root.querySelector(selector); return e ? clean(e.innerText || e.textContent) : ''; };
-  return [...document.querySelectorAll('li[data-occludable-job-id]')].map((li) => ({
-    id: li.getAttribute('data-occludable-job-id') || '',
-    title: text(li, 'a[href*="/jobs/view/"] strong'),
-    company: text(li, '.artdeco-entity-lockup__subtitle'),
-    text: text(li, '.artdeco-entity-lockup__caption'),
-  }));
+  return [...document.querySelectorAll('[componentkey^="' + prefix + '"]')].map((card) => {
+    const titleBox = card.querySelector('div[data-display-contents="true"] > p');
+    const spans = titleBox ? [...titleBox.children].filter((e) => e.tagName === 'SPAN') : [];
+    const lockup = titleBox ? titleBox.parentElement.parentElement : null;
+    const company = titleBox && titleBox.parentElement.nextElementSibling;
+    const place = lockup && [...lockup.children].find((e) => e.tagName === 'P');
+    return {
+      id: (card.getAttribute('componentkey') || '').slice(prefix.length),
+      title: spans.length ? clean(spans[spans.length - 1].innerText || spans[spans.length - 1].textContent) : '',
+      company: company ? clean(company.innerText || company.textContent) : '',
+      text: place ? clean(place.innerText || place.textContent) : '',
+    };
+  });
 }"""
 
 
@@ -81,6 +88,9 @@ class LinkedInSite:
         if "/checkpoint" in url:
             return "captcha"
         if any(part in url for part in ("/authwall", "/login", "/uas/")):
+            return "login"
+        lines = {normalize(line) for line in text.splitlines()}
+        if any(marker in lines for marker in LOGGED_OUT_LINES):
             return "login"
         return None
 

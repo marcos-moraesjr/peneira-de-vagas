@@ -38,20 +38,20 @@ def test_linkedin_le_cards_rolando_um_a_um_e_ignora_o_nao_renderizado(page, sett
     assert [j.id for j in jobs] == ["3900000001", "3900000002"]
     assert jobs[0].titulo == "Engenheiro Mecânico Pleno"
     assert jobs[0].empresa == "Metalúrgica Exemplo"
-    assert jobs[0].trecho == "Campinas, São Paulo, Brasil (Presencial)"
+    assert jobs[0].trecho == "Campinas, SP (Presencial)"
     assert jobs[0].link == "https://www.linkedin.com/jobs/view/3900000001/"
-    assert jobs[0].localidade == "Campinas, São Paulo, Brasil (Presencial)"
+    assert jobs[0].localidade == "Campinas, SP (Presencial)"
+    assert jobs[1].titulo == "Analista de Compras" and jobs[1].localidade == "Remoto"
     assert len(pausas) == 1  # apenas o card ainda não renderizado precisa de rolagem
 
 
 def test_linkedin_card_que_renderiza_depois_de_rolar_e_aproveitado(page, settings):
     site = LinkedInSite(settings)
     page.set_content(
-        """<ul><li data-occludable-job-id="77"></li></ul>
+        """<div componentkey="job-card-component-ref-77"></div>
         <script>
-          const li = document.querySelector('li');
-          li.addEventListener('mouseenter', () => {});
-          window.fill = () => { li.innerHTML = '<a href="/jobs/view/77/"><strong>Projetista Mecânico</strong></a>'; };
+          const card = document.querySelector('div');
+          window.fill = () => { card.innerHTML = '<div data-display-contents="true"><p><span></span><span>Projetista Mecânico</span></p></div><div><p>ACME</p></div>'; };
         </script>"""
     )
     navigator = PlaywrightNavigator(page, timeout_ms=5000)
@@ -61,9 +61,8 @@ def test_linkedin_card_que_renderiza_depois_de_rolar_e_aproveitado(page, setting
 
 def test_linkedin_abre_o_painel_com_id_sem_quebrar_o_seletor(page, settings):
     page.set_content(
-        """<ul><li data-occludable-job-id="4477569627">
-        <a href="/jobs/view/4477569627/"><strong>Vaga</strong></a></li></ul>
-        <script>window.opened = false; const link = document.querySelector('a'); link.addEventListener('click', (event) => { event.preventDefault(); window.opened = true; });</script>"""
+        """<div componentkey="job-card-component-ref-4477569627"><div role="button"><p>Vaga</p></div></div>
+        <script>window.opened = false; document.querySelector('[role=button]').addEventListener('click', () => { window.opened = true; });</script>"""
     )
     site = LinkedInSite(settings)
     script = site.open_detail_js.replace("__JOB_ID__", json.dumps("4477569627"))
@@ -151,7 +150,7 @@ def test_pagina_sem_cards_devolve_lista_vazia(page, settings):
     page.set_content("<html><body>nada</body></html>")
     navigator = PlaywrightNavigator(page, timeout_ms=5000)
     assert navigator.extract(LinkedInSite(settings).extract_js) == []
-    assert navigator.extract_progressive(LinkedInSite(settings).extract_js, "li[data-occludable-job-id]", lambda: None) == []
+    assert navigator.extract_progressive(LinkedInSite(settings).extract_js, LinkedInSite(settings).card_selector, lambda: None) == []
 
 
 def test_first_text_devolve_o_primeiro_seletor_que_existe(page):

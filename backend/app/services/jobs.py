@@ -134,6 +134,8 @@ def update_job(conn, job_id: int, visto: bool | None, excluida: bool | None, can
         campos["excluida"] = 0
     if "candidatada" in campos:  # a data registra quando a candidatura foi marcada; desfazer a limpa
         campos["candidatada_em"] = agora if campos["candidatada"] else None
+    if "excluida" in campos:  # idem: a data registra quando a vaga foi excluída; restaurar (ou candidatar) a limpa
+        campos["excluida_em"] = agora if campos["excluida"] else None
     atribuicoes = ", ".join(f"{nome}=?" for nome in campos)
     cursor = conn.execute(f"UPDATE jobs SET {atribuicoes} WHERE id=?", [*campos.values(), job_id])
     conn.commit()

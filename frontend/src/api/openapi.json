@@ -1663,6 +1663,17 @@
             "type": "boolean",
             "title": "Excluida"
           },
+          "excluida_em": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Excluida Em"
+          },
           "candidatada": {
             "type": "boolean",
             "title": "Candidatada"
@@ -1699,6 +1710,7 @@
           "publicada_em",
           "visto",
           "excluida",
+          "excluida_em",
           "candidatada",
           "candidatada_em"
         ],

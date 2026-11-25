@@ -46,14 +46,21 @@ const ESTADO_TITULO: Record<EstadoConjunto, string> = {
 /** Estado de cada conjunto da sequência, a partir das execuções mais recentes (uma por conjunto, em ordem).
  * A última execução localiza o conjunto atual; as anteriores só valem se seguirem a ordem da sequência. */
 function estadosDaSequencia(nomes: string[], runs: Run[]): EstadoConjunto[] {
-  const estados = nomes.map((): EstadoConjunto => "pendente");
+  return execucoesDaSequencia(nomes, runs).map((run) =>
+    !run ? "pendente" : run.status === "executando" ? "andamento" : run.fontes.some((fonte) => fonte.status === "falha") ? "falha" : "sucesso",
+  );
+}
+
+/** Execução de cada conjunto da sequência (`undefined` = ainda não buscado). */
+function execucoesDaSequencia(nomes: string[], runs: Run[]): (Run | undefined)[] {
+  const execucoes: (Run | undefined)[] = nomes.map(() => undefined);
   const atual = runs.length ? nomes.indexOf(runs[0].conjunto) : -1;
   for (let k = 0; atual >= 0 && k <= atual; k++) {
     const run = runs[k];
     if (!run || run.conjunto !== nomes[atual - k]) break;
-    estados[atual - k] = run.status === "executando" ? "andamento" : run.fontes.some((fonte) => fonte.status === "falha") ? "falha" : "sucesso";
+    execucoes[atual - k] = run;
   }
-  return estados;
+  return execucoes;
 }
 
 function newJobsText(run: Run): string {
@@ -82,6 +89,8 @@ type Props = {
   /** Ids dos conjuntos a buscar, em ordem; vazia = só o conjunto ativo. */
   sequencia: number[];
   onSequenciaChange: (ids: number[]) => void;
+  /** Retoma, na mesma execução, só a fonte que falhou, da página em que parou. */
+  onRetomar: (runId: number, fonte: string) => void;
   hint?: string;
 };
 
@@ -132,6 +141,7 @@ export function RunBar({
   conjuntos,
   sequencia,
   onSequenciaChange,
+  onRetomar,
   hint,
 }: Props) {
   const [selected, setSelected] = useState<string[]>(sources);
@@ -157,6 +167,9 @@ export function RunBar({
   const fora = conjuntos.filter((item) => !sequencia.includes(item.id));
   const nomes = sequencia.map((id) => conjuntos.find((item) => item.id === id)?.nome ?? String(id));
   const estados = estadosDaSequencia(nomes, runs);
+  const execucoes = execucoesDaSequencia(nomes, runs);
+  const [aberto, setAberto] = useState<number | null>(null);
+  const indiceAberto = aberto === null ? -1 : sequencia.indexOf(aberto);
 
   function toggle(name: string) {
     setSelected((current) => (current.includes(name) ? current.filter((item) => item !== name) : [...current, name]));
@@ -264,7 +277,15 @@ export function RunBar({
                     className={`flex shrink-0 items-center gap-1.5 rounded-botao border px-2 py-1 ${ESTADO_CLASSE[estado]} ${running ? "" : "cursor-grab"} ${arrastando === id ? "opacity-50" : ""}`}
                   >
                     <span className="text-legenda opacity-70">{index + 1}.</span>
-                    <span className="whitespace-nowrap" title={nome}>{nome}</span>
+                    <button
+                      type="button"
+                      className="whitespace-nowrap rounded hover:underline"
+                      title={nome}
+                      aria-expanded={aberto === id}
+                      onClick={() => setAberto(aberto === id ? null : id)}
+                    >
+                      {nome}
+                    </button>
                     <button type="button" className={miniBotao} aria-label={`Subir ${nome}`} disabled={running || index === 0} onClick={() => move(index, -1)}>←</button>
                     <button type="button" className={miniBotao} aria-label={`Descer ${nome}`} disabled={running || index === sequencia.length - 1} onClick={() => move(index, 1)}>→</button>
                     <button type="button" className={`${miniBotao} hover:text-erro-fg`} aria-label={`Remover ${nome}`} disabled={running} onClick={() => onSequenciaChange(sequencia.filter((item) => item !== id))}>✕</button>
@@ -272,6 +293,32 @@ export function RunBar({
                 );
               })}
             </ol>
+          )}
+          {indiceAberto >= 0 && (
+            <div role="group" aria-label={`Fontes de ${nomes[indiceAberto]}`} className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 text-[13px] font-semibold">
+              {execucoes[indiceAberto] ? (
+                execucoes[indiceAberto].fontes.map((source) => (
+                  <span key={source.fonte} className={`flex items-center gap-2 ${STATUS_CLASS[source.status] ?? "text-grafite-500"}`}>
+                    <span aria-hidden className="h-2 w-2 rounded-full bg-current" />
+                    {`${sourceLabel(source.fonte)}: ${STATUS_TEXT[source.status] ?? source.status}`}
+                    {source.status === "falha" && (
+                      <button
+                        type="button"
+                        className="rounded-botao border border-linha bg-painel px-2 py-0.5 text-legenda font-medium text-grafite-900 hover:bg-linha-2 disabled:cursor-not-allowed disabled:opacity-50"
+                        aria-label={`Retomar ${sourceLabel(source.fonte)} de onde parou`}
+                        title={navegadorAberto === false && PRECISAM_DO_NAVEGADOR.includes(source.fonte) ? "Abra o Chrome dedicado para retomar" : "Continua da página em que a busca falhou"}
+                        disabled={execucoes[indiceAberto]?.status === "executando" || running || starting || (navegadorAberto === false && PRECISAM_DO_NAVEGADOR.includes(source.fonte))}
+                        onClick={() => onRetomar(execucoes[indiceAberto]!.id, source.fonte)}
+                      >
+                        Retomar de onde parou
+                      </button>
+                    )}
+                  </span>
+                ))
+              ) : (
+                <span className="font-normal text-grafite-500">Ainda não buscado nesta sequência.</span>
+              )}
+            </div>
           )}
         </section>
       )}

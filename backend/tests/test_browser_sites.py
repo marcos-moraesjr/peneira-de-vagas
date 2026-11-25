@@ -38,6 +38,24 @@ def test_linkedin_detecta_login_e_verificacao_pela_url(settings, url, motivo):
     assert LinkedInSite(settings).classify(url, "LinkedIn", "") == motivo
 
 
+@pytest.mark.parametrize(
+    "texto",
+    [
+        "Pular para conteúdo principal\nLinkedIn\nVagas\nEntrar\nCadastre-se agora\nÚltima semana",
+        "Skip to main content\nLinkedIn\nJobs\nSign in\nJoin now\nPast week",
+    ],
+)
+def test_linkedin_pagina_publica_deslogada_e_login(settings, texto):
+    url = "https://www.linkedin.com/jobs/search/?keywords=x"
+    assert LinkedInSite(settings).classify(url, "Vagas | LinkedIn", texto) == "login"
+
+
+def test_linkedin_pagina_logada_nao_e_login(settings):
+    url = "https://www.linkedin.com/jobs/search/?keywords=x"
+    texto = "Pular para conteúdo principal\nVagas\nResultados da busca\nEntrar em contato com o recrutador"
+    assert LinkedInSite(settings).classify(url, "Vagas | LinkedIn", texto) is None
+
+
 def test_linkedin_mapeia_card_para_vaga_com_link_canonico(settings):
     raw = {"id": "3900000001", "title": "Engenheiro Mecânico", "company": "ACME", "text": "Campinas"}
     job = LinkedInSite(settings).to_job(raw)
@@ -129,7 +147,7 @@ def test_linkedin_card_nao_renderizado_so_com_id_e_ignorado(settings):
 def test_somente_o_linkedin_le_cards_de_forma_incremental(settings):
     assert LinkedInSite(settings).lazy_cards is True
     assert IndeedSite(settings).lazy_cards is False
-    assert LinkedInSite(settings).card_selector == "li[data-occludable-job-id]"
+    assert LinkedInSite(settings).card_selector == '[componentkey^="job-card-component-ref-"]'
 
 
 # ---------- LinkedIn: data de publicação relativa do detalhe ----------

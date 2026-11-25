@@ -87,6 +87,7 @@ export function makeJob(id: number, overrides: Record<string, unknown> = {}) {
     visto: false,
     excluida: false,
     candidatada: false,
+    excluida_em: null,
     candidatada_em: null,
     ...overrides,
   };

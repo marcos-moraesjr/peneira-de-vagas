@@ -147,7 +147,7 @@ class PlaywrightNavigator:
         merge(self._page.evaluate(js))
         for index in range(cards.count()):
             card = cards.nth(index)
-            card_id = card.get_attribute("data-occludable-job-id")
+            card_id = card.get_attribute("data-occludable-job-id") or (card.get_attribute("componentkey") or "").rsplit("-", 1)[-1]
             if card_id and merged.get(card_id, {}).get("title"):
                 continue
             card.scroll_into_view_if_needed(timeout=self._timeout_ms)

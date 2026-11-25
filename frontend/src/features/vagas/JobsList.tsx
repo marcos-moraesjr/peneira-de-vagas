@@ -35,6 +35,7 @@ const actionButton = "rounded-botao px-2 py-1 text-grafite-500 hover:bg-linha-2 
 
 export function JobsList({ jobs, onSeen, onExcluir, onCandidatar, sort, onSort }: Props) {
   const mostrarCandidatura = jobs.some((job) => job.candidatada); // só na aba Candidaturas
+  const mostrarExclusao = jobs.some((job) => job.excluida); // só na aba Excluídas
   return (
     <div className="max-h-[65vh] overflow-y-auto rounded-painel border border-linha bg-painel">
       <table className="w-full table-fixed text-left text-sm">
@@ -64,6 +65,11 @@ export function JobsList({ jobs, onSeen, onExcluir, onCandidatar, sort, onSort }
             {mostrarCandidatura && (
               <th scope="col" className="w-[8%] px-3 py-3 font-semibold">
                 Candidatura
+              </th>
+            )}
+            {mostrarExclusao && (
+              <th scope="col" className="w-[8%] px-3 py-3 font-semibold">
+                Exclusão
               </th>
             )}
           </tr>
@@ -130,6 +136,7 @@ export function JobsList({ jobs, onSeen, onExcluir, onCandidatar, sort, onSort }
                 </div>
               </td>
               {mostrarCandidatura && <td className={`${cell} whitespace-nowrap text-legenda`}>{job.candidatada_em ? formatDay(job.candidatada_em) : "—"}</td>}
+              {mostrarExclusao && <td className={`${cell} whitespace-nowrap text-legenda`}>{job.excluida_em ? formatDay(job.excluida_em) : "—"}</td>}
             </tr>
           ))}
         </tbody>

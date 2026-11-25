@@ -18,6 +18,16 @@ describe("JobsList (tabela)", () => {
     expect(within(screen.getByRole("row", { name: /Engenheiro Mecânico 3/ })).getByText("15/10/2026")).toBeInTheDocument();
   });
 
+  it("mostra a coluna Exclusão com a data só quando há vagas excluídas", () => {
+    const props = { onSeen: () => {}, onExcluir: () => {}, onCandidatar: () => {}, sort: null, onSort: () => {} };
+    const { rerender } = render(<JobsList jobs={JOBS} {...props} />);
+    expect(screen.queryByRole("columnheader", { name: /Exclusão/ })).not.toBeInTheDocument();
+    rerender(<JobsList jobs={[makeJob(3, { excluida: true, excluida_em: "2026-10-16T09:00:00+00:00" }), makeJob(4, { excluida: true, excluida_em: null })]} {...props} />);
+    expect(screen.getByRole("columnheader", { name: /Exclusão/ })).toBeInTheDocument();
+    expect(within(screen.getByRole("row", { name: /Engenheiro Mecânico 3/ })).getByText("16/10/2026")).toBeInTheDocument();
+    expect(within(screen.getByRole("row", { name: /Engenheiro Mecânico 4/ })).getAllByText("—").length).toBeGreaterThan(0);
+  });
+
   it("mostra as colunas Vaga, Empresa, Palavra-chave, Cidade, Estado, Modalidade, Publicada, Encontrada, Plataforma e Pontos", () => {
     render(<JobsList jobs={JOBS} onSeen={() => {}} onExcluir={() => {}} onCandidatar={() => {}} sort={null} onSort={() => {}} />);
     const names = screen.getAllByRole("columnheader").map((header) => header.textContent?.replace(/[▲▼↕]/g, ""));

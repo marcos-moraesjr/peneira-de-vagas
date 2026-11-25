@@ -97,7 +97,7 @@ export function ComoUsarPage() {
           <p>
             Na aba Buscar vagas, a <strong>Sequência de conjuntos</strong> busca vários conjuntos de uma vez, na ordem
             escolhida (arraste os itens ou use as setas). Cada conjunto vira uma execução no histórico. Vazia, a busca
-            usa só o conjunto ativo. A sequência para se uma fonte for bloqueada por CAPTCHA, login ou erro de HTTP.
+            usa só o conjunto ativo. A sequência para se uma fonte for bloqueada por CAPTCHA, login ou erro de HTTP. Clique no nome de um conjunto para ver o status de cada fonte nele.
           </p>
         </Step>
 

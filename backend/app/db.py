@@ -190,11 +190,14 @@ ALTER TABLE run_sources ADD COLUMN termo_pos INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE run_sources ADD COLUMN pagina_pos INTEGER NOT NULL DEFAULT 0;
 """
 
+# V16: data/hora em que a vaga foi excluída (nula nas já excluídas antes da coluna e nas não excluídas).
+_MIGRATION_V16 = "ALTER TABLE jobs ADD COLUMN excluida_em TEXT;"
+
 # Versão do esquema → script. Banco existente é copiado para backup_dir antes de qualquer migração.
 MIGRATIONS = {
     1: _SCHEMA_V1, 2: _MIGRATION_V2, 3: _MIGRATION_V3, 4: _MIGRATION_V4,
     5: _MIGRATION_V5, 6: _MIGRATION_V6, 7: _MIGRATION_V7, 8: _MIGRATION_V8, 9: _MIGRATION_V9,
-    10: _MIGRATION_V10, 11: _MIGRATION_V11, 12: _MIGRATION_V12, 13: _MIGRATION_V13, 14: _MIGRATION_V14, 15: _MIGRATION_V15,
+    10: _MIGRATION_V10, 11: _MIGRATION_V11, 12: _MIGRATION_V12, 13: _MIGRATION_V13, 14: _MIGRATION_V14, 15: _MIGRATION_V15, 16: _MIGRATION_V16,
 }
 SCHEMA_VERSION = max(MIGRATIONS)
 

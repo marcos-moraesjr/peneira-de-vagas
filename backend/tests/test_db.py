@@ -317,6 +317,12 @@ def test_migracao_12_adiciona_candidatada_em_nula(conn):
     assert conn.execute("SELECT candidatada_em FROM jobs").fetchone()["candidatada_em"] is None
 
 
+def test_migracao_16_adiciona_excluida_em_nula(conn):
+    run_id = db.create_run(conn, ["gupy"], NOW)
+    db.insert_new_jobs(conn, [make_job()], {}, run_id, NOW, 1)
+    assert conn.execute("SELECT excluida_em FROM jobs").fetchone()["excluida_em"] is None
+
+
 def test_migracao_10_adiciona_excluida_mantendo_as_vagas(conn):
     assert conn.execute("SELECT excluida FROM jobs LIMIT 1").fetchall() == []
     run_id = db.create_run(conn, ["gupy"], NOW)

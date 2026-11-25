@@ -582,6 +582,8 @@ export interface components {
             visto: boolean;
             /** Excluida */
             excluida: boolean;
+            /** Excluida Em */
+            excluida_em: string | null;
             /** Candidatada */
             candidatada: boolean;
             /** Candidatada Em */

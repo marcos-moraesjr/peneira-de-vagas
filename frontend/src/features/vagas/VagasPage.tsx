@@ -67,7 +67,7 @@ export function VagasPage() {
   const [minPontos, setMinPontos] = useState("");
   const [page, setPage] = useState(1);
   const [sort, setSort] = useState<Sort>(null);
-  const [conjuntoEscolhido, setConjuntoEscolhido] = useState<number | typeof TODOS | null>(null);
+  const [conjuntoEscolhido, setConjuntoEscolhido] = useState<number | typeof TODOS | null>(TODOS);
   const [localidade, setLocalidade] = useState("");
   const [modalidadeBusca, setModalidadeBusca] = useState("");
   const [janelaDias, setJanelaDias] = useState<string | undefined>();
@@ -146,6 +146,7 @@ export function VagasPage() {
         conjuntos={conjuntos}
         sequencia={sequencia}
         onSequenciaChange={(ids) => saveSequencia.mutate(ids)}
+        onRetomar={(runId, fonte) => startRun.mutate({ retomar_run_id: runId, fontes: [fonte] })}
         hint={keywords.data?.length || !keywords.isSuccess ? undefined : "Adicione ao menos uma palavra-chave na aba Parâmetros de busca."}
       />
       {startRun.error && <ErrorBox message={startRun.error.message} />}

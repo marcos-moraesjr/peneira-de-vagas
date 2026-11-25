@@ -1,22 +1,36 @@
-<!-- Estrutura OBSERVADA no DOM real do LinkedIn em 14/10/2026 (ver docs/SCANNERS.md §LinkedIn), com textos
-     fictícios: <li data-occludable-job-id>, a[href*="/jobs/view/"] strong, .artdeco-entity-lockup__subtitle/caption.
-     O 3º card tem só o ID (renderização incremental: ainda não renderizado). -->
+<!-- Estrutura OBSERVADA no DOM real do LinkedIn em 15/11/2026 (ver docs/SCANNERS.md §LinkedIn), com textos
+     fictícios: div[componentkey="job-card-component-ref-<id>"], sem <li>, sem link /jobs/view/ e sem classes
+     estáveis. O 1º card tem selo "Selecionada ... (vaga verificada)" no 1º span do título; o 3º card só tem o
+     contêiner (ainda não renderizado). O cabeçalho do detalhe vem depois da lista. -->
 <html><body>
-<ul class="aB3xK9">
-  <li data-occludable-job-id="3900000001">
-    <div class="job-card-container">
-      <a class="x7f2 disabled" href="/jobs/view/3900000001/?eBP=abc&refId=xyz"><strong>Engenheiro Mecânico Pleno</strong></a>
-      <div class="artdeco-entity-lockup__subtitle"><span>Metalúrgica Exemplo</span></div>
-      <div class="artdeco-entity-lockup__caption"><span>Campinas, São Paulo, Brasil (Presencial)</span></div>
-    </div>
-  </li>
-  <li data-occludable-job-id="3900000002">
-    <div class="job-card-container">
-      <a class="x7f2" href="/jobs/view/3900000002/"><strong>Analista de Compras</strong></a>
-      <div class="artdeco-entity-lockup__subtitle"><span>Indústria Teste</span></div>
-      <div class="artdeco-entity-lockup__caption"><span>Remoto</span></div>
-    </div>
-  </li>
-  <li data-occludable-job-id="3900000003"></li>
-</ul>
+<div data-testid="lazy-column" componentkey="SearchResultsMainContent">
+  <div data-display-contents="true"><div>
+    <div data-display-contents="true"><div componentkey="job-card-component-ref-3900000001">
+      <div data-display-contents="true"><div role="button" componentkey="aaa"><div>
+        <figure><img alt=""></figure>
+        <div><div><div><div>
+          <div data-display-contents="true"><p><span>Selecionada, Engenheiro Mecânico Pleno (vaga verificada)</span><span>Engenheiro Mecânico Pleno<span> </span><span></span></span></p></div>
+          <div><p>Metalúrgica Exemplo</p></div>
+          <p>Campinas, SP (Presencial)</p>
+        </div></div></div>
+        <div><div><p><span>Anunciada há 1 dia</span><span>há 1 dia</span></p><p> · </p><p>Seja uma das primeiras pessoas a se candidatar</p></div></div></div>
+      </div></div></div>
+      <div><button type="button" aria-label="Fechar vaga de Engenheiro Mecânico Pleno"><span></span></button></div>
+    </div></div>
+    <hr role="presentation">
+    <div data-display-contents="true"><div componentkey="job-card-component-ref-3900000002">
+      <div data-display-contents="true"><div role="button" componentkey="bbb"><div>
+        <figure><img alt=""></figure>
+        <div><div><div><div>
+          <div data-display-contents="true"><p><span></span><span>Analista de Compras</span></p></div>
+          <div><p>Indústria Teste</p></div>
+          <p>Remoto</p>
+        </div></div></div>
+        <div><div><p><span>Anunciada há 5 horas</span><span>há 5 horas</span></p></div></div></div>
+      </div></div></div>
+    </div></div>
+    <hr role="presentation">
+    <div data-display-contents="true"><div componentkey="job-card-component-ref-3900000003"></div></div>
+  </div></div>
+</div>
 </body></html>

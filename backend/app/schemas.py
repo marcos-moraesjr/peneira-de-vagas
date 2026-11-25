@@ -84,6 +84,7 @@ class JobOut(BaseModel):
     publicada_em: str | None
     visto: bool
     excluida: bool
+    excluida_em: str | None
     candidatada: bool
     candidatada_em: str | None
 

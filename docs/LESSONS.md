@@ -251,3 +251,15 @@ Crie conforme a necessidade; sugestão inicial:
 - **Antes:** o botão disparava uma execução nova das fontes que falharam. Nada guardava a posição, então a fonte reabria todos os termos e páginas desde o início (só o detalhe das vagas já gravadas era evitado), com as pausas humanas e o risco extra de bloqueio. Os parâmetros da busca (estado, modalidade, janela) vinham da barra atual.
 - **Depois:** a cada página concluída a fonte avisa a próxima posição (termo, página) e o serviço a grava em `run_sources.termo_pos`/`pagina_pos` (migração 15, só `ADD COLUMN`; cópia do `.db` em `backups/` antes). O botão envia `retomar_run_id`: a **mesma execução** é reaberta, a fonte recomeça da posição gravada e soma aos contadores já gravados; `runs` passa a guardar conjunto e parâmetros da busca (também migração 15), e a retomada usa os originais. Execuções anteriores à migração não têm posição (recomeçam do início).
 - **Motivo**: pedido do usuário. **Consequência**: a página que estava aberta quando a falha ocorreu é lida de novo (a posição aponta para a próxima página não concluída); a deduplicação evita reabrir os detalhes já gravados.
+
+### LinkedIn deslogado aparecia como "layout mudou" (2026-11-11)
+- **Contexto**: a tela mostrava "LinkedIn: o layout do site mudou" (`seletor_nao_encontrado`).
+- **Causa raiz**: o perfil do Chrome dedicado estava sem sessão; o LinkedIn serve a busca pública em `/jobs/search/` sem redirecionar a `/login`/`/authwall`, então `classify` (só por URL) não detectou e a ausência de `li[data-occludable-job-id]` virou erro de seletor.
+- **Correção**: `LinkedInSite.classify` também reconhece as linhas "Cadastre-se agora"/"Join now" da página pública e devolve `login`; scanner `linkedin` 1.10.1. O usuário só precisa logar no Chrome dedicado.
+- **Risco futuro**: se o LinkedIn mudar esses textos, volta o falso "layout mudou"; conferir o login primeiro.
+
+## LinkedIn trocou o layout da busca e o scanner parou de achar cards
+
+- **Sintoma**: a fonte falhava com `seletor_nao_encontrado` mesmo logada.
+- **Causa raiz**: o DOM de 15/11/2026 não tem mais `li[data-occludable-job-id]`, `a[href*="/jobs/view/"]` nem `.artdeco-entity-lockup__*`; o card virou `div[componentkey="job-card-component-ref-<id>"]` com classes de hash.
+- **Correção**: seletores por `componentkey` e estrutura (`docs/SCANNERS.md §LinkedIn`); amostra `linkedin_list.html` refeita; scanner `linkedin` 1.11.0. Salvar o HTML da página (Ctrl+S) basta para refazer o scanner.

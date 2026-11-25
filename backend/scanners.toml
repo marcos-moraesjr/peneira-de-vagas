@@ -3,8 +3,8 @@
 # registre no changelog de docs/SCANNERS.md. Regras de versão e procedimento: docs/SCANNERS.md.
 
 [linkedin]
-versao = "1.10.0"
-explorado_em = "2026-10-14"
+versao = "1.11.0"
+explorado_em = "2026-11-15"
 gerado_por = "Claude"
 referencia = "docs/SCANNERS.md §LinkedIn"
 
